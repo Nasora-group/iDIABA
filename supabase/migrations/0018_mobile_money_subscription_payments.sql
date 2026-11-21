@@ -156,6 +156,7 @@ create or replace function public.process_subscription_payment_webhook(
   p_event_type text,
   p_provider_reference text,
   p_provider_transaction_id text,
+  p_client_reference text,
   p_amount_fcfa bigint,
   p_currency text
 ) returns text
@@ -188,6 +189,168 @@ begin
   select * into v_payment from public.subscription_payments
    where provider=p_provider and provider_reference=p_provider_reference
    for update;
+  if not found and p_client_reference ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}
+  if v_payment.status='paid' then return 'already_paid'; end if;
+  if v_payment.status not in ('pending','processing') then return 'not_payable'; end if;
+
+  if p_event_type in ('checkout.session.completed','payment.success') then
+    if p_amount_fcfa is distinct from v_payment.amount_fcfa or p_currency is distinct from 'XOF' then
+      raise exception 'Montant ou devise du paiement non conforme';
+    end if;
+    select * into v_request from public.subscription_requests
+      where id=v_payment.subscription_request_id and tenant_id=v_payment.tenant_id and status='pending'
+      for update;
+    if not found then raise exception 'Demande de souscription introuvable'; end if;
+    select case when v_request.billing_interval='monthly' then price_monthly_fcfa else price_yearly_fcfa end
+      into v_plan_price from public.subscription_plans
+      where id=v_request.requested_plan_id and is_active=true;
+    if v_plan_price is null or v_plan_price<>v_payment.amount_fcfa then
+      raise exception 'Le tarif de la souscription a changé; contrôle administratif requis';
+    end if;
+
+    update public.subscription_payments
+      set status='paid',provider_transaction_id=coalesce(p_provider_transaction_id,''),
+          paid_at=now(),updated_at=now()
+      where id=v_payment.id;
+
+    insert into public.tenant_subscriptions(
+      tenant_id,plan_id,status,billing_interval,trial_ends_at,
+      current_period_starts_at,current_period_ends_at,grace_ends_at,canceled_at,updated_at
+    ) values(
+      v_payment.tenant_id,v_request.requested_plan_id,'active',v_request.billing_interval,null,
+      now(),
+      case when v_request.billing_interval='monthly' then now()+interval '1 month' else now()+interval '1 year' end,
+      null,null,now()
+    )
+    on conflict(tenant_id) do update set
+      plan_id=excluded.plan_id,status='active',billing_interval=excluded.billing_interval,
+      trial_ends_at=null,current_period_starts_at=excluded.current_period_starts_at,
+      current_period_ends_at=excluded.current_period_ends_at,grace_ends_at=null,
+      canceled_at=null,updated_at=now();
+
+    update public.subscription_requests
+      set status='approved',reviewed_at=now(),
+          admin_note='Paiement confirmé automatiquement par le prestataire.'
+      where id=v_request.id;
+    return 'paid';
+  end if;
+
+  -- Wave may report several failed attempts before a later successful payment
+  -- on the same checkout session. Keep the intent payable until success or expiry.
+  update public.subscription_payments
+    set status='processing',failure_reason='Dernière tentative refusée par le prestataire',updated_at=now()
+    where id=v_payment.id;
+  return 'payment_failed_retryable';
+end;
+$$;
+
+revoke all on function public.create_subscription_payment(uuid,text,text,text,uuid) from public,anon;
+grant execute on function public.create_subscription_payment(uuid,text,text,text,uuid) to authenticated;
+revoke all on function public.attach_subscription_payment_checkout(uuid,text,text) from public,anon;
+grant execute on function public.attach_subscription_payment_checkout(uuid,text,text) to authenticated;
+revoke all on function public.process_subscription_payment_webhook(text,text,text,text,text,text,bigint,text) from public,anon,authenticated;
+grant execute on function public.process_subscription_payment_webhook(text,text,text,text,text,text,bigint,text) to service_role;
+
+-- Include subscription payment changes in the existing tenant audit trail.
+drop trigger if exists tenant_audit_log on public.subscription_payments;
+create trigger tenant_audit_log after insert or update or delete on public.subscription_payments
+  for each row execute function public.capture_tenant_audit_log();
+
+
+-- Prevent manual activation of a Wave request before a verified webhook marks it paid.
+create or replace function public.review_subscription_request(
+  p_request_id uuid,
+  p_decision text,
+  p_admin_note text default ''
+) returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_tenant_id uuid;
+  v_plan_id uuid;
+  v_billing_interval text;
+  v_payment_method text;
+  v_payment_reference text;
+  v_price numeric(14,2);
+  v_note text := coalesce(p_admin_note,'');
+begin
+  if auth.uid() is null
+     or coalesce((auth.jwt() -> 'app_metadata' ->> 'role'),'') <> 'platform_admin' then
+    raise exception 'Accès réservé à l''administration iDIABA';
+  end if;
+  if p_decision is null or p_decision not in ('approve','reject') then
+    raise exception 'Décision invalide';
+  end if;
+  if length(v_note)>500 then raise exception 'Note administrative trop longue'; end if;
+
+  select tenant_id,requested_plan_id,billing_interval,payment_method,payment_reference
+    into v_tenant_id,v_plan_id,v_billing_interval,v_payment_method,v_payment_reference
+  from public.subscription_requests
+  where id=p_request_id and status='pending'
+  for update;
+  if not found then raise exception 'Demande introuvable ou déjà traitée'; end if;
+
+  if p_decision='approve' then
+    if v_payment_method='orange_money' and length(trim(coalesce(v_payment_reference,'')))=0 then
+      raise exception 'La référence Orange Money est obligatoire avant validation';
+    end if;
+    if v_payment_method='wave' and not exists (
+      select 1 from public.subscription_payments
+      where subscription_request_id=p_request_id and status='paid'
+    ) then
+      raise exception 'Le paiement Wave doit être confirmé par le webhook avant activation';
+    end if;
+
+    select case when v_billing_interval='monthly' then price_monthly_fcfa else price_yearly_fcfa end
+      into v_price from public.subscription_plans
+      where id=v_plan_id and is_active=true;
+    if v_price is null then
+      raise exception 'Configurez le tarif de cette formule avant de valider la demande';
+    end if;
+
+    insert into public.tenant_subscriptions(
+      tenant_id,plan_id,status,billing_interval,trial_ends_at,
+      current_period_starts_at,current_period_ends_at,grace_ends_at,canceled_at,updated_at
+    ) values (
+      v_tenant_id,v_plan_id,'active',v_billing_interval,null,now(),
+      case when v_billing_interval='monthly' then now()+interval '1 month' else now()+interval '1 year' end,
+      null,null,now()
+    )
+    on conflict (tenant_id) do update set
+      plan_id=excluded.plan_id,status='active',billing_interval=excluded.billing_interval,
+      trial_ends_at=null,current_period_starts_at=excluded.current_period_starts_at,
+      current_period_ends_at=excluded.current_period_ends_at,grace_ends_at=null,
+      canceled_at=null,updated_at=now();
+
+    update public.subscription_requests
+      set status='approved',reviewed_by=auth.uid(),reviewed_at=now(),admin_note=v_note
+      where id=p_request_id;
+  else
+    update public.subscription_requests
+      set status='rejected',reviewed_by=auth.uid(),reviewed_at=now(),admin_note=v_note
+      where id=p_request_id;
+  end if;
+end;
+$$;
+revoke all on function public.review_subscription_request(uuid,text,text) from public,anon,authenticated;
+grant execute on function public.review_subscription_request(uuid,text,text) to authenticated;
+
+create policy "platform admins read all subscription payments" on public.subscription_payments
+  for select to authenticated
+  using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'platform_admin');
+ then
+    select * into v_payment from public.subscription_payments
+     where provider=p_provider and id::text=p_client_reference
+     for update;
+    if found and v_payment.provider_reference is null then
+      update public.subscription_payments
+        set provider_reference=p_provider_reference,updated_at=now()
+        where id=v_payment.id;
+      v_payment.provider_reference := p_provider_reference;
+    end if;
+  end if;
   if not found then
     delete from public.payment_webhook_events where provider=p_provider and event_id=p_event_id;
     raise exception 'Paiement correspondant introuvable';
