@@ -177,7 +177,7 @@ export default function OfflinePOSClient() {
   }
 
   if (!snapshot) {
-    return <section className="offline-panel"><h2>Caisse hors connexion</h2><p>Aucun catalogue de caisse n'a encore été enregistré sur cet appareil.</p><p>Connectez-vous, ouvrez une session de caisse et consultez le point de vente une première fois pour préparer le mode hors connexion.</p>{message && <p role="status">{message}</p>}</section>;
+    return <section className="offline-panel"><h2>Caisse hors connexion</h2><p>Aucun catalogue de caisse n&apos;a encore été enregistré sur cet appareil.</p><p>Connectez-vous, ouvrez une session de caisse et consultez le point de vente une première fois pour préparer le mode hors connexion.</p>{message && <p role="status">{message}</p>}</section>;
   }
 
   return (
@@ -189,7 +189,7 @@ export default function OfflinePOSClient() {
       <section className="workspace catalog-workspace">
         <p className="eyebrow">CAISSE · MODE HORS CONNEXION</p>
         <h1>Continuer les ventes</h1>
-        <p className="lead">Les ventes saisies ici sont conservées sur cet appareil puis synchronisées à la reconnexion. Le stock et l'état de la caisse seront contrôlés par le serveur au moment de la synchronisation.</p>
+        <p className="lead">Les ventes saisies ici sont conservées sur cet appareil puis synchronisées à la reconnexion. Le stock et l&apos;état de la caisse seront contrôlés par le serveur au moment de la synchronisation.</p>
         {snapshots.length > 1 && <label className="offline-session-select">Session de caisse<select value={snapshot.key} onChange={(event) => setSelectedKey(event.target.value)}>{snapshots.map((item) => <option key={item.key} value={item.key}>{item.tenantName} · {item.locationName}</option>)}</select></label>}
         <div className="offline-panel">
           <div className="catalog-heading"><div><h2>{snapshot.tenantName}</h2><p>{snapshot.locationName} · Catalogue enregistré le {new Date(snapshot.savedAt).toLocaleString("fr-FR")}</p></div><span className="pill">{queue.length} en attente</span></div>
