@@ -177,6 +177,10 @@ begin
     raise exception 'Invalid return information';
   end if;
 
+  select id into v_return_id from public.sale_returns
+   where tenant_id=p_tenant_id and client_return_id=p_client_return_id;
+  if v_return_id is not null then return v_return_id; end if;
+
   select * into v_item from public.sale_items
    where id=p_sale_item_id and tenant_id=p_tenant_id for update;
   if not found then raise exception 'Sale line not found'; end if;
@@ -191,10 +195,6 @@ begin
   if p_quantity > v_returnable then
     raise exception 'Returned quantity exceeds the remaining quantity: %', v_returnable;
   end if;
-
-  select id into v_return_id from public.sale_returns
-   where tenant_id=p_tenant_id and client_return_id=p_client_return_id;
-  if v_return_id is not null then return v_return_id; end if;
 
   v_refund := round(p_quantity * v_item.unit_price * (1 + v_item.tax_rate / 100), 2);
   if v_refund <= 0 then raise exception 'Return amount must be positive'; end if;
