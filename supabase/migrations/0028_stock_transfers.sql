@@ -8,6 +8,7 @@ create table if not exists public.stock_transfers (
   status text not null default 'draft'
     check (status in ('draft','shipped','partially_received','received','canceled')),
   notes text not null default '',
+  client_transfer_id uuid not null,
   created_by uuid references auth.users(id) on delete set null,
   shipped_by uuid references auth.users(id) on delete set null,
   received_by uuid references auth.users(id) on delete set null,
@@ -16,6 +17,7 @@ create table if not exists public.stock_transfers (
   received_at timestamptz,
   unique (tenant_id,id),
   unique (tenant_id,transfer_number),
+  unique (tenant_id,client_transfer_id),
   constraint stock_transfers_source_location_fk
     foreign key (tenant_id,source_location_id) references public.stock_locations(tenant_id,id),
   constraint stock_transfers_destination_location_fk
@@ -44,11 +46,13 @@ create table if not exists public.stock_transfer_receipts (
   tenant_id uuid not null,
   transfer_id uuid not null,
   receipt_number text not null,
+  client_receipt_id uuid not null,
   received_by uuid not null references auth.users(id),
   notes text not null default '',
   received_at timestamptz not null default now(),
   unique (tenant_id,id),
   unique (tenant_id,receipt_number),
+  unique (tenant_id,client_receipt_id),
   constraint stock_transfer_receipts_transfer_fk
     foreign key (tenant_id,transfer_id) references public.stock_transfers(tenant_id,id)
 );
@@ -100,13 +104,14 @@ create or replace function public.create_stock_transfer(
   p_source_location_id uuid,
   p_destination_location_id uuid,
   p_items jsonb,
+  p_client_transfer_id uuid,
   p_notes text default ''
 )
 returns uuid
 language plpgsql
 security definer
 set search_path = pg_catalog, public
-as $$
+as $
 declare
   v_transfer_id uuid := gen_random_uuid();
   v_transfer_number text;
@@ -121,6 +126,11 @@ begin
   ) then
     raise exception 'Permission denied to create a stock transfer';
   end if;
+  if p_client_transfer_id is null then raise exception 'Transfer idempotency key is required'; end if;
+  select id into v_transfer_id from public.stock_transfers
+    where tenant_id=p_tenant_id and client_transfer_id=p_client_transfer_id;
+  if found then return v_transfer_id; end if;
+  v_transfer_id := gen_random_uuid();
   if p_source_location_id is null or p_destination_location_id is null
      or p_source_location_id = p_destination_location_id then
     raise exception 'Choose two different locations';
@@ -142,10 +152,10 @@ begin
     upper(substr(replace(v_transfer_id::text,'-',''),1,8));
 
   insert into public.stock_transfers(
-    id,tenant_id,source_location_id,destination_location_id,transfer_number,notes,created_by
+    id,tenant_id,source_location_id,destination_location_id,transfer_number,notes,client_transfer_id,created_by
   ) values (
     v_transfer_id,p_tenant_id,p_source_location_id,p_destination_location_id,
-    v_transfer_number,left(trim(coalesce(p_notes,'')),1000),auth.uid()
+    v_transfer_number,left(trim(coalesce(p_notes,'')),1000),p_client_transfer_id,auth.uid()
   );
 
   for v_item in select value from jsonb_array_elements(p_items)
@@ -231,6 +241,7 @@ $$;
 
 create or replace function public.receive_stock_transfer(
   p_transfer_id uuid,
+  p_client_receipt_id uuid,
   p_items jsonb,
   p_notes text default ''
 )
@@ -238,7 +249,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = pg_catalog, public
-as $$
+as $
 declare
   v_transfer public.stock_transfers%rowtype;
   v_item public.stock_transfer_items%rowtype;
@@ -246,17 +257,22 @@ declare
   v_item_id uuid;
   v_quantity numeric(14,3);
   v_remaining numeric(14,3);
-  v_receipt_id uuid := gen_random_uuid();
+  v_receipt_id uuid;
   v_receipt_number text;
   v_count integer := 0;
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
   select * into v_transfer from public.stock_transfers where id=p_transfer_id for update;
-  if not found or v_transfer.status not in ('shipped','partially_received') then
-    raise exception 'Only dispatched transfers can be received';
-  end if;
+  if not found then raise exception 'Transfer not found'; end if;
   if not public.has_tenant_role(v_transfer.tenant_id,array['owner','admin','manager','stock']::public.tenant_role[]) then
     raise exception 'Permission denied to receive this transfer';
+  end if;
+  if p_client_receipt_id is null then raise exception 'Receipt idempotency key is required'; end if;
+  select id into v_receipt_id from public.stock_transfer_receipts
+    where tenant_id=v_transfer.tenant_id and client_receipt_id=p_client_receipt_id;
+  if found then return v_receipt_id; end if;
+  if v_transfer.status not in ('shipped','partially_received') then
+    raise exception 'Only dispatched transfers can be received';
   end if;
   if jsonb_typeof(p_items) is distinct from 'array' then
     raise exception 'Receipt items must be an array';
@@ -265,12 +281,13 @@ begin
     raise exception 'Receipt must contain between 1 and 100 lines';
   end if;
 
+  v_receipt_id := gen_random_uuid();
   v_receipt_number := 'TRR-' || to_char(now(),'YYYYMMDD') || '-' ||
     upper(substr(replace(v_receipt_id::text,'-',''),1,8));
   insert into public.stock_transfer_receipts(
-    id,tenant_id,transfer_id,receipt_number,received_by,notes
+    id,tenant_id,transfer_id,receipt_number,client_receipt_id,received_by,notes
   ) values (
-    v_receipt_id,v_transfer.tenant_id,v_transfer.id,v_receipt_number,auth.uid(),
+    v_receipt_id,v_transfer.tenant_id,v_transfer.id,v_receipt_number,p_client_receipt_id,auth.uid(),
     left(trim(coalesce(p_notes,'')),1000)
   );
 
@@ -323,12 +340,12 @@ begin
 end;
 $$;
 
-revoke all on function public.create_stock_transfer(uuid,uuid,uuid,jsonb,text) from public,anon,authenticated;
-grant execute on function public.create_stock_transfer(uuid,uuid,uuid,jsonb,text) to authenticated;
+revoke all on function public.create_stock_transfer(uuid,uuid,uuid,jsonb,uuid,text) from public,anon,authenticated;
+grant execute on function public.create_stock_transfer(uuid,uuid,uuid,jsonb,uuid,text) to authenticated;
 revoke all on function public.ship_stock_transfer(uuid) from public,anon,authenticated;
 grant execute on function public.ship_stock_transfer(uuid) to authenticated;
-revoke all on function public.receive_stock_transfer(uuid,jsonb,text) from public,anon,authenticated;
-grant execute on function public.receive_stock_transfer(uuid,jsonb,text) to authenticated;
+revoke all on function public.receive_stock_transfer(uuid,uuid,jsonb,text) from public,anon,authenticated;
+grant execute on function public.receive_stock_transfer(uuid,uuid,jsonb,text) to authenticated;
 
 revoke all on function public.capture_tenant_audit_log() from public,anon,authenticated;
 drop trigger if exists tenant_audit_log on public.stock_transfers;
