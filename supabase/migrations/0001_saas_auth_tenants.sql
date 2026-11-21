@@ -55,21 +55,18 @@ $$;
 
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public
-as $
-declare workspace_id uuid;
+as $$
+declare workspace_id uuid; workspace_slug text;
 begin
   insert into public.profiles(id,full_name) values(new.id,coalesce(new.raw_user_meta_data->>'full_name','')) on conflict (id) do nothing;
-  -- Workspace creation is tied to the auth-user trigger so it also works when email confirmation is enabled.
+  -- Create the workspace at signup, including when email confirmation is enabled.
   if length(trim(coalesce(new.raw_user_meta_data->>'workspace_name',''))) between 2 and 120 then
-    declare workspace_slug text;
-    begin
-      workspace_slug := lower(regexp_replace(trim(coalesce(new.raw_user_meta_data->>'workspace_slug','')), '[^a-z0-9]+', '-', 'g'));
-      workspace_slug := trim(both '-' from workspace_slug);
-      if workspace_slug = '' then workspace_slug := 'workspace-' || substr(new.id::text,1,8); end if;
-      if exists(select 1 from public.tenants where slug=workspace_slug) then workspace_slug := workspace_slug || '-' || substr(new.id::text,1,8); end if;
-      insert into public.tenants(name,slug,created_by) values(trim(new.raw_user_meta_data->>'workspace_name'),workspace_slug,new.id) returning id into workspace_id;
-      insert into public.tenant_memberships(tenant_id,user_id,role) values(workspace_id,new.id,'owner');
-    end;
+    workspace_slug := lower(regexp_replace(trim(coalesce(new.raw_user_meta_data->>'workspace_slug','')), '[^a-z0-9]+', '-', 'g'));
+    workspace_slug := trim(both '-' from workspace_slug);
+    if workspace_slug = '' then workspace_slug := 'workspace-' || substr(new.id::text,1,8); end if;
+    if exists(select 1 from public.tenants where slug=workspace_slug) then workspace_slug := workspace_slug || '-' || substr(new.id::text,1,8); end if;
+    insert into public.tenants(name,slug,created_by) values(trim(new.raw_user_meta_data->>'workspace_name'),workspace_slug,new.id) returning id into workspace_id;
+    insert into public.tenant_memberships(tenant_id,user_id,role) values(workspace_id,new.id,'owner');
   end if;
   return new;
 end;
