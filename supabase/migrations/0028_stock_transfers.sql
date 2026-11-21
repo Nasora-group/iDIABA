@@ -258,8 +258,10 @@ begin
   if not public.has_tenant_role(v_transfer.tenant_id,array['owner','admin','manager','stock']::public.tenant_role[]) then
     raise exception 'Permission denied to receive this transfer';
   end if;
-  if jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) < 1
-     or jsonb_array_length(p_items) > 100 then
+  if jsonb_typeof(p_items) is distinct from 'array' then
+    raise exception 'Receipt items must be an array';
+  end if;
+  if jsonb_array_length(p_items) < 1 or jsonb_array_length(p_items) > 100 then
     raise exception 'Receipt must contain between 1 and 100 lines';
   end if;
 
