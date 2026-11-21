@@ -119,8 +119,11 @@ declare
   v_limit integer;
   v_lock_key text;
 begin
-  if tg_table_name='products' and coalesce(new.is_active,false)=false then return new; end if;
-  if tg_table_name='stock_locations' and coalesce(new.is_active,false)=false then return new; end if;
+  if tg_table_name='products' then
+    if new.is_active is distinct from true then return new; end if;
+  elsif tg_table_name='stock_locations' then
+    if new.is_active is distinct from true then return new; end if;
+  end if;
   v_tenant_id := new.tenant_id;
   v_lock_key := v_tenant_id::text || ':' || tg_table_name;
   perform pg_advisory_xact_lock(hashtextextended(v_lock_key,0));
@@ -134,21 +137,15 @@ begin
 
   if not found then raise exception 'Aucune souscription active pour cette entreprise'; end if;
 
-  if v_status='trialing' and v_trial_ends_at <= now() then
-    update public.tenant_subscriptions set status='expired',updated_at=now() where tenant_id=v_tenant_id;
-    v_status := 'expired';
-  elsif v_status='active' and v_period_ends_at is not null and v_period_ends_at <= now() then
-    update public.tenant_subscriptions set status='expired',updated_at=now() where tenant_id=v_tenant_id;
-    v_status := 'expired';
-  elsif v_status='past_due' and (v_grace_ends_at is null or v_grace_ends_at <= now()) then
-    update public.tenant_subscriptions set status='expired',updated_at=now() where tenant_id=v_tenant_id;
-    v_status := 'expired';
-  end if;
-
   if v_status not in ('trialing','active','past_due') then
     raise exception 'Abonnement expiré ou suspendu. Choisissez une formule pour continuer.';
   end if;
-
+  if v_status='trialing' and (v_trial_ends_at is null or v_trial_ends_at <= now()) then
+    raise exception 'Période d''essai terminée. Choisissez une formule pour continuer.';
+  end if;
+  if v_status='active' and v_period_ends_at is not null and v_period_ends_at <= now() then
+    raise exception 'Abonnement arrivé à échéance. Renouvelez votre formule.';
+  end if;
   if v_status='past_due' and (v_grace_ends_at is null or v_grace_ends_at <= now()) then
     raise exception 'Délai de paiement dépassé. Contactez le support.';
   end if;
