@@ -31,10 +31,15 @@ export async function updateSubscriptionPlan(formData: FormData) {
   };
   const monthly = numeric(priceMonthly);
   const yearly = numeric(priceYearly);
-  const users = numeric(maxUsers);
-  const locations = numeric(maxLocations);
-  const products = numeric(maxProducts);
-  const sales = numeric(maxSales);
+  const quota = (value: string) => {
+    if (!value) return null;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : Number.NaN;
+  };
+  const users = quota(maxUsers);
+  const locations = quota(maxLocations);
+  const products = quota(maxProducts);
+  const sales = quota(maxSales);
   if (!/^[0-9a-f-]{36}$/i.test(id) || !name || [monthly,yearly,users,locations,products,sales].some(Number.isNaN)) {
     redirect("/app/platform-admin?error=validation");
   }
