@@ -272,6 +272,7 @@ declare
   v_plan_id uuid;
   v_billing_interval text;
   v_payment_method text;
+  v_payment_reference text;
   v_price numeric(14,2);
   v_note text := coalesce(p_admin_note,'');
 begin
@@ -284,14 +285,17 @@ begin
   end if;
   if length(v_note)>500 then raise exception 'Note administrative trop longue'; end if;
 
-  select tenant_id,requested_plan_id,billing_interval,payment_method
-    into v_tenant_id,v_plan_id,v_billing_interval,v_payment_method
+  select tenant_id,requested_plan_id,billing_interval,payment_method,payment_reference
+    into v_tenant_id,v_plan_id,v_billing_interval,v_payment_method,v_payment_reference
   from public.subscription_requests
   where id=p_request_id and status='pending'
   for update;
   if not found then raise exception 'Demande introuvable ou déjà traitée'; end if;
 
   if p_decision='approve' then
+    if v_payment_method='orange_money' and length(trim(coalesce(v_payment_reference,'')))=0 then
+      raise exception 'La référence Orange Money est obligatoire avant validation';
+    end if;
     if v_payment_method='wave' and not exists (
       select 1 from public.subscription_payments
       where subscription_request_id=p_request_id and status='paid'
@@ -332,3 +336,7 @@ end;
 $$;
 revoke all on function public.review_subscription_request(uuid,text,text) from public,anon,authenticated;
 grant execute on function public.review_subscription_request(uuid,text,text) to authenticated;
+
+create policy "platform admins read all subscription payments" on public.subscription_payments
+  for select to authenticated
+  using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'platform_admin');
