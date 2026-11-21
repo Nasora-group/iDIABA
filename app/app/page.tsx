@@ -21,6 +21,7 @@ const modules = [
   { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", href: "/app/customers", action: "Gérer les clients", icon: Users },
   { title: "Utilisateurs & équipe", description: "Ajoutez des employés et gérez leurs rôles et accès.", href: "/app/team", action: "Gérer l’équipe", icon: Users },
   { title: "Abonnements & limites", description: "Formules, volumes et demandes de changement par entreprise.", href: "/app/subscription", action: "Gérer l’abonnement", icon: CreditCard },
+  { title: "Paramètres entreprise", description: "Identité, RCCM, NINEA, coordonnées, devise et TVA par défaut.", href: "/app/company-settings", action: "Configurer l’entreprise", icon: ShieldCheck },
 ];
 
 export default async function AppHome() {
@@ -56,6 +57,7 @@ export default async function AppHome() {
           <Link href="/app/accounting">Comptabilité</Link>
           <Link href="/app/subscription">Abonnement</Link>
           <Link href="/app/team">Équipe</Link>
+          <Link href="/app/company-settings">Entreprise</Link>
           <Link href="/app/security">Sécurité</Link>
           {canViewAudit && <Link href="/app/audit">Journal d’audit</Link>}
           {canViewAudit && <Link href="/app/reports">Rapports</Link>}
