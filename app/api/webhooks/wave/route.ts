@@ -25,6 +25,7 @@ type WaveEvent = {
   type?: string;
   data?: {
     id?: string;
+    client_reference?: string;
     amount?: string;
     currency?: string;
     payment_status?: string;
@@ -72,6 +73,7 @@ export async function POST(request: Request) {
       p_event_type: event.type,
       p_provider_reference: event.data.id,
       p_provider_transaction_id: event.data.transaction_id ?? "",
+      p_client_reference: event.data.client_reference ?? "",
       p_amount_fcfa: amountFcfa,
       p_currency: event.data.currency ?? "",
     });
