@@ -1,1 +1,53 @@
-import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart, Wallet } from "lucide-react";\nconst modules = [{title:"Caisse & ventes",desc:"Point de vente, ventes, tickets et paiements.",icon:ShoppingCart},{title:"Produits & stocks",desc:"Catalogue, niveaux de stock et alertes.",icon:Package},{title:"Achats",desc:"Fournisseurs, commandes et réceptions.",icon:ClipboardList},{title:"Inventaire",desc:"Comptages, écarts et ajustements contrôlés.",icon:Boxes},{title:"Finances",desc:"Dépenses, trésorerie et clôture de caisse.",icon:Wallet},{title:"Comptabilité",desc:"Journaux et états financiers.",icon:ChartNoAxesCombined}];\nexport default function Home(){return <main className="shell"><header className="topbar"><div className="brand"><span className="mark">i</span><span>iDIABA</span></div><span className="pill">Prototype • Fondation SaaS</span></header><section className="hero"><div><p className="eyebrow">GESTION • COMMERCE • FINANCE</p><h1>Votre activité.<br/><span>En un seul endroit.</span></h1><p className="lead">Un outil simple pour piloter les ventes, la caisse, les stocks, les achats et la comptabilité.</p><button className="primary">Découvrir le tableau de bord <ArrowUpRight size={17}/></button></div><div className="hero-card"><div className="card-title">Vue d’ensemble <span>●</span></div><div className="metric"><small>Chiffre d’affaires</small><strong>-- FCFA</strong><em>Les données apparaîtront ici</em></div><div className="mini-row"><div><CreditCard/><small>Encaissements</small><b>--</b></div><div><Boxes/><small>Articles en stock</small><b>--</b></div></div></div></section><section className="section"><div className="section-heading"><div><p className="eyebrow">LES MODULES</p><h2>Tout ce qu’il faut pour gérer</h2></div><p>Une base modulaire pour évoluer avec votre entreprise.</p></div><div className="grid">{modules.map(({title,desc,icon:Icon},i)=><article className="module" key={title}><div className="icon"><Icon size={21}/></div><span className="number">0{i+1}</span><h3>{title}</h3><p>{desc}</p><div className="coming">En préparation</div></article>)}</div></section><footer>iDIABA · Version initiale · Architecture conçue pour plusieurs entreprises et points de vente</footer></main>}
+import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart, Wallet } from "lucide-react";
+
+const modules = [
+  { title: "Caisse & ventes", desc: "Point de vente, ventes, tickets et paiements.", icon: ShoppingCart },
+  { title: "Produits & stocks", desc: "Catalogue, niveaux de stock et alertes.", icon: Package },
+  { title: "Achats", desc: "Fournisseurs, commandes et réceptions.", icon: ClipboardList },
+  { title: "Inventaire", desc: "Comptages, écarts et ajustements contrôlés.", icon: Boxes },
+  { title: "Finances", desc: "Dépenses, trésorerie et clôture de caisse.", icon: Wallet },
+  { title: "Comptabilité", desc: "Journaux et états financiers.", icon: ChartNoAxesCombined },
+];
+
+export default function Home() {
+  return (
+    <main className="shell">
+      <header className="topbar">
+        <div className="brand"><span className="mark">i</span><span>iDIABA</span></div>
+        <span className="pill">Prototype • Fondation SaaS</span>
+      </header>
+      <section className="hero">
+        <div>
+          <p className="eyebrow">GESTION • COMMERCE • FINANCE</p>
+          <h1>Votre activité.<br /><span>En un seul endroit.</span></h1>
+          <p className="lead">Un outil simple pour piloter les ventes, la caisse, les stocks, les achats et la comptabilité.</p>
+          <a className="primary" href="/signup">Créer mon espace <ArrowUpRight size={17} /></a>
+        </div>
+        <div className="hero-card">
+          <div className="card-title">Vue d’ensemble <span>●</span></div>
+          <div className="metric"><small>Chiffre d’affaires</small><strong>-- FCFA</strong><em>Les données apparaîtront ici</em></div>
+          <div className="mini-row">
+            <div><CreditCard /><small>Encaissements</small><b>--</b></div>
+            <div><Boxes /><small>Articles en stock</small><b>--</b></div>
+          </div>
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-heading">
+          <div><p className="eyebrow">LES MODULES</p><h2>Tout ce qu’il faut pour gérer</h2></div>
+          <p>Une base modulaire pour évoluer avec votre entreprise.</p>
+        </div>
+        <div className="grid">
+          {modules.map(({ title, desc, icon: Icon }, index) => (
+            <article className="module" key={title}>
+              <div className="icon"><Icon size={21} /></div>
+              <span className="number">0{index + 1}</span>
+              <h3>{title}</h3><p>{desc}</p><div className="coming">En préparation</div>
+            </article>
+          ))}
+        </div>
+      </section>
+      <footer>iDIABA · Version initiale · Architecture conçue pour plusieurs entreprises et points de vente</footer>
+    </main>
+  );
+}
