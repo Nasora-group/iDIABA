@@ -179,7 +179,7 @@ drop policy if exists "tenant members read stock transfers" on public.stock_tran
 create policy "tenant members read assigned stock transfers" on public.stock_transfers
   for select to authenticated using (
     public.has_stock_location_access(tenant_id,source_location_id)
-    and public.has_stock_location_access(tenant_id,destination_location_id)
+    or public.has_stock_location_access(tenant_id,destination_location_id)
   );
 
 drop policy if exists "tenant members read stock transfer items" on public.stock_transfer_items;
@@ -187,8 +187,10 @@ create policy "tenant members read assigned stock transfer items" on public.stoc
   for select to authenticated using (
     public.is_tenant_member(tenant_id) and exists (
       select 1 from public.stock_transfers st where st.id=transfer_id and st.tenant_id=stock_transfer_items.tenant_id
-        and public.has_stock_location_access(st.tenant_id,st.source_location_id)
-        and public.has_stock_location_access(st.tenant_id,st.destination_location_id)
+        and (
+          public.has_stock_location_access(st.tenant_id,st.source_location_id)
+          or public.has_stock_location_access(st.tenant_id,st.destination_location_id)
+        )
     )
   );
 
@@ -197,8 +199,10 @@ create policy "tenant members read assigned stock transfer receipts" on public.s
   for select to authenticated using (
     public.is_tenant_member(tenant_id) and exists (
       select 1 from public.stock_transfers st where st.id=transfer_id and st.tenant_id=stock_transfer_receipts.tenant_id
-        and public.has_stock_location_access(st.tenant_id,st.source_location_id)
-        and public.has_stock_location_access(st.tenant_id,st.destination_location_id)
+        and (
+          public.has_stock_location_access(st.tenant_id,st.source_location_id)
+          or public.has_stock_location_access(st.tenant_id,st.destination_location_id)
+        )
     )
   );
 
@@ -209,8 +213,10 @@ create policy "tenant members read assigned stock transfer receipt items" on pub
       select 1 from public.stock_transfer_receipts r
       join public.stock_transfers st on st.id=r.transfer_id and st.tenant_id=r.tenant_id
       where r.id=receipt_id and r.tenant_id=stock_transfer_receipt_items.tenant_id
-        and public.has_stock_location_access(st.tenant_id,st.source_location_id)
-        and public.has_stock_location_access(st.tenant_id,st.destination_location_id)
+        and (
+          public.has_stock_location_access(st.tenant_id,st.source_location_id)
+          or public.has_stock_location_access(st.tenant_id,st.destination_location_id)
+        )
     )
   );
 
@@ -235,9 +241,18 @@ begin
   if tg_table_name='stock_transfers' then
     v_location_id := nullif(v_row->>'source_location_id','')::uuid;
     v_other_location_id := nullif(v_row->>'destination_location_id','')::uuid;
-    if not public.has_stock_location_access(v_tenant_id,v_location_id)
-       or not public.has_stock_location_access(v_tenant_id,v_other_location_id) then
-      raise exception 'You do not have access to both locations in this transfer';
+    -- The source team creates and dispatches; the destination team receives.
+    if tg_op='INSERT' or new.status in ('draft','shipped') then
+      if not public.has_stock_location_access(v_tenant_id,v_location_id) then
+        raise exception 'You do not have access to the source location';
+      end if;
+    elsif new.status in ('partially_received','received') then
+      if not public.has_stock_location_access(v_tenant_id,v_other_location_id) then
+        raise exception 'You do not have access to the destination location';
+      end if;
+    elsif not public.has_stock_location_access(v_tenant_id,v_location_id)
+       and not public.has_stock_location_access(v_tenant_id,v_other_location_id) then
+      raise exception 'You do not have access to this transfer';
     end if;
     return new;
   elsif tg_table_name='cash_movements' then
