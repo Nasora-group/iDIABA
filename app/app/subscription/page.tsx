@@ -79,7 +79,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
         <h1>Abonnements & limites</h1>
         <p className="lead">Suivez votre formule, vos volumes et les demandes de changement pour chaque entreprise.</p>
         {params.requested && <p className="form-success" role="status">Votre demande a été envoyée. Elle sera traitée par l&apos;équipe iDIABA.</p>}
-        {params.error && <p className="form-error" role="alert">{params.error === "request" ? "Impossible d'envoyer la demande. Vérifiez qu&apos;aucune autre demande n'est déjà en attente." : "Informations de demande invalides."}</p>}
+        {params.error && <p className="form-error" role="alert">{params.error === "request" ? "Impossible d'envoyer la demande. Vérifiez qu'aucune autre demande n'est déjà en attente." : "Informations de demande invalides."}</p>}
         {!panels.length && <p className="catalog-empty">Seuls les propriétaires et administrateurs peuvent consulter les abonnements des entreprises.</p>}
         {panels.map((panel) => (
           <section className="subscription-card" key={panel.tenantId}>
@@ -116,7 +116,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
             {panel.requests.length > 0 && <div className="subscription-history"><h3>Demandes récentes</h3>{panel.requests.map((request) => <div key={request.id}><span>{request.plan?.name ?? "Formule"} · {new Date(request.created_at).toLocaleDateString("fr-FR")}</span><strong>{request.status === "pending" ? "En attente" : request.status === "approved" ? "Acceptée" : request.status === "rejected" ? "Refusée" : "Annulée"}</strong></div>)}</div>}
           </section>
         ))}
-        <p className="catalog-help">L&apos;essai dure 14 jours. Les formules payantes et leurs tarifs devront être configurés avant l'ouverture commerciale. Les limites sont contrôlées directement dans la base de données.</p>
+        <p className="catalog-help">L&apos;essai dure 14 jours. Les formules payantes et leurs tarifs devront être configurés avant l&apos;ouverture commerciale. Les limites sont contrôlées directement dans la base de données.</p>
       </section>
     </main>
   );
