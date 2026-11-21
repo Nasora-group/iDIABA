@@ -71,7 +71,7 @@ begin
     delete from public.tenant_memberships where tenant_id=p_tenant_id and user_id=v_target;
   end if;
 
-  if p_action <> 'remove' and p_full_name is not null and length(trim(p_full_name)) <= 120 then
+  if p_action <> 'remove' and p_full_name is not null and length(trim(p_full_name)) between 1 and 120 then
     update public.profiles set full_name=trim(p_full_name), updated_at=now() where id=v_target;
   end if;
   return v_target;
