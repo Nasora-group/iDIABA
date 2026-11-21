@@ -65,6 +65,7 @@ create table if not exists public.stock_transfer_receipt_items (
   product_id uuid not null,
   quantity numeric(14,3) not null check (quantity > 0),
   created_at timestamptz not null default now(),
+  unique (tenant_id,receipt_id,transfer_item_id),
   constraint stock_transfer_receipt_items_receipt_fk
     foreign key (tenant_id,receipt_id) references public.stock_transfer_receipts(tenant_id,id) on delete cascade,
   constraint stock_transfer_receipt_items_transfer_item_fk
@@ -127,6 +128,7 @@ begin
     raise exception 'Permission denied to create a stock transfer';
   end if;
   if p_client_transfer_id is null then raise exception 'Transfer idempotency key is required'; end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_tenant_id::text || ':' || p_client_transfer_id::text,0));
   select id into v_transfer_id from public.stock_transfers
     where tenant_id=p_tenant_id and client_transfer_id=p_client_transfer_id;
   if found then return v_transfer_id; end if;
