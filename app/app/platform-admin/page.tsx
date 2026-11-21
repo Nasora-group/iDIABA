@@ -16,7 +16,7 @@ type RequestRow = {
   payment_reference: string; created_at: string; status: string;
   tenant: Relation<{ name: string }>; plan: Relation<{ name: string; code: string }>;
 };
-type PaymentRow = { subscription_request_id: string; provider: string; status: string; amount_fcfa: number | string; provider_transaction_id: string | null; paid_at: string | null };
+type PaymentRow = { id: string; subscription_request_id: string; provider: string; status: string; amount_fcfa: number | string; provider_transaction_id: string | null; paid_at: string | null };
 type SubscriptionRow = {
   tenant_id: string; status: string;
   tenant: Relation<{ name: string }>; plan: Relation<{ name: string }>;
@@ -38,7 +38,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
     supabase.from("subscription_plans").select("id,code,name,description,price_monthly_fcfa,price_yearly_fcfa,max_users,max_locations,max_products,max_monthly_sales").order("code"),
     supabase.from("subscription_requests").select("id,tenant_id,billing_interval,payment_method,payment_reference,created_at,status,tenant:tenants(name),plan:subscription_plans(name,code)").order("created_at", { ascending: false }).limit(100),
     supabase.from("tenant_subscriptions").select("tenant_id,status,plan:subscription_plans(name),tenant:tenants(name)").order("created_at", { ascending: false }).limit(100),
-    supabase.from("subscription_payments").select("subscription_request_id,provider,status,amount_fcfa,provider_transaction_id,paid_at").order("created_at", { ascending: false }).limit(200),
+    supabase.from("subscription_payments").select("id,subscription_request_id,provider,status,amount_fcfa,provider_transaction_id,paid_at").order("created_at", { ascending: false }).limit(200),
   ]);
   const plans = (plansResult.data ?? []) as unknown as Plan[];
   const requests = (requestsResult.data ?? []) as unknown as RequestRow[];
@@ -90,7 +90,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
             return <article className="platform-request-card" key={request.id}>
               <div className="platform-request-header"><div><strong>{tenant?.name ?? "Entreprise"}</strong><span>{plan?.name ?? "Formule"} · {request.billing_interval === "monthly" ? "Mensuel" : "Annuel"}</span></div><span className={"subscription-status " + (request.status === "pending" ? "pending" : "")}>{request.status === "pending" ? "En attente" : request.status === "approved" ? "Acceptée" : request.status === "rejected" ? "Refusée" : "Annulée"}</span></div>
               <p>Moyen : {request.payment_method === "orange_money" ? "Orange Money" : request.payment_method === "wave" ? "Wave" : request.payment_method} · Référence : {request.payment_reference || "Non renseignée"}</p>
-              {payments.filter((payment) => payment.subscription_request_id === request.id).map((payment) => <p key={payment.subscription_request_id}>Paiement : {Number(payment.amount_fcfa).toLocaleString("fr-FR")} FCFA · {payment.status === "paid" ? "Confirmé" : payment.status === "processing" ? "En cours" : payment.status === "failed" ? "Échoué" : "En attente"}{payment.provider_transaction_id ? " · Transaction " + payment.provider_transaction_id : ""}</p>)}
+              {payments.filter((payment) => payment.subscription_request_id === request.id).map((payment) => <p key={payment.id}>Paiement : {Number(payment.amount_fcfa).toLocaleString("fr-FR")} FCFA · {payment.status === "paid" ? "Confirmé" : payment.status === "processing" ? "En cours" : payment.status === "failed" ? "Échoué" : "En attente"}{payment.provider_transaction_id ? " · Transaction " + payment.provider_transaction_id : ""}</p>)}
               <small>Reçue le {new Date(request.created_at).toLocaleString("fr-FR")}</small>
               {request.status === "pending" && <form action={reviewSubscriptionRequest} className="platform-review-form">
                 <input type="hidden" name="request_id" value={request.id} />
