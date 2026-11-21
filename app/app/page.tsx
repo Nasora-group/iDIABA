@@ -22,6 +22,7 @@ const modules = [
   { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
   { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", href: "/app/customers", action: "Gérer les clients", icon: Users },
   { title: "Utilisateurs & équipe", description: "Ajoutez des employés et gérez leurs rôles et accès.", href: "/app/team", action: "Gérer l’équipe", icon: Users },
+  { title: "Accès boutiques", description: "Affectez chaque employé aux boutiques et dépôts autorisés.", href: "/app/location-access", action: "Gérer les accès par site", icon: ShieldCheck },
   { title: "Abonnements & limites", description: "Formules, volumes et demandes de changement par entreprise.", href: "/app/subscription", action: "Gérer l’abonnement", icon: CreditCard },
   { title: "Paramètres entreprise", description: "Identité, RCCM, NINEA, coordonnées, devise et TVA par défaut.", href: "/app/company-settings", action: "Configurer l’entreprise", icon: ShieldCheck },
 ];
