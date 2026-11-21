@@ -31,12 +31,16 @@ export async function createStockTransfer(formData: FormData) {
     items.push({ product_id, quantity });
   }
   if (!items.length) redirect("/app/transfers?error=validation");
+  const mergedItems = [...items.reduce((map, item) => {
+    map.set(item.product_id, (map.get(item.product_id) ?? 0) + item.quantity);
+    return map;
+  }, new Map<string, number>())].map(([product_id, quantity]) => ({ product_id, quantity }));
   const notes = String(formData.get("notes") ?? "").trim().slice(0, 1000);
   const { error } = await supabase.rpc("create_stock_transfer", {
     p_tenant_id: tenant_id,
     p_source_location_id: source_location_id,
     p_destination_location_id: destination_location_id,
-    p_items: items,
+    p_items: mergedItems,
     p_notes: notes,
   });
   if (error) redirect("/app/transfers?error=create");
