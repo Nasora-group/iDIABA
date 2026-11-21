@@ -28,7 +28,7 @@ export default async function AppHome() {
     <main className="shell">
       <header className="topbar">
         <div className="brand"><span className="mark">i</span><span>iDIABA</span></div>
-        <div className="app-actions"><Link href="/app/products">Catalogue produits</Link><Link href="/app/stock">Gestion des stocks</Link><form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form></div>
+        <div className="app-actions"><Link href="/app/products">Catalogue produits</Link><Link href="/app/stock">Gestion des stocks</Link><Link href="/app/pos">Point de vente</Link><form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form></div>
       </header>
       <section className="workspace">
         <p className="eyebrow">ESPACE DE TRAVAIL</p>
@@ -41,6 +41,10 @@ export default async function AppHome() {
         <div className="app-module-card">
           <div><strong>Gestion des stocks</strong><p>Créez vos dépôts, enregistrez les stocks initiaux et suivez chaque mouvement sans effacer l&apos;historique.</p></div>
           <Link className="primary" href="/app/stock">Ouvrir les stocks</Link>
+        </div>
+        <div className="app-module-card">
+          <div><strong>Ventes et caisse</strong><p>Ouvrez une session, encaissez les ventes et mettez à jour le stock automatiquement.</p></div>
+          <Link className="primary" href="/app/pos">Ouvrir la caisse</Link>
         </div>
         <h2>Vos entreprises</h2>
         {memberships.length ? (
