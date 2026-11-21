@@ -78,7 +78,7 @@ begin
     ),
     'purchases',(
       select coalesce(sum(po.total_amount),0) from public.purchase_orders po
-      where po.tenant_id=p_tenant_id and po.ordered_at>=p_from and po.ordered_at<p_to
+      where po.tenant_id=p_tenant_id and po.status<>'cancelled' and po.ordered_at>=p_from and po.ordered_at<p_to
     ),
     'cash_variance',(
       select coalesce(sum(cs.cash_variance),0) from public.cash_sessions cs
