@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createStockTransfer, receiveStockTransfer, shipStockTransfer } from "./actions";
 
@@ -94,6 +95,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
                 <form action={createStockTransfer} className="catalog-form">
                   <h3>Nouveau transfert</h3>
                   <input type="hidden" name="tenant_id" value={workspace.tenant_id} />
+                  <input type="hidden" name="client_transfer_id" value={randomUUID()} />
                   <div className="catalog-fields">
                     <label>Dépôt / boutique source<select name="source_location_id" required defaultValue=""><option value="" disabled>Choisir</option>{locations.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.code}</option>)}</select></label>
                     <label>Destination<select name="destination_location_id" required defaultValue=""><option value="" disabled>Choisir</option>{locations.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.code}</option>)}</select></label>
@@ -127,6 +129,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
                   {canManage && ["shipped","partially_received"].includes(transfer.status) && (
                     <form action={receiveStockTransfer} className="catalog-form">
                       <input type="hidden" name="transfer_id" value={transfer.id}/>
+                      <input type="hidden" name="client_receipt_id" value={randomUUID()}/>
                       <h4>Valider la réception</h4>
                       {transfer.items.filter((item) => Number(item.quantity) > Number(item.received_quantity)).map((item) => {
                         const remaining = Number(item.quantity)-Number(item.received_quantity);
