@@ -38,7 +38,7 @@ export default function MFAChallenge({ next }: { next: string }) {
 
   async function verify(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!factorId || !challengeId || !/^\\d{6}$/.test(code)) return;
+    if (!factorId || !challengeId || !/^\d{6}$/.test(code)) return;
     setBusy(true); setError("");
     try {
       const supabase = createClient();
@@ -59,7 +59,7 @@ export default function MFAChallenge({ next }: { next: string }) {
         <h1>Confirmez votre identité</h1>
         <p className="lead">Saisissez le code temporaire affiché dans votre application d’authentification.</p>
         <form className="auth-form" onSubmit={verify}>
-          <label>Code à 6 chiffres<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\\D/g, "").slice(0, 6))} required /></label>
+          <label>Code à 6 chiffres<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required /></label>
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="primary auth-submit" disabled={busy || !challengeId || code.length !== 6}>{busy ? "Vérification…" : "Valider le code"}</button>
         </form>
