@@ -64,7 +64,7 @@ export default async function StockPage({ searchParams }: {
       <section className="workspace catalog-workspace">
         <p className="eyebrow">SPRINT 3 · STOCKS</p>
         <h1>Gestion des stocks</h1>
-        <p className="lead">Suivez les dépôts, les entrées, les sorties et l'historique des mouvements. Le stock disponible est calculé sur l'ensemble du journal, sans limite sur le nombre de mouvements.</p>
+        <p className="lead">Suivez les dépôts, les entrées, les sorties et l&apos;historique des mouvements. Le stock disponible est calculé sur l&apos;ensemble du journal, sans limite sur le nombre de mouvements.</p>
         {params.created && <p className="form-success">Enregistrement effectué.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les droits et le stock disponible.</p>}
         {!stockData.length && <p>Aucun espace entreprise associé à ce compte.</p>}
