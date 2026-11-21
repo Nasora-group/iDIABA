@@ -14,7 +14,8 @@ export async function manageMember(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const fullName = String(formData.get("full_name") ?? "").trim().slice(0,120);
   const role = String(formData.get("role") ?? "cashier");
-  if (!/^[0-9a-f-]{36}$/i.test(tenantId) || !["add","update","remove"].includes(action) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || (action!=="remove" && !allowed.includes(role))) go("validation");
+  const validAccount = /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email) || /^[0-9a-f-]{36}$/i.test(email);
+  if (!/^[0-9a-f-]{36}$/i.test(tenantId) || !["add","update","remove"].includes(action) || !validAccount || (action!=="remove" && !allowed.includes(role))) go("validation");
   const { error } = await supabase.rpc("manage_tenant_member", {
     p_tenant_id: tenantId, p_email: email, p_full_name: fullName, p_role: action==="remove" ? "cashier" : role, p_action: action
   });
