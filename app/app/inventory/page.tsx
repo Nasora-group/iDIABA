@@ -76,12 +76,12 @@ export default async function InventoryPage({ searchParams }: {
       <section className="workspace catalog-workspace">
         <p className="eyebrow">SPRINT 8 · CONTRÔLE DES STOCKS</p>
         <h1>Inventaires physiques</h1>
-        <p className="lead">Comparez les quantités réellement comptées au stock théorique. La validation enregistre uniquement les écarts dans le journal de stock, sans modifier ni effacer l'historique.</p>
+        <p className="lead">Comparez les quantités réellement comptées au stock théorique. La validation enregistre uniquement les écarts dans le journal de stock, sans modifier ni effacer l&apos;historique.</p>
 
         {params.created && <p className="form-success">Inventaire créé. Ajoutez les produits comptés.</p>}
         {params.line && <p className="form-success">Ligne d'inventaire enregistrée.</p>}
         {params.posted && <p className="form-success">Inventaire validé. Les écarts ont été enregistrés dans le journal de stock.</p>}
-        {params.error === "stale" && <p className="form-error">Le stock a changé depuis le comptage d'un produit. Actualisez la quantité de ce produit avant de valider l'inventaire.</p>}
+        {params.error === "stale" && <p className="form-error">Le stock a changé depuis le comptage d'un produit. Actualisez la quantité de ce produit avant de valider l&apos;inventaire.</p>}
         {params.error && params.error !== "stale" && <p className="form-error">Opération impossible. Vérifiez les informations, les droits et les quantités saisies.</p>}
 
         {!data.length && <p className="catalog-empty">Aucun espace entreprise associé à ce compte.</p>}
@@ -111,7 +111,7 @@ export default async function InventoryPage({ searchParams }: {
                 <input name="notes" maxLength={500} placeholder="Équipe de comptage, zone ou commentaire" />
               </label>
               <button className="primary" type="submit" disabled={!locations.length}>Créer l'inventaire</button>
-              {!locations.length && <p className="catalog-help">Créez d'abord un dépôt dans le module Stocks.</p>}
+              {!locations.length && <p className="catalog-help">Créez d&apos;abord un dépôt dans le module Stocks.</p>}
             </form>
 
             <div className="inventory-count-list">
