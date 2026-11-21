@@ -64,9 +64,9 @@ export default async function ProductsPage({
         <p className="lead">Centralisez vos références, codes-barres, unités, prix et taux de taxe par entreprise.</p>
         {params.created && <p className="form-success">Enregistrement effectué.</p>}
         {params.archived && <p className="form-success">Produit archivé. Son historique est conservé.</p>}
-        {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les doublons SKU/code-barres et vos droits d'accès.</p>}
+        {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les doublons SKU/code-barres et vos droits d&apos;accès.</p>}
         {membershipError && <p className="form-error">Impossible de charger les espaces entreprise.</p>}
-        {!catalogs.length && <p>Aucun espace entreprise n'est associé à ce compte.</p>}
+        {!catalogs.length && <p>Aucun espace entreprise n&apos;est associé à ce compte.</p>}
         {catalogs.map(({ workspace, categories, products, error }) => (
           <section className="catalog-tenant" key={workspace.tenant_id}>
             <div className="catalog-heading">
@@ -88,7 +88,7 @@ export default async function ProductsPage({
                   <label>Unité<input name="unit" required maxLength={24} defaultValue="unité" /></label>
                 </div>
                 <div className="catalog-fields">
-                  <label>Prix d'achat (FCFA)<input name="purchase_price" type="number" min="0" step="0.01" defaultValue="0" required /></label>
+                  <label>Prix d&apos;achat (FCFA)<input name="purchase_price" type="number" min="0" step="0.01" defaultValue="0" required /></label>
                   <label>Prix de vente (FCFA)<input name="sale_price" type="number" min="0" step="0.01" defaultValue="0" required /></label>
                 </div>
                 <label>Taxe (%)<input name="tax_rate" type="number" min="0" max="100" step="0.01" defaultValue="0" required /></label>
