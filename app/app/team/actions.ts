@@ -14,7 +14,7 @@ export async function manageMember(formData:FormData){
  const email=String(formData.get("email")??"").trim().toLowerCase();
  const fullName=String(formData.get("full_name")??"").trim().slice(0,120);
  const role=String(formData.get("role")??"cashier");
- const validAccount=/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)||/^[0-9a-f-]{36}$/i.test(email);
+ const validAccount=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||/^[0-9a-f-]{36}$/i.test(email);
  if(!/^[0-9a-f-]{36}$/i.test(tenantId)||!["add","update","remove"].includes(action)||!validAccount||(action!=="remove"&&!allowed.includes(role))) go("validation");
  const {error}=await supabase.rpc("manage_tenant_member",{p_tenant_id:tenantId,p_email:email,p_full_name:fullName,p_role:action==="remove"?"cashier":role,p_action:action});
  if(error) go(error.message.includes("quota")?"quota":error.message.includes("No account")?"noaccount":"error");
@@ -29,7 +29,7 @@ export async function inviteMember(formData:FormData){
  const email=String(formData.get("email")??"").trim().toLowerCase();
  const fullName=String(formData.get("full_name")??"").trim().slice(0,120);
  const role=String(formData.get("role")??"cashier");
- if(!/^[0-9a-f-]{36}$/i.test(tenantId)||!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)||!allowed.includes(role)) go("validation");
+ if(!/^[0-9a-f-]{36}$/i.test(tenantId)||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||!allowed.includes(role)) go("validation");
  const {data,error}=await supabase.functions.invoke("invite-tenant-member",{body:{tenant_id:tenantId,email,full_name:fullName,role}});
  if(error) go("inviteerror");
  if(data?.error) go(data.error);
