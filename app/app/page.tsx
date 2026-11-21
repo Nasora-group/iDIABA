@@ -15,6 +15,7 @@ const modules = [
   { title: "Stocks & dépôts", description: "Stocks disponibles, dépôts et journal des mouvements.", href: "/app/stock", action: "Consulter les stocks", icon: Boxes },
   { title: "Caisse & ventes", description: "Encaissements, paiements multiples et clôture de caisse.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
   { title: "Achats & fournisseurs", description: "Commandes fournisseurs et réceptions de marchandises.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
+  { title: "Factures fournisseurs", description: "Dettes, échéances et règlements partiels ou complets.", href: "/app/supplier-invoices", action: "Suivre les factures", icon: ClipboardList },
   { title: "Comptabilité", description: "Dépenses, écritures et balance comptable.", href: "/app/accounting", action: "Voir la comptabilité", icon: ChartNoAxesCombined },
   { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
   { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", href: "/app/customers", action: "Gérer les clients", icon: Users },
@@ -50,6 +51,7 @@ export default async function AppHome() {
           <Link href="/app/customers">Clients</Link>
           <Link href="/app/pos">Caisse</Link>
           <Link href="/app/purchasing">Achats</Link>
+          <Link href="/app/supplier-invoices">Factures fournisseurs</Link>
           <Link href="/app/accounting">Comptabilité</Link>
           <Link href="/app/subscription">Abonnement</Link>
           {canViewAudit && <Link href="/app/audit">Journal d’audit</Link>}
