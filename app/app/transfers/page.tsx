@@ -82,7 +82,8 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
         <p className="eyebrow">STOCKS · MOUVEMENTS INTER-ÉTABLISSEMENTS</p>
         <h1>Transferts de stock</h1>
         <p className="lead">Créez un transfert, validez son expédition, puis enregistrez les quantités réellement reçues. Les mouvements de stock sont tracés à chaque étape.</p>
-        {params.status && messages[params.status] && <p className={["created","shipped","received"].includes(params.status) ? "form-success" : "form-error"}>{messages[params.status]}</p>}
+        {params.status && messages[params.status] && <p className="form-success">{messages[params.status]}</p>}
+        {params.error && messages[params.error] && <p className="form-error">{messages[params.error]}</p>}
         {data.map(({ workspace, locations, products, transfers, error }) => {
           const canManage = ["owner","admin","manager","stock"].includes(workspace.role);
           return (
