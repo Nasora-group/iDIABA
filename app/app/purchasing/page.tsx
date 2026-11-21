@@ -48,7 +48,7 @@ export default async function PurchasingPage({ searchParams }: {
     <main className="shell">
       <header className="topbar">
         <div className="brand"><span className="mark">i</span><span>iDIABA</span></div>
-        <nav className="product-nav"><Link href="/app">Mon espace</Link><Link href="/app/products">Catalogue</Link><Link href="/app/stock">Stocks</Link><Link href="/app/inventory">Inventaires</Link><Link href="/app/pos">Caisse</Link><span>Achats</span><Link href="/app/accounting">Comptabilité</Link></nav>
+        <nav className="product-nav"><Link href="/app">Mon espace</Link><Link href="/app/products">Catalogue</Link><Link href="/app/stock">Stocks</Link><Link href="/app/inventory">Inventaires</Link><Link href="/app/pos">Caisse</Link><span>Achats</span><Link href="/app/supplier-invoices">Factures fournisseurs</Link><Link href="/app/accounting">Comptabilité</Link></nav>
       </header>
       <section className="workspace catalog-workspace">
         <p className="eyebrow">ACHATS & APPROVISIONNEMENT</p>
