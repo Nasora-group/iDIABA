@@ -65,6 +65,8 @@ create table if not exists public.subscription_requests (
 );
 create index if not exists subscription_requests_tenant_created_idx
   on public.subscription_requests(tenant_id,created_at desc);
+create unique index if not exists subscription_requests_one_pending_per_tenant
+  on public.subscription_requests(tenant_id) where status='pending';
 
 alter table public.subscription_plans enable row level security;
 alter table public.tenant_subscriptions enable row level security;
@@ -77,8 +79,13 @@ create policy "tenant owners read subscriptions" on public.tenant_subscriptions
   for select to authenticated using (public.has_tenant_role(tenant_id,array['owner','admin']::public.tenant_role[]));
 create policy "tenant owners read subscription requests" on public.subscription_requests
   for select to authenticated using (public.has_tenant_role(tenant_id,array['owner','admin']::public.tenant_role[]));
+create policy "tenant owners create subscription requests" on public.subscription_requests
+  for insert to authenticated with check (
+    created_by=auth.uid() and public.has_tenant_role(tenant_id,array['owner','admin']::public.tenant_role[])
+  );
 
 grant select on public.subscription_plans,public.tenant_subscriptions,public.subscription_requests to authenticated;
+grant insert on public.subscription_requests to authenticated;
 
 create or replace function public.create_trial_subscription()
 returns trigger language plpgsql security definer set search_path = pg_catalog, public
@@ -204,37 +211,6 @@ begin
 end;
 $;
 
-create or replace function public.request_subscription_change(
-  p_tenant_id uuid,
-  p_plan_code text,
-  p_billing_interval text,
-  p_payment_method text,
-  p_payment_reference text default ''
-) returns uuid language plpgsql security definer set search_path = pg_catalog, public
-as $$
-declare
-  v_plan_id uuid;
-  v_request_id uuid;
-begin
-  if auth.uid() is null or not public.has_tenant_role(p_tenant_id,array['owner','admin']::public.tenant_role[]) then
-    raise exception 'Seul un propriétaire ou administrateur peut demander un changement de formule';
-  end if;
-  if p_billing_interval not in ('monthly','yearly') then raise exception 'Période de facturation invalide'; end if;
-  if p_payment_method not in ('wave','orange_money','bank_transfer','cash','other') then raise exception 'Moyen de paiement invalide'; end if;
-  if length(coalesce(p_payment_reference,'')) > 160 then raise exception 'Référence de paiement trop longue'; end if;
-  select id into v_plan_id from public.subscription_plans where code=p_plan_code and is_active=true and code<>'trial';
-  if v_plan_id is null then raise exception 'Formule indisponible'; end if;
-  if exists(select 1 from public.subscription_requests where tenant_id=p_tenant_id and status='pending') then
-    raise exception 'Une demande de changement est déjà en attente';
-  end if;
-  insert into public.subscription_requests(tenant_id,requested_plan_id,billing_interval,payment_method,payment_reference,created_by)
-  values(p_tenant_id,v_plan_id,p_billing_interval,p_payment_method,coalesce(p_payment_reference,''),auth.uid())
-  returning id into v_request_id;
-  return v_request_id;
-end;
-$$;
 
 revoke all on function public.create_trial_subscription() from public,anon,authenticated;
 revoke all on function public.enforce_tenant_subscription_quota() from public,anon,authenticated;
-revoke all on function public.request_subscription_change(uuid,text,text,text,text) from public,anon,authenticated;
-grant execute on function public.request_subscription_change(uuid,text,text,text,text) to authenticated;
