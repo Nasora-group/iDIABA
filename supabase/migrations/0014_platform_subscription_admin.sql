@@ -1,4 +1,9 @@
 -- Sprint 13: platform administration for subscription plans and payment approval.
+alter table public.subscription_plans
+  add constraint subscription_plans_monthly_price_nonnegative
+    check (price_monthly_fcfa is null or price_monthly_fcfa >= 0),
+  add constraint subscription_plans_yearly_price_nonnegative
+    check (price_yearly_fcfa is null or price_yearly_fcfa >= 0);
 drop policy if exists "authenticated read active subscription plans" on public.subscription_plans;
 create policy "authenticated read active subscription plans" on public.subscription_plans
   for select to authenticated
@@ -41,7 +46,7 @@ begin
      or coalesce((auth.jwt() -> 'app_metadata' ->> 'role'),'') <> 'platform_admin' then
     raise exception 'Accès réservé à l''administration iDIABA';
   end if;
-  if p_decision not in ('approve','reject') then
+  if p_decision is null or p_decision not in ('approve','reject') then
     raise exception 'Décision invalide';
   end if;
   if length(v_note)>500 then raise exception 'Note administrative trop longue'; end if;
