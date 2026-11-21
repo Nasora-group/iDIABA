@@ -65,9 +65,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         <nav className="app-actions"><Link href="/app">Tableau de bord</Link><Link href="/app/accounting">Comptabilité</Link><Link href="/app/audit">Audit</Link></nav>
       </header>
       <section className="workspace">
-        <p className="eyebrow">PILOTAGE DE L'ENTREPRISE</p>
+        <p className="eyebrow">PILOTAGE DE L&apos;ENTREPRISE</p>
         <h1>Rapports de gestion</h1>
-        <p className="lead">Suivez le chiffre d'affaires, les dépenses, les achats, les retours et les mouvements de stock.</p>
+        <p className="lead">Suivez le chiffre d&apos;affaires, les dépenses, les achats, les retours et les mouvements de stock.</p>
         <form method="get" className="report-filter">
           <label>Entreprise<select name="tenant_id" defaultValue={tenant.tenant_id}>{workspaces.map((item) => <option key={item.tenant_id} value={item.tenant_id}>{item.tenant?.name}</option>)}</select></label>
           <label>Du<input type="date" name="from" defaultValue={from} required /></label>
@@ -79,7 +79,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         {reportError && <p className="form-error">Impossible de charger le rapport. Vérifiez vos droits et réessayez.</p>}
         {report && <>
           <div className="report-stat-grid">
-            <article><span>Chiffre d'affaires</span><strong>{money(report.revenue)}</strong><small>{report.sales_count} ventes validées</small></article>
+            <article><span>Chiffre d&apos;affaires</span><strong>{money(report.revenue)}</strong><small>{report.sales_count} ventes validées</small></article>
             <article><span>Panier moyen</span><strong>{money(report.average_ticket)}</strong><small>Par vente validée</small></article>
             <article><span>Dépenses</span><strong>{money(report.expenses)}</strong><small>Charges enregistrées</small></article>
             <article><span>Commandes fournisseurs</span><strong>{money(report.purchases)}</strong><small>Montant commandé</small></article>
@@ -90,14 +90,14 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
           <section className="report-section">
             <h2>Meilleurs produits</h2>
-            {report.top_products?.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Produit</th><th>Quantité vendue</th><th>Chiffre d'affaires</th></tr></thead><tbody>{report.top_products.map((product,index) => <tr key={product.product_name + index}><td>{product.product_name}</td><td>{Number(product.quantity).toLocaleString("fr-FR")}</td><td>{money(product.revenue)}</td></tr>)}</tbody></table></div> : <p className="catalog-empty">Aucune vente sur cette période.</p>}
+            {report.top_products?.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Produit</th><th>Quantité vendue</th><th>Chiffre d&apos;affaires</th></tr></thead><tbody>{report.top_products.map((product,index) => <tr key={product.product_name + index}><td>{product.product_name}</td><td>{Number(product.quantity).toLocaleString("fr-FR")}</td><td>{money(product.revenue)}</td></tr>)}</tbody></table></div> : <p className="catalog-empty">Aucune vente sur cette période.</p>}
           </section>
 
           <section className="report-section">
             <h2>Dernières ventes</h2>
             {report.recent_sales?.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Date</th><th>Ticket</th><th>Montant</th></tr></thead><tbody>{report.recent_sales.map((sale) => <tr key={sale.id}><td>{new Date(sale.completed_at).toLocaleString("fr-FR")}</td><td><code>{sale.id.slice(0,8)}</code></td><td>{money(sale.total)}</td></tr>)}</tbody></table></div> : <p className="catalog-empty">Aucune vente sur cette période.</p>}
           </section>
-          <p className="catalog-help">La marge brute n'est pas affichée : le coût d'achat historique par ligne de vente doit être enregistré pour la calculer de façon fiable.</p>
+          <p className="catalog-help">La marge brute n&apos;est pas affichée : le coût d&apos;achat historique par ligne de vente doit être enregistré pour la calculer de façon fiable.</p>
         </>}
       </section>
     </main>
