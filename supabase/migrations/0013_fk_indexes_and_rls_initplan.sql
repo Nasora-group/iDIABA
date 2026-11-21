@@ -30,9 +30,9 @@ begin
         and idx.indpred is null
         and idx.indnkeyatts >= array_length(fk.conkey,1)
         and array(
-          select idx.indkey[position]::smallint
-          from generate_series(0,array_length(fk.conkey,1)-1) as position
-          order by position
+          select idx.indkey[gs.pos]::smallint
+          from generate_series(0,array_length(fk.conkey,1)-1) as gs(pos)
+          order by gs.pos
         ) = fk.conkey
     ) then
       index_name := left('idx_fk_' || fk.table_name || '_' || substr(md5(fk.conname),1,10),63);
