@@ -1,15 +1,16 @@
 # Roadmap
 
-- Sprint 0 : dépôt, conventions, CI, environnements et architecture.
-- Sprint 1 : authentification, entreprises, établissements, rôles, RLS.
-- Sprint 2 : produits, catégories, clients, fournisseurs.
-- Sprint 3 : entrepôts, mouvements, lots, inventaires.
-- Sprint 4 : POS, ventes, paiements, retours, tickets.
-- Sprint 5 : achats et réception.
-- Sprint 6 : dépenses, caisse, trésorerie et clôtures.
-- Sprint 7 : comptabilité et rapports.
-- Sprint 8 : PWA hors-ligne, synchronisation idempotente.
-- Sprint 9 : abonnements SaaS, quotas, facturation et onboarding.
-- Sprint 10 : durcissement sécurité, audit des opérations et sauvegardes.
-- Sprint 11 : tableaux de bord, exports et rapports de gestion.
-- Sprint 12 : tests fonctionnels complets, recette métier et préparation de lancement.
+- Sprint 1 : authentification, entreprises, établissements, rôles et RLS.
+- Sprint 2 : catalogue produits, catégories et fournisseurs.
+- Sprint 3 : dépôts, mouvements de stock et soldes.
+- Sprint 4 : caisse, ventes, paiements et clôtures.
+- Sprint 5 : commandes fournisseurs et réceptions.
+- Sprint 6 : mouvements de caisse, dépenses et trésorerie.
+- Sprint 7 : comptabilité SYSCOHADA et balance.
+- Sprint 8 : inventaires physiques et ajustements contrôlés.
+- Sprint 9 : clients, historique et retours de ventes.
+- Sprint 10 : PWA, caisse hors connexion et synchronisation idempotente.
+- Sprint 11 : abonnements SaaS, quotas et demandes de changement de formule.
+- Sprint 12 : sécurité, audit des opérations, sauvegardes et restauration.
+- Sprint 13 : tableaux de bord, rapports et exports.
+- Sprint 14 : tests métier complets, recette multi-entreprises et préparation de lancement.
