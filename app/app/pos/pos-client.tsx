@@ -18,7 +18,10 @@ function formatCents(cents: number) {
   return (cents / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export default function POSCheckout({ userId, tenantId, locationId, sessionId, clientSaleId, products }: Props) {\n  const [activeSaleId, setActiveSaleId] = useState(clientSaleId);\n  const [offlineMessage, setOfflineMessage] = useState("");\n  const syncLock = useRef(false);
+export default function POSCheckout({ userId, tenantId, locationId, sessionId, clientSaleId, products }: Props) {
+  const [activeSaleId, setActiveSaleId] = useState(clientSaleId);
+  const [offlineMessage, setOfflineMessage] = useState("");
+  const syncLock = useRef(false);
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [quantity, setQuantity] = useState("1");
   const [cart, setCart] = useState<CartLine[]>([]);
