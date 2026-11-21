@@ -116,7 +116,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
                   <label>Formule souhaitée<select name="plan_code" required defaultValue="starter">{availablePlans.filter((plan) => plan.code !== "trial" && plan.code !== panel.plan?.code).map((plan) => <option value={plan.code} key={plan.id}>{plan.name} · {formatPrice(plan.price_monthly_fcfa)} / mois</option>)}</select></label>
                   <label>Facturation<select name="billing_interval" defaultValue="monthly"><option value="monthly">Mensuelle</option><option value="yearly">Annuelle</option></select></label>
                   <label>Moyen de paiement<select name="payment_method" defaultValue="wave"><option value="wave">Wave · paiement en ligne</option><option value="orange_money">Orange Money · validation manuelle</option></select></label>
-                  <label>Référence Orange Money (facultatif)<input name="payment_reference" maxLength={160} placeholder="Référence après paiement" /></label>
+                  <label>Référence Orange Money (obligatoire si ce moyen est choisi)<input name="payment_reference" maxLength={160} placeholder="Référence après paiement" /></label>
                 </div>
                 <p className="catalog-help">Wave ouvre une page de paiement sécurisée. L&apos;abonnement est activé uniquement après confirmation serveur du paiement. Orange Money reste en validation manuelle tant que l&apos;accès marchand/API Orange n&apos;est pas configuré.</p>
                 <button className="primary" type="submit">Envoyer la demande</button>
