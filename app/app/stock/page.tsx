@@ -11,6 +11,11 @@ type Movement = {
   product: { name: string; sku: string; unit: string } | null;
   location: { name: string; code: string } | null;
 };
+type Balance = {
+  quantity_on_hand: string | number;
+  product: { name: string; sku: string; unit: string } | null;
+  location: { name: string; code: string } | null;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -26,30 +31,28 @@ export default async function StockPage({ searchParams }: {
     .select("tenant_id,role,tenant:tenants(name)").eq("user_id", user.id);
   const workspaces = (memberships ?? []) as unknown as Workspace[];
   const stockData = await Promise.all(workspaces.map(async (workspace) => {
-    const [productResult, locationResult, movementResult] = await Promise.all([
+    const [productResult, locationResult, movementResult, balanceResult] = await Promise.all([
       supabase.from("products").select("id,name,sku,unit").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       supabase.from("stock_movements").select("id,movement_type,quantity_delta,reference,note,created_at,product:products(name,sku,unit),location:stock_locations(name,code)").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(500),
+      supabase.from("stock_balances").select("quantity_on_hand,product:products(name,sku,unit),location:stock_locations(name,code)").eq("tenant_id", workspace.tenant_id),
     ]);
     const movements = (movementResult.data ?? []) as unknown as Movement[];
-    const balances = new Map<string, { product: Product; location: Location; quantity: number }>();
-    for (const movement of movements) {
-      if (!movement.product || !movement.location) continue;
-      const key = movement.product.sku + "::" + movement.location.code;
-      const current = balances.get(key);
-      balances.set(key, {
-        product: { id: "", ...movement.product },
-        location: { id: "", ...movement.location },
-        quantity: (current?.quantity ?? 0) + Number(movement.quantity_delta),
-      });
-    }
+    const balances = ((balanceResult.data ?? []) as unknown as Balance[])
+      .filter((balance) => balance.product && balance.location)
+      .map((balance) => ({
+        product: balance.product!,
+        location: balance.location!,
+        quantity: Number(balance.quantity_on_hand),
+      }))
+      .sort((a, b) => a.product.name.localeCompare(b.product.name));
     return {
       workspace,
       products: (productResult.data ?? []) as Product[],
       locations: (locationResult.data ?? []) as Location[],
       movements,
-      balances: Array.from(balances.values()).sort((a, b) => a.product.name.localeCompare(b.product.name)),
-      error: productResult.error?.message ?? locationResult.error?.message ?? movementResult.error?.message ?? null,
+      balances,
+      error: productResult.error?.message ?? locationResult.error?.message ?? movementResult.error?.message ?? balanceResult.error?.message ?? null,
     };
   }));
 
@@ -62,7 +65,7 @@ export default async function StockPage({ searchParams }: {
       <section className="workspace catalog-workspace">
         <p className="eyebrow">SPRINT 3 · STOCKS</p>
         <h1>Gestion des stocks</h1>
-        <p className="lead">Suivez les dépôts, les entrées, les sorties et l'historique des mouvements. Le stock est calculé à partir du journal des mouvements.</p>
+        <p className="lead">Suivez les dépôts, les entrées, les sorties et l'historique des mouvements. Le stock disponible est calculé sur l'ensemble du journal, sans limite sur le nombre de mouvements.</p>
         {params.created && <p className="form-success">Enregistrement effectué.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les droits et le stock disponible.</p>}
         {!stockData.length && <p>Aucun espace entreprise associé à ce compte.</p>}
@@ -70,7 +73,7 @@ export default async function StockPage({ searchParams }: {
           <section className="catalog-tenant" key={workspace.tenant_id}>
             <div className="catalog-heading">
               <div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>Rôle : {workspace.role}</p></div>
-              <span className="pill">{locations.length} dépôt(s) · {movements.length} mouvement(s) récents</span>
+              <span className="pill">{locations.length} dépôt(s) · {movements.length} mouvements récents</span>
             </div>
             {error && <p className="form-error">Erreur de chargement : {error}</p>}
             <div className="catalog-forms stock-forms">
@@ -98,10 +101,10 @@ export default async function StockPage({ searchParams }: {
               </form>
             </div>
             <div className="catalog-table-wrap">
-              <h3>État du stock récent</h3>
+              <h3>État du stock</h3>
               {balances.length ? (
                 <table className="catalog-table">
-                  <thead><tr><th>Produit</th><th>Dépôt</th><th>Quantité calculée</th><th>Unité</th></tr></thead>
+                  <thead><tr><th>Produit</th><th>Dépôt</th><th>Quantité disponible</th><th>Unité</th></tr></thead>
                   <tbody>{balances.map((balance) => (
                     <tr key={balance.product.sku + balance.location.code}>
                       <td><strong>{balance.product.name}</strong><small>{balance.product.sku}</small></td>
