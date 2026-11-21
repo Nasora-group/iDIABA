@@ -56,6 +56,7 @@ export default async function AppHome() {
           <Link href="/app/accounting">Comptabilité</Link>
           <Link href="/app/subscription">Abonnement</Link>
           <Link href="/app/team">Équipe</Link>
+          <Link href="/app/security">Sécurité</Link>
           {canViewAudit && <Link href="/app/audit">Journal d’audit</Link>}
           {canViewAudit && <Link href="/app/reports">Rapports</Link>}
           {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin">Admin SaaS</Link>}

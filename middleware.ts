@@ -26,6 +26,16 @@ export async function middleware(request: NextRequest) {
     destination.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(destination);
   }
+  if (request.nextUrl.pathname.startsWith("/app") && user) {
+    const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assurance?.nextLevel === "aal2" && assurance.currentLevel !== "aal2") {
+      const destination = request.nextUrl.clone();
+      destination.pathname = "/auth/mfa";
+      destination.search = "";
+      destination.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
+      return NextResponse.redirect(destination);
+    }
+  }
   if ((request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup") && user) {
     const destination = request.nextUrl.clone();
     destination.pathname = "/app";
