@@ -80,7 +80,7 @@ export async function recordSupplierPayment(fd: FormData) {
   const reference = String(fd.get("reference") ?? "").trim().slice(0, 100);
   const cashSessionId = String(fd.get("cash_session_id") ?? "").trim() || null;
 
-  if (!uuid(invoiceId) || !uuid(accountId) || !validDate(paidAt) || !paymentAmount) fail("payment");
+  if (!uuid(invoiceId) || !uuid(accountId) || (cashSessionId !== null && !uuid(cashSessionId)) || !validDate(paidAt) || !paymentAmount) fail("payment");
 
   const { error } = await supabase.rpc("record_supplier_invoice_payment", {
     p_invoice_id: invoiceId,
