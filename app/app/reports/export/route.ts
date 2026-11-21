@@ -4,8 +4,13 @@ export const dynamic = "force-dynamic";
 
 type Report = {
   revenue: number; sales_count: number; average_ticket: number;
+  costed_revenue: number; cost_of_goods_sold: number; gross_margin: number;
+  gross_margin_rate: number; costed_lines: number; uncosted_lines: number;
   recent_sales: { id: string; total: number; completed_at: string }[];
-  top_products: { product_name: string; quantity: number; revenue: number }[];
+  top_products: {
+    product_name: string; quantity: number; revenue: number; cost: number | null;
+    gross_margin: number | null; costed_lines: number; total_lines: number;
+  }[];
   expenses: number; purchases: number; returns_amount: number; returns_count: number;
   cash_variance: number; stock_movements_count: number;
 };
@@ -49,6 +54,12 @@ export async function GET(request: Request) {
     ["Chiffre d'affaires FCFA",report.revenue],
     ["Nombre de ventes",report.sales_count],
     ["Panier moyen FCFA",report.average_ticket],
+    ["Chiffre d'affaires HT avec coût connu FCFA",report.costed_revenue],
+    ["Coût des marchandises vendues FCFA",report.cost_of_goods_sold],
+    ["Marge brute connue FCFA",report.gross_margin],
+    ["Taux de marge brute sur ventes valorisées (%)",report.gross_margin_rate],
+    ["Lignes valorisées",report.costed_lines],
+    ["Lignes sans coût connu",report.uncosted_lines],
     ["Dépenses FCFA",report.expenses],
     ["Commandes fournisseurs FCFA",report.purchases],
     ["Remboursements FCFA",report.returns_amount],
@@ -56,8 +67,8 @@ export async function GET(request: Request) {
     ["Écart de caisse FCFA",report.cash_variance],
     ["Mouvements de stock",report.stock_movements_count],
     [],
-    ["Top produits","Quantité","Chiffre d'affaires FCFA"],
-    ...(report.top_products ?? []).map((item) => [item.product_name,item.quantity,item.revenue]),
+    ["Top produits","Quantité","Chiffre d'affaires HT FCFA","Coût connu FCFA","Marge brute connue FCFA","Lignes valorisées","Lignes totales"],
+    ...(report.top_products ?? []).map((item) => [item.product_name,item.quantity,item.revenue,item.cost ?? "Non disponible",item.gross_margin ?? "Non disponible",item.costed_lines,item.total_lines]),
     [],
     ["Dernières ventes","Date","Montant FCFA"],
     ...(report.recent_sales ?? []).map((item) => [item.id,item.completed_at,item.total]),
