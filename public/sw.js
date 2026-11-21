@@ -37,7 +37,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.mode === "navigate" && url.pathname.startsWith("/app/pos")) {
+  if (request.mode === "navigate" && (url.pathname === "/app" || url.pathname.startsWith("/app/") || url.pathname === OFFLINE_PAGE)) {
     event.respondWith(
       fetch(request).catch(async () => {
         const cached = await caches.match(OFFLINE_PAGE);
