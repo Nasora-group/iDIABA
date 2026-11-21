@@ -18,6 +18,7 @@ const modules = [
   { title: "Comptabilité", description: "Dépenses, écritures et balance comptable.", href: "/app/accounting", action: "Voir la comptabilité", icon: ChartNoAxesCombined },
   { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
   { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", href: "/app/customers", action: "Gérer les clients", icon: Users },
+  { title: "Abonnements & limites", description: "Formules, volumes et demandes de changement par entreprise.", href: "/app/subscription", action: "Gérer l’abonnement", icon: CreditCard },
 ];
 
 export default async function AppHome() {
@@ -49,6 +50,7 @@ export default async function AppHome() {
           <Link href="/app/pos">Caisse</Link>
           <Link href="/app/purchasing">Achats</Link>
           <Link href="/app/accounting">Comptabilité</Link>
+          <Link href="/app/subscription">Abonnement</Link>
           <form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form>
         </nav>
       </header>
