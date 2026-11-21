@@ -17,7 +17,7 @@ create table if not exists public.tenants (
   updated_at timestamptz not null default now()
 );
 
-create type public.tenant_role as enum ('owner','admin','manager','cashier','stock','accountant','viewer');
+do $ begin create type public.tenant_role as enum ('owner','admin','manager','cashier','stock','accountant','viewer'); exception when duplicate_object then null; end $;
 
 create table if not exists public.tenant_memberships (
   id uuid primary key default gen_random_uuid(),
@@ -55,9 +55,22 @@ $$;
 
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public
-as $$
+as $
+declare workspace_id uuid;
 begin
   insert into public.profiles(id,full_name) values(new.id,coalesce(new.raw_user_meta_data->>'full_name','')) on conflict (id) do nothing;
+  -- Workspace creation is tied to the auth-user trigger so it also works when email confirmation is enabled.
+  if length(trim(coalesce(new.raw_user_meta_data->>'workspace_name',''))) between 2 and 120 then
+    declare workspace_slug text;
+    begin
+      workspace_slug := lower(regexp_replace(trim(coalesce(new.raw_user_meta_data->>'workspace_slug','')), '[^a-z0-9]+', '-', 'g'));
+      workspace_slug := trim(both '-' from workspace_slug);
+      if workspace_slug = '' then workspace_slug := 'workspace-' || substr(new.id::text,1,8); end if;
+      if exists(select 1 from public.tenants where slug=workspace_slug) then workspace_slug := workspace_slug || '-' || substr(new.id::text,1,8); end if;
+      insert into public.tenants(name,slug,created_by) values(trim(new.raw_user_meta_data->>'workspace_name'),workspace_slug,new.id) returning id into workspace_id;
+      insert into public.tenant_memberships(tenant_id,user_id,role) values(workspace_id,new.id,'owner');
+    end;
+  end if;
   return new;
 end;
 $$;
@@ -74,13 +87,10 @@ create policy "profiles update self" on public.profiles for update to authentica
 create policy "tenant members can read tenant" on public.tenants for select to authenticated using (public.is_tenant_member(id));
 create policy "tenant admins can update tenant" on public.tenants for update to authenticated using (public.has_tenant_role(id,array['owner','admin']::public.tenant_role[])) with check (public.has_tenant_role(id,array['owner','admin']::public.tenant_role[]));
 create policy "members can read memberships in their tenant" on public.tenant_memberships for select to authenticated using (public.is_tenant_member(tenant_id));
-create policy "admins can add memberships" on public.tenant_memberships for insert to authenticated with check (public.has_tenant_role(tenant_id,array['owner','admin']::public.tenant_role[]));
-create policy "admins can update memberships" on public.tenant_memberships for update to authenticated using (public.has_tenant_role(tenant_id,array['owner','admin']::public.tenant_role[])) with check (public.has_tenant_role(tenant_id,array['owner','admin']::public.tenant_role[]));
-create policy "admins can remove memberships" on public.tenant_memberships for delete to authenticated using (public.has_tenant_role(tenant_id,array['owner','admin']::public.tenant_role[]));
 
 grant select, update on public.profiles to authenticated;
 grant select, update on public.tenants to authenticated;
-grant select, insert, update, delete on public.tenant_memberships to authenticated;
+grant select on public.tenant_memberships to authenticated;
 grant execute on function public.create_tenant(text,text) to authenticated;
 grant execute on function public.is_tenant_member(uuid) to authenticated;
 grant execute on function public.has_tenant_role(uuid,public.tenant_role[]) to authenticated;
