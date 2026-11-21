@@ -50,7 +50,7 @@ export default async function POSPage({ searchParams }: {
     <main className="shell">
       <header className="topbar">
         <div className="brand"><span className="mark">i</span><span>iDIABA</span></div>
-        <nav className="product-nav"><Link href="/app">Mon espace</Link><Link href="/app/products">Catalogue</Link><Link href="/app/stock">Stocks</Link><span>Caisse</span></nav>
+        <nav className="product-nav"><Link href="/app">Mon espace</Link><Link href="/app/products">Catalogue</Link><Link href="/app/stock">Stocks</Link><Link href="/app/inventory">Inventaires</Link><span>Caisse</span><Link href="/app/purchasing">Achats</Link><Link href="/app/accounting">Comptabilité</Link></nav>
       </header>
       <section className="workspace catalog-workspace">
         <p className="eyebrow">SPRINT 6 · CAISSE & RAPPROCHEMENT</p>

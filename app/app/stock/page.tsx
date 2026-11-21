@@ -59,7 +59,7 @@ export default async function StockPage({ searchParams }: {
     <main className="shell">
       <header className="topbar">
         <div className="brand"><span className="mark">i</span><span>iDIABA</span></div>
-        <nav className="product-nav"><Link href="/app">Mon espace</Link><Link href="/app/products">Catalogue</Link><span>Stocks</span></nav>
+        <nav className="product-nav"><Link href="/app">Mon espace</Link><Link href="/app/products">Catalogue</Link><span>Stocks</span><Link href="/app/inventory">Inventaires</Link><Link href="/app/pos">Caisse</Link><Link href="/app/purchasing">Achats</Link><Link href="/app/accounting">Comptabilité</Link></nav>
       </header>
       <section className="workspace catalog-workspace">
         <p className="eyebrow">SPRINT 3 · STOCKS</p>
