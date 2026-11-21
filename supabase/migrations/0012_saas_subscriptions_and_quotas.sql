@@ -119,11 +119,13 @@ declare
   v_limit integer;
   v_lock_key text;
 begin
+  if tg_table_name='products' and coalesce(new.is_active,false)=false then return new; end if;
+  if tg_table_name='stock_locations' and coalesce(new.is_active,false)=false then return new; end if;
   v_tenant_id := new.tenant_id;
   v_lock_key := v_tenant_id::text || ':' || tg_table_name;
   perform pg_advisory_xact_lock(hashtextextended(v_lock_key,0));
 
-  select s.status,s.trial_ends_at,s.current_period_ends_at,s.grace_ends_at,p.*
+  select s.status,s.trial_ends_at,s.current_period_ends_at,s.grace_ends_at,p
     into v_status,v_trial_ends_at,v_period_ends_at,v_grace_ends_at,v_plan
   from public.tenant_subscriptions s
   join public.subscription_plans p on p.id=s.plan_id
