@@ -47,7 +47,10 @@ begin
       from public.tenant_subscriptions ts join public.subscription_plans sp on sp.id=ts.plan_id
       where ts.tenant_id=p_tenant_id and ts.status in ('active','trialing')
       order by ts.created_at desc limit 1;
-    if v_max_users is null then\n      select max_users into v_max_users from public.subscription_plans where code='trial' and is_active;\n    end if;\n    if v_max_users is not null and v_count >= v_max_users then
+    if v_max_users is null then
+      select max_users into v_max_users from public.subscription_plans where code='trial' and is_active;
+    end if;
+    if v_max_users is not null and v_count >= v_max_users then
       raise exception 'User quota reached for this subscription';
     end if;
     insert into public.tenant_memberships(tenant_id,user_id,role)
