@@ -13,6 +13,7 @@ type Membership = {
 const modules = [
   { title: "Catalogue produits", description: "Références, catégories, prix et codes-barres.", href: "/app/products", action: "Gérer les produits", icon: Package },
   { title: "Stocks & dépôts", description: "Stocks disponibles, dépôts et journal des mouvements.", href: "/app/stock", action: "Consulter les stocks", icon: Boxes },
+  { title: "Transferts de stock", description: "Expédiez et réceptionnez les marchandises entre vos boutiques et dépôts.", href: "/app/transfers", action: "Gérer les transferts", icon: Boxes },
   { title: "Caisse & ventes", description: "Encaissements, paiements multiples et clôture de caisse.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
   { title: "Achats & fournisseurs", description: "Commandes fournisseurs et réceptions de marchandises.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
   { title: "Factures fournisseurs", description: "Dettes, échéances et règlements partiels ou complets.", href: "/app/supplier-invoices", action: "Suivre les factures", icon: ClipboardList },
@@ -49,6 +50,7 @@ export default async function AppHome() {
         <nav className="app-actions" aria-label="Navigation principale">
           <Link href="/app/products">Produits</Link>
           <Link href="/app/stock">Stocks</Link>
+          <Link href="/app/transfers">Transferts</Link>
           <Link href="/app/inventory">Inventaires</Link>
           <Link href="/app/customers">Clients</Link>
           <Link href="/app/pos">Caisse</Link>
