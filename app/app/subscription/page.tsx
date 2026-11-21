@@ -40,6 +40,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
   const { data: memberships } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(id,name)").eq("user_id", user.id);
   const workspaces = ((memberships ?? []) as unknown as Membership[])
+    .map((item) => ({ ...item, tenant: one(item.tenant) }))
     .filter((item) => item.tenant && ["owner", "admin"].includes(item.role));
 
   const { data: plans } = await supabase.from("subscription_plans")
