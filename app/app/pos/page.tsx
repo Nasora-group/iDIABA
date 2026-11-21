@@ -55,7 +55,7 @@ export default async function POSPage({ searchParams }: {
       <section className="workspace catalog-workspace">
         <p className="eyebrow">SPRINT 6 · CAISSE & RAPPROCHEMENT</p>
         <h1>Point de vente</h1>
-        <p className="lead">Encaissez avec plusieurs moyens de paiement, suivez les entrées et sorties d'espèces et contrôlez les écarts à la clôture.</p>
+        <p className="lead">Encaissez avec plusieurs moyens de paiement, suivez les entrées et sorties d&apos;espèces et contrôlez les écarts à la clôture.</p>
         {params.opened && <p className="form-success">Session de caisse ouverte.</p>}
         {params.closed && <p className="form-success">Session clôturée. Le solde théorique et l'écart ont été calculés.</p>}
         {params.sold && <p className="form-success">Vente enregistrée et stock mis à jour.</p>}
@@ -72,7 +72,7 @@ export default async function POSPage({ searchParams }: {
                 <label>Dépôt / point de vente<select name="location_id" required defaultValue=""><option value="" disabled>Choisir un dépôt</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name} · {location.code}</option>)}</select></label>
                 <label>Fond de caisse initial (FCFA)<input name="opening_cash" type="number" min="0" step="0.01" defaultValue="0" required /></label>
                 <button className="primary" type="submit" disabled={!locations.length}>Ouvrir la caisse</button>
-                {!locations.length && <p className="catalog-help">Créez d'abord un dépôt dans le module Stocks.</p>}
+                {!locations.length && <p className="catalog-help">Créez d&apos;abord un dépôt dans le module Stocks.</p>}
               </form>
             ) : sessions.map((session) => (
               <div className="pos-session" key={session.id}>
@@ -81,9 +81,9 @@ export default async function POSPage({ searchParams }: {
                 </div>
                 <div className="pos-cash-tools">
                   <form action={recordCashMovement} className="pos-cash-movement">
-                    <h4>Entrée / sortie d'espèces</h4>
+                    <h4>Entrée / sortie d&apos;espèces</h4>
                     <input type="hidden" name="session_id" value={session.id} />
-                    <label>Type<select name="movement_type"><option value="cash_in">Entrée d'espèces</option><option value="cash_out">Sortie d'espèces</option></select></label>
+                    <label>Type<select name="movement_type"><option value="cash_in">Entrée d&apos;espèces</option><option value="cash_out">Sortie d&apos;espèces</option></select></label>
                     <label>Montant (FCFA)<input name="amount" type="number" min="0.01" step="0.01" required /></label>
                     <label>Motif<input name="reason" minLength={2} maxLength={250} required placeholder="Ex. petite dépense, apport..." /></label>
                     <button className="secondary" type="submit">Enregistrer le mouvement</button>
