@@ -30,6 +30,7 @@ export async function startSubscriptionPayment(formData: FormData) {
   if (planError || !plan) redirect("/app/subscription?error=validation");
 
   if (paymentMethod === "orange_money") {
+    if (!paymentReference) redirect("/app/subscription?error=orange_reference");
     const { error } = await supabase.from("subscription_requests").insert({
       tenant_id: tenantId,
       requested_plan_id: plan.id,
