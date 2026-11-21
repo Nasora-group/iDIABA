@@ -90,7 +90,7 @@ export default async function SupplierInvoicesPage({ searchParams }: {
                 </div>
                 <div className="catalog-fields">
                   <label>Date de facture<input name="invoice_date" type="date" defaultValue={today} required /></label>
-                  <label>Date d'échéance<input name="due_date" type="date" min={today} /></label>
+                  <label>Date d'échéance<input name="due_date" type="date" /></label>
                 </div>
                 <label>Libellé / note<input name="description" maxLength={250} placeholder="Optionnel" /></label>
                 <button className="primary" type="submit" disabled={!suppliers.length || !orders.length}>Enregistrer la facture</button>
