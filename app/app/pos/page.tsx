@@ -57,7 +57,7 @@ export default async function POSPage({ searchParams }: {
         <h1>Point de vente</h1>
         <p className="lead">Encaissez avec plusieurs moyens de paiement, suivez les entrées et sorties d&apos;espèces et contrôlez les écarts à la clôture.</p>
         {params.opened && <p className="form-success">Session de caisse ouverte.</p>}
-        {params.closed && <p className="form-success">Session clôturée. Le solde théorique et l'écart ont été calculés.</p>}
+        {params.closed && <p className="form-success">Session clôturée. Le solde théorique et l&apos;écart ont été calculés.</p>}
         {params.sold && <p className="form-success">Vente enregistrée et stock mis à jour.</p>}
         {params.movement && <p className="form-success">Mouvement de caisse enregistré.</p>}
         {params.error && <p className="form-error">Opération impossible : vérifiez les droits, la caisse ouverte, le montant et les informations saisies.</p>}
