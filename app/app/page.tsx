@@ -16,7 +16,7 @@ const modules = [
   { title: "Caisse & ventes", description: "Encaissements, paiements multiples et clôture de caisse.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
   { title: "Achats & fournisseurs", description: "Commandes fournisseurs et réceptions de marchandises.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
   { title: "Comptabilité", description: "Dépenses, écritures et balance comptable.", href: "/app/accounting", action: "Voir la comptabilité", icon: ChartNoAxesCombined },
-  { title: "Espaces entreprises", description: "Retrouvez les entreprises rattachées à votre compte et vos rôles.", href: "/app", action: "Voir mes entreprises", icon: ClipboardList },
+  { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
 ];
 
 export default async function AppHome() {
@@ -43,6 +43,7 @@ export default async function AppHome() {
         <nav className="app-actions" aria-label="Navigation principale">
           <Link href="/app/products">Produits</Link>
           <Link href="/app/stock">Stocks</Link>
+          <Link href="/app/inventory">Inventaires</Link>
           <Link href="/app/pos">Caisse</Link>
           <Link href="/app/purchasing">Achats</Link>
           <Link href="/app/accounting">Comptabilité</Link>
