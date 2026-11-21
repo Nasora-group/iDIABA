@@ -161,10 +161,10 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
             </label>
             <label>Montant (FCFA)
               <input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, amount: event.target.value } : item))} required />
+            </label>
             {["wave", "orange_money"].includes(payment.method) && <label>Référence de transaction
               <input value={payment.reference ?? ""} minLength={4} maxLength={160} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Référence affichée dans l'application" required />
             </label>}
-            </label>
             {payments.length > 1 && <button type="button" className="archive-button" onClick={() => setPayments((current) => current.filter((_, i) => i !== index))}>Retirer</button>}
           </div>
         ))}
