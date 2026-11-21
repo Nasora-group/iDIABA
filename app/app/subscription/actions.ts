@@ -22,12 +22,17 @@ export async function requestSubscriptionChange(formData: FormData) {
     redirect("/app/subscription?error=validation");
   }
 
-  const { error } = await supabase.rpc("request_subscription_change", {
-    p_tenant_id: tenantId,
-    p_plan_code: planCode,
-    p_billing_interval: billingInterval,
-    p_payment_method: paymentMethod,
-    p_payment_reference: paymentReference,
+  const { data: plan, error: planError } = await supabase.from("subscription_plans")
+    .select("id").eq("code", planCode).eq("is_active", true).maybeSingle();
+  if (planError || !plan) redirect("/app/subscription?error=validation");
+
+  const { error } = await supabase.from("subscription_requests").insert({
+    tenant_id: tenantId,
+    requested_plan_id: plan.id,
+    billing_interval: billingInterval,
+    payment_method: paymentMethod,
+    payment_reference: paymentReference,
+    created_by: user.id,
   });
   if (error) redirect("/app/subscription?error=request");
   revalidatePath("/app/subscription");
