@@ -101,7 +101,8 @@ export async function receivePurchaseOrder(formData: FormData) {
   const items: { order_item_id: string; quantity: string }[] = [];
   for (let i = 0; i < lineIds.length; i += 1) {
     const lineId = String(lineIds[i] ?? "");
-    const quantity = decimal(quantities[i], 1000000000, true);
+    const rawQuantity = String(quantities[i] ?? "").trim();
+    const quantity = decimal(rawQuantity === "" ? "0" : rawQuantity, 1000000000, true);
     if (!validUuid(lineId) || quantity === null || seenLines.has(lineId)) fail("receipt");
     seenLines.add(lineId);
     if (Number(quantity) > 0) items.push({ order_item_id: lineId, quantity });
