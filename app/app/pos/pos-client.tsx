@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { checkoutSale } from "./actions";
 
 type Product = { id: string; name: string; sku: string; unit: string; sale_price: string | number; tax_rate: string | number };
 type CartLine = { product_id: string; quantity: string };
+type PaymentLine = { method: string; amount: string };
 type Props = { tenantId: string; locationId: string; sessionId: string; clientSaleId: string; products: Product[] };
 
 function toCents(value: string | number) {
@@ -19,7 +20,7 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [quantity, setQuantity] = useState("1");
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [payments, setPayments] = useState<PaymentLine[]>([{ method: "cash", amount: "" }]);
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -35,6 +36,24 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
     }
     return { subtotal, tax, total: subtotal + tax };
   }, [cart, products]);
+
+  useEffect(() => {
+    if (payments.length === 1) {
+      const amount = (totals.total / 100).toFixed(2);
+      setPayments((current) => current.length === 1 && current[0].amount !== amount
+        ? [{ ...current[0], amount }] : current);
+    }
+  }, [payments.length, totals.total]);
+
+  const paidTotal = payments.reduce((sum, payment) => {
+    const amount = Number(payment.amount.replace(",", "."));
+    return sum + (Number.isFinite(amount) && amount > 0 ? toCents(payment.amount.replace(",", ".")) : 0);
+  }, 0);
+  const paymentsValid = payments.length > 0 && payments.every((payment) => {
+    const amount = Number(payment.amount.replace(",", "."));
+    return ["cash", "mobile_money", "card", "bank_transfer"].includes(payment.method)
+      && Number.isFinite(amount) && amount > 0;
+  }) && paidTotal === totals.total;
 
   function addLine() {
     const qty = Number(quantity);
@@ -55,7 +74,7 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
       <input type="hidden" name="session_id" value={sessionId} />
       <input type="hidden" name="client_sale_id" value={clientSaleId} />
       <input type="hidden" name="items_json" value={JSON.stringify(cart)} />
-      <input type="hidden" name="payment_amount" value={(totals.total / 100).toFixed(2)} />
+      <input type="hidden" name="payments_json" value={JSON.stringify(payments)} />
       <h3>Nouvelle vente</h3>
       <div className="pos-add-row">
         <label>Produit
@@ -84,13 +103,26 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
         <div><span>Taxes</span><strong>{formatCents(totals.tax)} F</strong></div>
         <div className="pos-grand-total"><span>Total à payer</span><strong>{formatCents(totals.total)} F</strong></div>
       </div>
-      <label>Moyen de paiement
-        <select name="payment_method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
-          <option value="cash">Espèces</option><option value="mobile_money">Mobile Money</option><option value="card">Carte bancaire</option><option value="bank_transfer">Virement</option>
-        </select>
-      </label>
-      <button className="primary" type="submit" disabled={!cart.length || totals.total <= 0}>Valider et encaisser</button>
-      <p className="catalog-help">La validation vérifie le stock disponible et enregistre la vente, le paiement et les sorties de stock dans une seule transaction.</p>
+      <div className="pos-payment-section">
+        <div className="pos-payment-heading"><strong>Règlement</strong><button type="button" className="secondary" onClick={() => setPayments((current) => current.length < 4 ? [...current, { method: "mobile_money", amount: "" }] : current)} disabled={payments.length >= 4}>Ajouter un moyen de paiement</button></div>
+        {payments.map((payment, index) => (
+          <div className="pos-payment-row" key={index}>
+            <label>Moyen de paiement
+              <select value={payment.method} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, method: event.target.value } : item))}>
+                <option value="cash">Espèces</option><option value="mobile_money">Mobile Money</option><option value="card">Carte bancaire</option><option value="bank_transfer">Virement</option>
+              </select>
+            </label>
+            <label>Montant (FCFA)
+              <input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, amount: event.target.value } : item))} required />
+            </label>
+            {payments.length > 1 && <button type="button" className="archive-button" onClick={() => setPayments((current) => current.filter((_, i) => i !== index))}>Retirer</button>}
+          </div>
+        ))}
+        <div className="pos-payment-total"><span>Montant réglé</span><strong>{formatCents(paidTotal)} F / {formatCents(totals.total)} F</strong></div>
+        {!paymentsValid && cart.length > 0 && <p className="catalog-help">Répartissez le montant exact entre les moyens de paiement.</p>}
+      </div>
+      <button className="primary" type="submit" disabled={!cart.length || totals.total <= 0 || !paymentsValid}>Valider et encaisser</button>
+      <p className="catalog-help">La validation vérifie le stock et enregistre la vente, les différents paiements et les sorties de stock dans une seule transaction.</p>
     </form>
   );
 }

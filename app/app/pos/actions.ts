@@ -48,6 +48,27 @@ export async function closeCashSession(formData: FormData) {
   redirect("/app/pos?closed=1");
 }
 
+export async function recordCashMovement(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const sessionId = String(formData.get("session_id") ?? "");
+  const movementType = String(formData.get("movement_type") ?? "");
+  const amount = decimal(String(formData.get("amount") ?? ""), 999999999999);
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 250);
+  if (!validUuid(sessionId) || !["cash_in", "cash_out"].includes(movementType)
+      || amount === null || Number(amount) <= 0 || reason.length < 2) fail("movement");
+  const { error } = await supabase.rpc("create_cash_movement", {
+    p_session_id: sessionId,
+    p_movement_type: movementType,
+    p_amount: amount,
+    p_reason: reason,
+  });
+  if (error) fail("movement");
+  revalidatePath("/app/pos");
+  redirect("/app/pos?movement=1");
+}
+
 export async function checkoutSale(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -57,16 +78,21 @@ export async function checkoutSale(formData: FormData) {
   const locationId = String(formData.get("location_id") ?? "");
   const sessionId = String(formData.get("session_id") ?? "");
   const clientSaleId = String(formData.get("client_sale_id") ?? "");
-  const paymentMethod = String(formData.get("payment_method") ?? "");
-  const paymentAmount = decimal(String(formData.get("payment_amount") ?? ""), 999999999999);
   const itemsRaw = String(formData.get("items_json") ?? "");
+  const paymentsRaw = String(formData.get("payments_json") ?? "");
   if (![tenantId, locationId, sessionId, clientSaleId].every(validUuid)) fail("validation");
-  if (!["cash", "mobile_money", "card", "bank_transfer"].includes(paymentMethod) || paymentAmount === null) fail("payment");
-  if (itemsRaw.length > 12000) fail("cart");
+  if (itemsRaw.length > 12000 || paymentsRaw.length > 4000) fail("cart");
+
   let items: unknown;
-  try { items = JSON.parse(itemsRaw); } catch { fail("cart"); }
+  let payments: unknown;
+  try {
+    items = JSON.parse(itemsRaw);
+    payments = JSON.parse(paymentsRaw);
+  } catch { fail("cart"); }
   if (!Array.isArray(items) || items.length < 1 || items.length > 40) fail("cart");
-  const normalized = items.map((item: unknown) => {
+  if (!Array.isArray(payments) || payments.length < 1 || payments.length > 4) fail("payment");
+
+  const normalizedItems = items.map((item: unknown) => {
     if (!item || typeof item !== "object") return null;
     const row = item as { product_id?: unknown; quantity?: unknown };
     const productId = String(row.product_id ?? "");
@@ -74,15 +100,26 @@ export async function checkoutSale(formData: FormData) {
     if (!validUuid(productId) || quantity === null || Number(quantity) <= 0) return null;
     return { product_id: productId, quantity };
   });
-  if (normalized.some((item) => item === null)) fail("cart");
+  if (normalizedItems.some((item) => item === null)) fail("cart");
+
+  const normalizedPayments = payments.map((payment: unknown) => {
+    if (!payment || typeof payment !== "object") return null;
+    const row = payment as { method?: unknown; amount?: unknown };
+    const method = String(row.method ?? "");
+    const amount = decimal(String(row.amount ?? ""), 999999999999);
+    if (!["cash", "mobile_money", "card", "bank_transfer"].includes(method)
+        || amount === null || Number(amount) <= 0) return null;
+    return { method, amount };
+  });
+  if (normalizedPayments.some((payment) => payment === null)) fail("payment");
 
   const { error } = await supabase.rpc("finalize_sale", {
     p_tenant_id: tenantId,
     p_location_id: locationId,
     p_cash_session_id: sessionId,
     p_client_sale_id: clientSaleId,
-    p_items: normalized,
-    p_payments: [{ method: paymentMethod, amount: paymentAmount }],
+    p_items: normalizedItems,
+    p_payments: normalizedPayments,
   });
   if (error) fail("checkout");
   revalidatePath("/app/pos");
