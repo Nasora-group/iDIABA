@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart, Users } from "lucide-react";
+import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart, ShieldCheck, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +37,7 @@ export default async function AppHome() {
 
   const memberships = (data ?? []) as unknown as Membership[];
   const displayName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
+  const canViewAudit = memberships.some((membership) => ["owner", "admin"].includes(membership.role));
 
   return (
     <main className="shell">
@@ -51,6 +52,7 @@ export default async function AppHome() {
           <Link href="/app/purchasing">Achats</Link>
           <Link href="/app/accounting">Comptabilité</Link>
           <Link href="/app/subscription">Abonnement</Link>
+          {canViewAudit && <Link href="/app/audit">Journal d’audit</Link>}
           {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin">Admin SaaS</Link>}
           <form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form>
         </nav>
@@ -78,6 +80,7 @@ export default async function AppHome() {
               <span className="app-module-link">{action}<ArrowUpRight size={15} /></span>
             </Link>
           ))}
+          {canViewAudit && <Link href="/app/audit" className="app-module-card"><span className="app-module-icon"><ShieldCheck size={20} strokeWidth={1.9} /></span><div><strong>Journal d’audit</strong><p>Traçabilité des créations, modifications et suppressions.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
           {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin" className="app-module-card"><span className="app-module-icon"><CreditCard size={20} strokeWidth={1.9} /></span><div><strong>Administration iDIABA</strong><p>Tarifs, quotas et validation des abonnements.</p></div><span className="app-module-link">Ouvrir la console<ArrowUpRight size={15} /></span></Link>}
         </div>
 

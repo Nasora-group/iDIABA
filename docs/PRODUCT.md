@@ -1,1 +1,18 @@
-# Vision produit iDIABA\n\niDIABA est une solution SaaS de gestion pour TPE, commerces, boutiques, pharmacies et petites entreprises.\n\n## Modules\n- Point de vente / caisse : ventes, remises contrôlées, tickets, paiements multi-moyens, retours.\n- Catalogue : produits, variantes, codes-barres, unités, taxes, catégories.\n- Stock : mouvements, lots, dates de péremption, seuils, transfert entre dépôts.\n- Achats : fournisseurs, demandes, commandes, réception, facture fournisseur.\n- Inventaire : comptage, écarts, ajustements avec historique.\n- Finance : dépenses, caisse, clôtures, rapprochements.\n- Comptabilité : écritures équilibrées, journaux, plan comptable et exports.\n- Pilotage : ventes, marge, stock, créances et tableaux de bord.\n- SaaS : abonnements par entreprise, périodes d'essai, quotas, demandes de changement de formule et suivi de paiement.\n\n## Principes\nSimple à utiliser sur mobile, rapide en caisse, multi-entreprise, configurable, extensible et capable de travailler hors-ligne avec synchronisation.
+# Vision produit iDIABA
+
+iDIABA est une solution SaaS de gestion pour TPE, commerces, boutiques, pharmacies et petites entreprises.
+
+## Modules
+- Point de vente / caisse : ventes, remises contrôlées, tickets, paiements multi-moyens, retours.
+- Catalogue : produits, variantes, codes-barres, unités, taxes, catégories.
+- Stock : mouvements, lots, dates de péremption, seuils, transfert entre dépôts.
+- Achats : fournisseurs, demandes, commandes, réception, facture fournisseur.
+- Inventaire : comptage, écarts, ajustements avec historique.
+- Finance : dépenses, caisse, clôtures, rapprochements.
+- Comptabilité : écritures équilibrées, journaux, plan comptable et exports.
+- Pilotage : ventes, marge, stock, créances et tableaux de bord.
+- SaaS : abonnements par entreprise, périodes d'essai, quotas, demandes de changement de formule et suivi de paiement.
+- Sécurité : console plateforme, journal d'audit multi-entreprises et traçabilité des opérations.
+
+## Principes
+Simple à utiliser sur mobile, rapide en caisse, multi-entreprise, configurable, extensible et capable de travailler hors-ligne avec synchronisation.
