@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart, Wallet } from "lucide-react";
 
 const modules = [
@@ -21,7 +22,7 @@ export default function Home() {
           <p className="eyebrow">GESTION • COMMERCE • FINANCE</p>
           <h1>Votre activité.<br /><span>En un seul endroit.</span></h1>
           <p className="lead">Un outil simple pour piloter les ventes, la caisse, les stocks, les achats et la comptabilité.</p>
-          <a className="primary" href="/signup">Créer mon espace <ArrowUpRight size={17} /></a>
+          <Link className="primary" href="/signup">Créer mon espace <ArrowUpRight size={17} /></Link>
         </div>
         <div className="hero-card">
           <div className="card-title">Vue d’ensemble <span>●</span></div>
