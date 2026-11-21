@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +23,10 @@ export default async function AuditPage() {
 
   const { data: memberships } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(name)").eq("user_id", user.id);
-  const allowed = ((memberships ?? []) as unknown as Membership[])
-    .filter((item) => ["owner", "admin"].includes(item.role));
+  const allMemberships = (memberships ?? []) as unknown as Membership[];
+  const activeId = await getActiveTenantId(allMemberships.map((item) => item.tenant_id));
+  const allowed = allMemberships
+    .filter((item) => item.tenant_id === activeId && ["owner", "admin"].includes(item.role));
   const tenantIds = allowed.map((item) => item.tenant_id);
   if (!tenantIds.length) {
     return <main className="shell"><section className="workspace"><h1>Journal d&apos;audit</h1><p className="catalog-empty">Cette rubrique est réservée aux propriétaires et administrateurs.</p><Link href="/app">Retour au tableau de bord</Link></section></main>;

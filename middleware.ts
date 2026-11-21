@@ -28,7 +28,9 @@ export async function middleware(request: NextRequest) {
   }
   if ((request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup") && user) {
     const destination = request.nextUrl.clone();
-    destination.pathname = "/app";
+    const next = request.nextUrl.searchParams.get("next");
+    const safeNext = next && (next === "/app" || next.startsWith("/app/")) && !next.startsWith("//") && !next.includes("\\") && next.length <= 300 ? next : "/app";
+    destination.pathname = safeNext;
     destination.search = "";
     return NextResponse.redirect(destination);
   }

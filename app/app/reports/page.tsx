@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveTenantId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -31,9 +32,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   const { data: memberships } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(name)").eq("user_id", user.id);
-  const workspaces = ((memberships ?? []) as unknown as Membership[])
+  const allMemberships = (memberships ?? []) as unknown as Membership[];
+  const activeId = await getActiveTenantId(allMemberships.map((item) => item.tenant_id));
+  const workspaces = allMemberships
     .map((item) => ({ ...item, tenant: one(item.tenant) }))
-    .filter((item) => item.tenant && ["owner","admin"].includes(item.role));
+    .filter((item) => item.tenant_id === activeId && item.tenant && ["owner","admin"].includes(item.role));
   if (!workspaces.length) redirect("/app");
 
   const tenant = workspaces.find((item) => item.tenant_id === params.tenant_id) ?? workspaces[0];

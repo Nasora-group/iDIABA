@@ -16,3 +16,4 @@
 - Sprint 14 : journal d'audit multi-entreprises et traçabilité des opérations.
 - Sprint 15 : tableaux de bord, rapports et exports.
 - Sprint 16 : tests métier complets, recette multi-entreprises et préparation de lancement.
+- Sprint 17 : multi-entreprise (entreprise active, nouvelle entreprise, équipe, invitations, gestion des rôles). Voir docs/MULTI_COMPANY.md.

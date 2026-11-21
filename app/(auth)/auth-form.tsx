@@ -4,9 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type Props = { mode: "login" | "signup" };
+type Props = { mode: "login" | "signup"; next?: string; invite?: boolean };
 
-export default function AuthForm({ mode }: Props) {
+export default function AuthForm({ mode, next = "/app", invite = false }: Props) {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [company, setCompany] = useState("");
@@ -38,14 +38,16 @@ export default function AuthForm({ mode }: Props) {
         if (signUpError) throw signUpError;
         if (!data.user) throw new Error("Création de compte impossible.");
         if (!data.session) {
-          setMessage("Compte créé. Vérifiez votre e-mail pour confirmer votre inscription, puis connectez-vous.");
+          setMessage(invite
+            ? "Compte créé. Confirmez votre e-mail, puis rouvrez le lien d’invitation reçu pour rejoindre l’entreprise."
+            : "Compte créé. Vérifiez votre e-mail pour confirmer votre inscription, puis connectez-vous.");
           return;
         }
       } else {
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
       }
-      router.push("/app");
+      router.push(next);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Une erreur est survenue.");
@@ -59,7 +61,7 @@ export default function AuthForm({ mode }: Props) {
       {mode === "signup" && (
         <>
           <label>Nom complet<input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></label>
-          <label>Nom de l&apos;entreprise<input value={company} onChange={(e) => setCompany(e.target.value)} required minLength={2} /></label>
+          <label>{invite ? "Nom de votre propre entreprise (facultatif)" : "Nom de l'entreprise"}<input value={company} onChange={(e) => setCompany(e.target.value)} required={!invite} minLength={invite && !company ? undefined : 2} /></label>
         </>
       )}
       <label>E-mail<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>

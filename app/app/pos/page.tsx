@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { scopeToActiveTenant } from "@/lib/tenant";
 import { closeCashSession, openCashSession, recordCashMovement } from "./actions";
 import POSCheckout from "./pos-client";
 import OfflinePOSSeed from "./offline-seed";
@@ -24,7 +25,7 @@ export default async function POSPage({ searchParams }: {
   if (!user) return null;
   const { data: memberships } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(name)").eq("user_id", user.id);
-  const workspaces = (memberships ?? []) as unknown as Workspace[];
+  const workspaces = await scopeToActiveTenant((memberships ?? []) as unknown as Workspace[]);
 
   const data = await Promise.all(workspaces.map(async (workspace) => {
     const [locationsResult, productsResult, sessionsResult, closedResult, salesResult, movementResult] = await Promise.all([

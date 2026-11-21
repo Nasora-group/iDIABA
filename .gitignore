@@ -1,1 +1,9 @@
-node_modules\n.next\n.env\n.env.*\n!.env.example\n.vercel\ndist\ncoverage\n*.log
+node_modules
+.next
+.env
+.env.*
+!.env.example
+.vercel
+dist
+coverage
+*.log

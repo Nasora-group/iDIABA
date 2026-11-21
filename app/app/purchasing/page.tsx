@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { scopeToActiveTenant } from "@/lib/tenant";
 import { createPurchaseOrder, createSupplier, receivePurchaseOrder } from "./actions";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
@@ -23,7 +24,7 @@ export default async function PurchasingPage({ searchParams }: {
   if (!user) return null;
   const { data: memberships } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(name)").eq("user_id", user.id);
-  const workspaces = (memberships ?? []) as unknown as Workspace[];
+  const workspaces = await scopeToActiveTenant((memberships ?? []) as unknown as Workspace[]);
 
   const data = await Promise.all(workspaces.map(async (workspace) => {
     const [supplierResult, productResult, locationResult, orderResult] = await Promise.all([
