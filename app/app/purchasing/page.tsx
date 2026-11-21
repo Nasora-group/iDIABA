@@ -54,7 +54,7 @@ export default async function PurchasingPage({ searchParams }: {
         <p className="eyebrow">SPRINT 5 · ACHATS & APPROVISIONNEMENT</p>
         <h1>Fournisseurs et achats</h1>
         <p className="lead">Centralisez vos fournisseurs, préparez les commandes et réceptionnez les marchandises directement dans le stock du dépôt choisi.</p>
-        {params.created && <p className="form-success">{params.created === "supplier" ? "Fournisseur enregistré." : "Commande d'achat créée."}</p>}
+        {params.created && <p className="form-success">{params.created === "supplier" ? "Fournisseur enregistré." : "Commande d&apos;achat créée."}</p>}
         {params.received && <p className="form-success">Réception enregistrée. Les quantités ont été ajoutées au stock et la commande mise à jour.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les informations, les droits et les références sélectionnées.</p>}
         {!data.length && <p>Aucun espace entreprise associé à ce compte.</p>}
@@ -90,7 +90,7 @@ export default async function PurchasingPage({ searchParams }: {
               {suppliers.length ? <table className="catalog-table"><thead><tr><th>Fournisseur</th><th>Contact</th><th>Téléphone</th><th>État</th></tr></thead><tbody>{suppliers.map((supplier) => <tr key={supplier.id}><td><strong>{supplier.name}</strong></td><td>{supplier.contact_name || "—"}</td><td>{supplier.phone || "—"}</td><td>{supplier.is_active ? "Actif" : "Archivé"}</td></tr>)}</tbody></table> : <p className="catalog-empty">Aucun fournisseur enregistré.</p>}
             </div>
             <div className="catalog-table-wrap">
-              <h3>Commandes d'achat</h3>
+              <h3>Commandes d&apos;achat</h3>
               {orders.length ? <table className="catalog-table"><thead><tr><th>Commande / date</th><th>Fournisseur</th><th>Articles</th><th>Dépôt</th><th>Montant</th><th>État</th><th>Réception</th></tr></thead><tbody>{orders.map((order) => (
                 <tr key={order.id}>
                   <td><strong>{order.order_number}</strong><small>{new Date(order.ordered_at).toLocaleDateString("fr-FR")}</small></td>
