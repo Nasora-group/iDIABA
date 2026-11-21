@@ -26,6 +26,10 @@ create policy "platform admins read all subscription requests" on public.subscri
   for select to authenticated
   using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'platform_admin');
 
+create policy "platform admins read tenant names" on public.tenants
+  for select to authenticated
+  using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'platform_admin');
+
 create or replace function public.review_subscription_request(
   p_request_id uuid,
   p_decision text,
