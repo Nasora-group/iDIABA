@@ -21,6 +21,12 @@ function amount(value: string) {
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 && n <= 999999999999 ? raw : null;
 }
+function nonNegativeAmount(value: string) {
+  const raw = value.trim().replace(",", ".");
+  if (!/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 999999999999 ? raw : null;
+}
 
 export async function createSupplierInvoice(fd: FormData) {
   const supabase = await createClient();
@@ -35,12 +41,14 @@ export async function createSupplierInvoice(fd: FormData) {
   const dueDateRaw = String(fd.get("due_date") ?? "").trim();
   const dueDate = dueDateRaw || null;
   const invoiceAmount = amount(String(fd.get("amount") ?? ""));
+  const taxAmount = nonNegativeAmount(String(fd.get("tax_amount") ?? "0"));
   const description = String(fd.get("description") ?? "").trim().slice(0, 250);
 
   if (!uuid(tenantId) || !uuid(supplierId) || !uuid(orderId)
     || invoiceNumber.length < 1 || invoiceNumber.length > 100
     || !validDate(invoiceDate) || (dueDate !== null && !validDate(dueDate))
-    || (dueDate !== null && dueDate < invoiceDate) || !invoiceAmount) fail("invoice");
+    || (dueDate !== null && dueDate < invoiceDate) || !invoiceAmount || taxAmount === null
+    || Number(taxAmount) > Number(invoiceAmount)) fail("invoice");
 
   const { error } = await supabase.rpc("create_supplier_invoice", {
     p_tenant_id: tenantId,
@@ -51,6 +59,7 @@ export async function createSupplierInvoice(fd: FormData) {
     p_due_date: dueDate,
     p_amount: invoiceAmount,
     p_description: description,
+    p_tax_amount: taxAmount,
   });
   if (error) fail(error.code === "23505" ? "duplicate" : "invoice");
   revalidatePath("/app/supplier-invoices");
@@ -69,6 +78,7 @@ export async function recordSupplierPayment(fd: FormData) {
   const paidAt = String(fd.get("paid_at") ?? "");
   const paymentAmount = amount(String(fd.get("amount") ?? ""));
   const reference = String(fd.get("reference") ?? "").trim().slice(0, 100);
+  const cashSessionId = String(fd.get("cash_session_id") ?? "").trim() || null;
 
   if (!uuid(invoiceId) || !uuid(accountId) || !validDate(paidAt) || !paymentAmount) fail("payment");
 
@@ -78,6 +88,7 @@ export async function recordSupplierPayment(fd: FormData) {
     p_amount: paymentAmount,
     p_paid_at: paidAt,
     p_reference: reference,
+    p_cash_session_id: cashSessionId,
   });
   if (error) fail("payment");
   revalidatePath("/app/supplier-invoices");
