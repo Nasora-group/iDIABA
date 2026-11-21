@@ -5,7 +5,8 @@ import { requestSubscriptionChange } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type Membership = { tenant_id: string; role: string; tenant: { id: string; name: string } | null };
+type Relation<T> = T | T[] | null;
+type Membership = { tenant_id: string; role: string; tenant: Relation<{ id: string; name: string }> };
 type Plan = {
   id: string; code: string; name: string; description: string;
   price_monthly_fcfa: number | string | null; price_yearly_fcfa: number | string | null;
@@ -15,7 +16,8 @@ type Subscription = {
   status: string; billing_interval: string; trial_ends_at: string | null; current_period_ends_at: string | null;
   plan: Plan | Plan[] | null;
 };
-type RequestRow = { id: string; status: string; payment_method: string; payment_reference: string; created_at: string; plan: { name: string } | null };
+type RequestRow = { id: string; status: string; payment_method: string; payment_reference: string; created_at: string; plan: Relation<{ name: string }> };
+function one<T>(value: Relation<T>): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
 
 function formatLimit(value: number | null, unit: string) {
   return value === null ? "Illimité" : value.toLocaleString("fr-FR") + " " + unit;
@@ -38,6 +40,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
   const { data: memberships } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(id,name)").eq("user_id", user.id);
   const workspaces = ((memberships ?? []) as unknown as Membership[])
+    .map((item) => ({ ...item, tenant: one(item.tenant) }))
     .filter((item) => item.tenant && ["owner", "admin"].includes(item.role));
 
   const { data: plans } = await supabase.from("subscription_plans")
@@ -114,7 +117,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
                 <button className="primary" type="submit">Envoyer la demande</button>
               </form>
             </details>
-            {panel.requests.length > 0 && <div className="subscription-history"><h3>Demandes récentes</h3>{panel.requests.map((request) => <div key={request.id}><span>{request.plan?.name ?? "Formule"} · {new Date(request.created_at).toLocaleDateString("fr-FR")}</span><strong>{request.status === "pending" ? "En attente" : request.status === "approved" ? "Acceptée" : request.status === "rejected" ? "Refusée" : "Annulée"}</strong></div>)}</div>}
+            {panel.requests.length > 0 && <div className="subscription-history"><h3>Demandes récentes</h3>{panel.requests.map((request) => <div key={request.id}><span>{one(request.plan)?.name ?? "Formule"} · {new Date(request.created_at).toLocaleDateString("fr-FR")}</span><strong>{request.status === "pending" ? "En attente" : request.status === "approved" ? "Acceptée" : request.status === "rejected" ? "Refusée" : "Annulée"}</strong></div>)}</div>}
           </section>
         ))}
         <p className="catalog-help">L&apos;essai dure 14 jours. Les formules payantes et leurs tarifs devront être configurés avant l&apos;ouverture commerciale. Les limites sont contrôlées directement dans la base de données.</p>

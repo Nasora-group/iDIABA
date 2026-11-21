@@ -51,6 +51,7 @@ export default async function AppHome() {
           <Link href="/app/purchasing">Achats</Link>
           <Link href="/app/accounting">Comptabilité</Link>
           <Link href="/app/subscription">Abonnement</Link>
+          {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin">Admin SaaS</Link>}
           <form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form>
         </nav>
       </header>
@@ -77,6 +78,7 @@ export default async function AppHome() {
               <span className="app-module-link">{action}<ArrowUpRight size={15} /></span>
             </Link>
           ))}
+          {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin" className="app-module-card"><span className="app-module-icon"><CreditCard size={20} strokeWidth={1.9} /></span><div><strong>Administration iDIABA</strong><p>Tarifs, quotas et validation des abonnements.</p></div><span className="app-module-link">Ouvrir la console<ArrowUpRight size={15} /></span></Link>}
         </div>
 
         <div className="app-section-heading">
