@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createSupplierInvoice, recordSupplierPayment } from "./actions";
 
@@ -115,6 +116,7 @@ export default async function SupplierInvoicesPage({ searchParams }: {
                       <td><span className={invoice.status === "paid" ? "catalog-state" : "catalog-state inactive"}>{statusLabel(invoice.status)}</span></td>
                       <td>{remaining > 0 && accounts.length > 0 && <form action={recordSupplierPayment} className="catalog-form">
                         <input type="hidden" name="invoice_id" value={invoice.id} />
+                        <input type="hidden" name="idempotency_key" value={randomUUID()} />
                         <label>Montant à régler<input name="amount" type="number" min="0.01" max={remaining} step="0.01" required /></label>
                         <label>Payé depuis<select name="payment_account_id" required defaultValue=""><option value="" disabled>Choisir caisse / banque</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label>
                         <label>Session de caisse (obligatoire pour un paiement en espèces)<select name="cash_session_id" defaultValue=""><option value="">Sans objet si paiement bancaire</option>{cashSessions.map(s => <option key={s.id} value={s.id}>{s.location?.name ?? "Point de vente"} · {new Date(s.opened_at).toLocaleString("fr-FR")}</option>)}</select></label>
