@@ -128,3 +128,18 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 @media(max-width:980px){.shell{padding:0 22px 36px}.app-actions{overflow-x:auto;max-width:72vw}.app-module-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{gap:28px;padding:56px 0}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.shell{padding:0 15px 28px}.topbar{min-height:66px;gap:12px}.app-actions{max-width:calc(100vw - 105px)}.app-actions a,.product-nav a,.product-nav span{padding:8px 10px;font-size:12px}.workspace{padding:27px 0 14px}.workspace h1{font-size:30px}.lead{font-size:13px}.app-welcome{display:grid;padding:21px;border-radius:16px}.welcome-chip{justify-self:start}.app-section-heading{align-items:flex-start;flex-direction:column;gap:4px;margin:26px 0 12px}.app-module-grid{grid-template-columns:1fr;gap:10px}.app-module-card{min-height:0;padding:16px}.workspace-list{grid-template-columns:1fr}.catalog-tenant{padding:14px;margin:15px 0}.catalog-forms{grid-template-columns:1fr}.catalog-form{padding:14px}.catalog-table-wrap{padding:13px;overflow-x:auto}.catalog-table{min-width:650px}.catalog-heading{align-items:flex-start;flex-direction:column}.catalog-fields{grid-template-columns:1fr}.hero{grid-template-columns:1fr;padding:42px 0;gap:25px}.hero h1{font-size:36px}.hero-card{padding:18px}.section-heading{display:block}.section-heading h2{font-size:21px}.grid{grid-template-columns:1fr}.module{padding:17px}.section{padding-bottom:35px}.pos-session{padding:14px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+
+/* Physical inventory */
+.inventory-start-form{max-width:760px;margin:18px 0}
+.inventory-count-list{display:grid;gap:16px;margin-top:22px}
+.inventory-count-card{padding:20px;border:1px solid var(--line);border-radius:15px;background:#fff;box-shadow:0 4px 16px rgba(25,48,35,.025)}
+.inventory-count-card .catalog-heading{align-items:flex-start;margin-bottom:12px}
+.inventory-count-card .catalog-heading h3{margin:8px 0 3px}
+.inventory-count-card .catalog-heading p{margin:3px 0}
+.inventory-line-form{grid-template-columns:minmax(0,1.2fr) minmax(150px,.7fr) auto;align-items:end;margin:14px 0;padding:14px}
+.inventory-line-form h4{grid-column:1/-1;margin:0;font-size:13px}
+.inventory-line-form button{white-space:nowrap}
+.inventory-post-form{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:14px}
+.inventory-post-form .catalog-help{margin:0}
+@media(max-width:760px){.inventory-count-card{padding:14px}.inventory-line-form{grid-template-columns:1fr}.inventory-line-form h4{grid-column:auto}.inventory-line-form button,.inventory-post-form button{width:100%}.inventory-post-form{display:grid}}
