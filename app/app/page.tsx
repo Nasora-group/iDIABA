@@ -28,7 +28,7 @@ export default async function AppHome() {
     <main className="shell">
       <header className="topbar">
         <div className="brand"><span className="mark">i</span><span>iDIABA</span></div>
-        <div className="app-actions"><Link href="/app/products">Catalogue produits</Link><Link href="/app/stock">Gestion des stocks</Link><Link href="/app/pos">Point de vente</Link><Link href="/app/purchasing">Achats & fournisseurs</Link><form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form></div>
+        <div className="app-actions"><Link href="/app/products">Catalogue produits</Link><Link href="/app/stock">Gestion des stocks</Link><Link href="/app/pos">Point de vente</Link><Link href="/app/purchasing">Achats & fournisseurs</Link><Link href="/app/accounting">Comptabilité</Link><form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form></div>
       </header>
       <section className="workspace">
         <p className="eyebrow">ESPACE DE TRAVAIL</p>
@@ -49,6 +49,10 @@ export default async function AppHome() {
         <div className="app-module-card">
           <div><strong>Achats et approvisionnement</strong><p>Gérez vos fournisseurs, créez vos commandes et réceptionnez les marchandises dans les dépôts.</p></div>
           <Link className="primary" href="/app/purchasing">Ouvrir les achats</Link>
+        </div>
+        <div className="app-module-card">
+          <div><strong>Comptabilité et finances</strong><p>Enregistrez les dépenses, passez des écritures équilibrées et consultez la balance comptable.</p></div>
+          <Link className="primary" href="/app/accounting">Ouvrir la comptabilité</Link>
         </div>
         <h2>Vos entreprises</h2>
         {memberships.length ? (
