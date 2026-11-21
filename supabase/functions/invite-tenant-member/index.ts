@@ -31,12 +31,20 @@ Deno.serve(async(req:Request)=>{
     if(memberError||!membership||!["owner","admin"].includes(membership.role)) return json(403,{error:"Seul l’administrateur de l’entreprise peut inviter des utilisateurs"});
     const {count,error:countError}=await admin.from("tenant_memberships").select("user_id",{count:"exact",head:true}).eq("tenant_id",tenantId);
     if(countError) return json(500,{error:"Impossible de vérifier le quota"});
-    const {data:sub}=await admin.from("tenant_subscriptions").select("status,plan:subscription_plans(max_users)").eq("tenant_id",tenantId).in("status",["active","trialing"]).maybeSingle();
-    const planData=sub?.plan as {max_users:number|null}|null;
-    const maxUsers=sub?planData?.max_users:2;
+    const {data:tenant,error:tenantError}=await admin.from("tenants").select("name").eq("id",tenantId).maybeSingle();
+    if(tenantError||!tenant) return json(404,{error:"Entreprise introuvable"});
+    const {data:sub,error:subError}=await admin.from("tenant_subscriptions").select("status,trial_ends_at,current_period_ends_at,grace_ends_at,plan_id").eq("tenant_id",tenantId).in("status",["active","trialing","past_due"]).maybeSingle();
+    if(subError||!sub) return json(403,{error:"Aucun abonnement valide pour cette entreprise"});
+    const now=new Date();
+    if(sub.status==="trialing"&&(!sub.trial_ends_at||new Date(sub.trial_ends_at)<=now)) return json(403,{error:"La période d’essai est terminée"});
+    if(sub.status==="active"&&sub.current_period_ends_at&&new Date(sub.current_period_ends_at)<=now) return json(403,{error:"Abonnement arrivé à échéance"});
+    if(sub.status==="past_due"&&(!sub.grace_ends_at||new Date(sub.grace_ends_at)<=now)) return json(403,{error:"Le délai de paiement est dépassé"});
+    const {data:plan,error:planError}=await admin.from("subscription_plans").select("max_users").eq("id",sub.plan_id).eq("is_active",true).maybeSingle();
+    if(planError||!plan) return json(403,{error:"Formule d’abonnement indisponible"});
+    const maxUsers=plan.max_users as number|null;
     if(maxUsers!==null&&(count??0)>=maxUsers) return json(403,{error:"Limite d’utilisateurs atteinte pour votre abonnement"});
     const redirectTo=(Deno.env.get("APP_URL")??"https://idiaba.onrender.com")+"/login";
-    const {data:invited,error:inviteError}=await admin.auth.admin.inviteUserByEmail(email,{redirectTo,data:{full_name:name}});
+    const {data:invited,error:inviteError}=await admin.auth.admin.inviteUserByEmail(email,{redirectTo,data:{full_name:name,company_name:tenant.name,tenant_role:role}});
     if(inviteError){
       const duplicate=/already|registered|exists/i.test(inviteError.message);
       return json(duplicate?409:400,{error:duplicate?"Cette adresse a déjà un compte iDIABA. Utilisez « Ajouter un compte existant » dans la page Équipe.":inviteError.message});
@@ -44,7 +52,8 @@ Deno.serve(async(req:Request)=>{
     if(!invited.user) return json(500,{error:"Invitation envoyée sans retour de compte; contactez l’administrateur"});
     const {error:insertError}=await admin.from("tenant_memberships").insert({tenant_id:tenantId,user_id:invited.user.id,role});
     if(insertError){
-      return json(500,{error:"Invitation envoyée, mais association à l’entreprise impossible. Recherchez ce compte dans Équipe puis ajoutez-le manuellement."});
+      await admin.auth.admin.deleteUser(invited.user.id);
+      return json(409,{error:"L’invitation a été annulée car l’ajout à l’entreprise a échoué. Vérifiez l’abonnement et le quota."});
     }
     if(name) await admin.from("profiles").update({full_name:name,updated_at:new Date().toISOString()}).eq("id",invited.user.id);
     return json(200,{message:"Invitation envoyée. L’employé recevra un e-mail pour activer son compte.",user_id:invited.user.id});
