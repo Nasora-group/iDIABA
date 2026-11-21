@@ -33,7 +33,7 @@ Deno.serve(async(req:Request)=>{
     if(countError) return json(500,{error:"Impossible de vérifier le quota"});
     const {data:sub}=await admin.from("tenant_subscriptions").select("status,plan:subscription_plans(max_users)").eq("tenant_id",tenantId).in("status",["active","trialing"]).maybeSingle();
     const planData=sub?.plan as {max_users:number|null}|null;
-    const maxUsers=planData?.max_users??2;
+    const maxUsers=sub?planData?.max_users:2;
     if(maxUsers!==null&&(count??0)>=maxUsers) return json(403,{error:"Limite d’utilisateurs atteinte pour votre abonnement"});
     const redirectTo=(Deno.env.get("APP_URL")??"https://idiaba.onrender.com")+"/login";
     const {data:invited,error:inviteError}=await admin.auth.admin.inviteUserByEmail(email,{redirectTo,data:{full_name:name}});
