@@ -104,12 +104,14 @@ export async function checkoutSale(formData: FormData) {
 
   const normalizedPayments = payments.map((payment: unknown) => {
     if (!payment || typeof payment !== "object") return null;
-    const row = payment as { method?: unknown; amount?: unknown };
+    const row = payment as { method?: unknown; amount?: unknown; reference?: unknown };
     const method = String(row.method ?? "");
     const amount = decimal(String(row.amount ?? ""), 999999999999);
-    if (!["cash", "mobile_money", "card", "bank_transfer"].includes(method)
-        || amount === null || Number(amount) <= 0) return null;
-    return { method, amount };
+    const reference = String(row.reference ?? "").trim().slice(0, 160);
+    if (!["cash", "mobile_money", "card", "bank_transfer", "wave", "orange_money"].includes(method)
+        || amount === null || Number(amount) <= 0
+        || (["wave", "orange_money"].includes(method) && reference.length < 4)) return null;
+    return { method, amount, reference: reference || null };
   });
   if (normalizedPayments.some((payment) => payment === null)) fail("payment");
 
