@@ -27,8 +27,12 @@ export async function createStockLocation(formData: FormData) {
   const name = required(formData.get("name"), "Le nom du dépôt", 100);
   const code = required(formData.get("code"), "Le code du dépôt", 32).toUpperCase();
   const description = String(formData.get("description") ?? "").trim().slice(0, 500);
+  const location_type = String(formData.get("location_type") ?? "store");
+  if (!["store", "warehouse"].includes(location_type)) redirect("/app/stock?error=location_type");
+  const address = String(formData.get("address") ?? "").trim().slice(0, 250);
+  const phone = String(formData.get("phone") ?? "").trim().slice(0, 40);
 
-  const { error } = await supabase.from("stock_locations").insert({ tenant_id, name, code, description });
+  const { error } = await supabase.from("stock_locations").insert({ tenant_id, name, code, description, location_type, address, phone });
   if (error) redirect("/app/stock?error=location");
   revalidatePath("/app/stock");
   redirect("/app/stock?created=location");
