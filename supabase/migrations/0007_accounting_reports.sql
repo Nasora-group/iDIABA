@@ -137,3 +137,73 @@ revoke all on function public.create_expense(uuid,date,text,numeric,uuid,uuid,te
 grant execute on function public.ensure_accounting_chart(uuid) to authenticated;
 grant execute on function public.post_manual_journal_entry(uuid,date,text,jsonb) to authenticated;
 grant execute on function public.create_expense(uuid,date,text,numeric,uuid,uuid,text) to authenticated;
+
+-- Automatic posting of completed POS sales: cash/bank debit, sales and VAT credit.
+create or replace function public.accounting_post_completed_sale()
+returns trigger language plpgsql security definer set search_path=public
+as $$
+declare
+ v_entry uuid:=gen_random_uuid(); v_number text; v_cash uuid; v_bank uuid; v_sales uuid; v_vat uuid;
+ v_payment record;
+begin
+ if old.status<>'completed' and new.status='completed' then
+  perform public.seed_default_accounting_chart(new.tenant_id);
+  select id into v_cash from public.accounting_accounts where tenant_id=new.tenant_id and code='571000';
+  select id into v_bank from public.accounting_accounts where tenant_id=new.tenant_id and code='521000';
+  select id into v_sales from public.accounting_accounts where tenant_id=new.tenant_id and code='701000';
+  select id into v_vat from public.accounting_accounts where tenant_id=new.tenant_id and code='443000';
+  v_number:='VT-'||to_char(new.created_at,'YYYYMMDD')||'-'||upper(substr(replace(v_entry::text,'-',''),1,8));
+  insert into public.journal_entries(id,tenant_id,entry_number,entry_date,description,source_type,source_id,created_by)
+   values(v_entry,new.tenant_id,v_number,new.created_at::date,'Vente caisse '||left(new.id::text,8),'sale',new.id,new.cashier_id);
+  for v_payment in
+   select payment_method,sum(amount)::numeric(16,2) amount from public.sale_payments
+   where tenant_id=new.tenant_id and sale_id=new.id group by payment_method
+  loop
+   insert into public.journal_lines(tenant_id,journal_entry_id,account_id,description,debit,credit)
+    values(new.tenant_id,v_entry,case when v_payment.payment_method='cash' then v_cash else v_bank end,
+      'Règlement vente '||v_payment.payment_method,v_payment.amount,0);
+  end loop;
+  if new.subtotal>0 then
+   insert into public.journal_lines(tenant_id,journal_entry_id,account_id,description,debit,credit)
+    values(new.tenant_id,v_entry,v_sales,'Ventes de marchandises',0,new.subtotal);
+  end if;
+  if new.tax_total>0 then
+   insert into public.journal_lines(tenant_id,journal_entry_id,account_id,description,debit,credit)
+    values(new.tenant_id,v_entry,v_vat,'TVA facturée',0,new.tax_total);
+  end if;
+ end if;
+ return new;
+end;
+$$;
+drop trigger if exists sales_accounting_posted on public.sales;
+create trigger sales_accounting_posted after update of status on public.sales
+ for each row when (old.status='draft' and new.status='completed')
+ execute function public.accounting_post_completed_sale();
+
+-- Stock received on a supplier delivery is booked as inventory against supplier payable.
+create or replace function public.accounting_post_purchase_receipt_item()
+returns trigger language plpgsql security definer set search_path=public
+as $$
+declare v_entry uuid:=gen_random_uuid(); v_number text; v_stock uuid; v_supplier uuid; v_amount numeric(16,2);
+begin
+ perform public.seed_default_accounting_chart(new.tenant_id);
+ insert into public.accounting_accounts(tenant_id,code,name,account_class,account_kind)
+ values(new.tenant_id,'311000','Stocks de marchandises','asset','general')
+ on conflict(tenant_id,code) do nothing;
+ select id into v_stock from public.accounting_accounts where tenant_id=new.tenant_id and code='311000';
+ select id into v_supplier from public.accounting_accounts where tenant_id=new.tenant_id and code='401000';
+ v_amount:=round(new.quantity*new.unit_cost,2);
+ if v_amount>0 then
+  v_number:='AC-'||to_char(new.created_at,'YYYYMMDD')||'-'||upper(substr(replace(v_entry::text,'-',''),1,8));
+  insert into public.journal_entries(id,tenant_id,entry_number,entry_date,description,source_type,source_id)
+   values(v_entry,new.tenant_id,v_number,new.created_at::date,'Réception achat '||left(new.receipt_id::text,8),'purchase',new.receipt_id);
+  insert into public.journal_lines(tenant_id,journal_entry_id,account_id,description,debit,credit)
+   values(new.tenant_id,v_entry,v_stock,'Entrée en stock',v_amount,0),
+         (new.tenant_id,v_entry,v_supplier,'Dette fournisseur',0,v_amount);
+ end if;
+ return new;
+end;
+$$;
+drop trigger if exists purchase_receipt_accounting_posted on public.purchase_receipt_items;
+create trigger purchase_receipt_accounting_posted after insert on public.purchase_receipt_items
+ for each row execute function public.accounting_post_purchase_receipt_item();
