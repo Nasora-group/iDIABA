@@ -17,9 +17,7 @@ create table if not exists public.tenants (
   updated_at timestamptz not null default now()
 );
 
-do $ begin create type public.tenant_role as enum ('owner','admin','manager','cashier','stock','accountant','viewer'); exception when duplicate_object then null; end $;
-
-create table if not exists public.tenant_memberships (
+do $$ begin create type public.tenant_role as enum ('owner','admin','manager','cashier','stock','accountant','viewer'); exception when duplicate_object then null; end $$;\n\ncreate table if not exists public.tenant_memberships (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references public.tenants(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
