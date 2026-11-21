@@ -217,7 +217,7 @@ begin
     raise exception 'Insufficient permissions';
   end if;
   if v_order.status not in ('ordered','partially_received') then raise exception 'Order cannot be received'; end if;
-  if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) < 1 or jsonb_array_length(p_items) > 100 then
+  if jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) < 1 or jsonb_array_length(p_items) > 100 then
     raise exception 'Receipt must contain at least one line';
   end if;
 

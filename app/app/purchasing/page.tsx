@@ -74,12 +74,12 @@ export default async function PurchasingPage({ searchParams }: {
                 <button className="primary" type="submit">Enregistrer le fournisseur</button>
               </form>
               <form action={createPurchaseOrder} className="catalog-form">
-                <h3>Créer une commande d'achat</h3>
+                <h3>Créer une commande d&apos;achat</h3>
                 <input type="hidden" name="tenant_id" value={workspace.tenant_id} />
                 <label>Fournisseur<select name="supplier_id" required defaultValue=""><option value="" disabled>Choisir un fournisseur</option>{suppliers.filter((supplier) => supplier.is_active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
                 <label>Dépôt de réception<select name="location_id" required defaultValue=""><option value="" disabled>Choisir un dépôt</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name} · {location.code}</option>)}</select></label>
                 <label>Produit<select name="product_id" required defaultValue=""><option value="" disabled>Choisir un produit</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</select></label>
-                <div className="catalog-fields"><label>Quantité<input name="quantity" type="number" min="0.001" step="0.001" required placeholder="Ex. 20" /></label><label>Coût unitaire (FCFA)<input name="unit_cost" type="number" min="0" step="0.01" required placeholder="Prix d'achat" /></label></div>
+                <div className="catalog-fields"><label>Quantité<input name="quantity" type="number" min="0.001" step="0.001" required placeholder="Ex. 20" /></label><label>Coût unitaire (FCFA)<input name="unit_cost" type="number" min="0" step="0.01" required placeholder="Prix d&apos;achat" /></label></div>
                 <label>Note / référence fournisseur<input name="notes" maxLength={1000} placeholder="Optionnel" /></label>
                 <button className="primary" type="submit" disabled={!suppliers.some((supplier) => supplier.is_active) || !products.length || !locations.length}>Créer la commande</button>
                 {(!suppliers.length || !products.length || !locations.length) && <p className="catalog-help">Ajoutez un fournisseur, un produit et un dépôt actif pour démarrer.</p>}

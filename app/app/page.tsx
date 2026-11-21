@@ -39,7 +39,7 @@ export default async function AppHome() {
           <Link className="primary" href="/app/products">Ouvrir le catalogue</Link>
         </div>
         <div className="app-module-card">
-          <div><strong>Gestion des stocks</strong><p>Créez vos dépôts, enregistrez les stocks initiaux et suivez chaque mouvement sans effacer l'historique.</p></div>
+          <div><strong>Gestion des stocks</strong><p>Créez vos dépôts, enregistrez les stocks initiaux et suivez chaque mouvement sans effacer l&apos;historique.</p></div>
           <Link className="primary" href="/app/stock">Ouvrir les stocks</Link>
         </div>
         <div className="app-module-card">
