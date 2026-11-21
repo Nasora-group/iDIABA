@@ -17,6 +17,8 @@ export async function createStockTransfer(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const tenant_id = validTenant(formData.get("tenant_id"));
+  const client_transfer_id = String(formData.get("client_transfer_id") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(client_transfer_id)) redirect("/app/transfers?error=validation");
   const source_location_id = String(formData.get("source_location_id") ?? "");
   const destination_location_id = String(formData.get("destination_location_id") ?? "");
   const items: { product_id: string; quantity: number }[] = [];
@@ -41,6 +43,7 @@ export async function createStockTransfer(formData: FormData) {
     p_source_location_id: source_location_id,
     p_destination_location_id: destination_location_id,
     p_items: mergedItems,
+    p_client_transfer_id: client_transfer_id,
     p_notes: notes,
   });
   if (error) redirect("/app/transfers?error=create");
@@ -68,6 +71,8 @@ export async function receiveStockTransfer(formData: FormData) {
   if (!user) redirect("/login");
   const transfer_id = String(formData.get("transfer_id") ?? "");
   if (!/^[0-9a-f-]{36}$/i.test(transfer_id)) redirect("/app/transfers?error=validation");
+  const client_receipt_id = String(formData.get("client_receipt_id") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(client_receipt_id)) redirect("/app/transfers?error=validation");
   const items: { transfer_item_id: string; quantity: number }[] = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("received_")) continue;
@@ -85,6 +90,7 @@ export async function receiveStockTransfer(formData: FormData) {
   const notes = String(formData.get("notes") ?? "").trim().slice(0, 1000);
   const { error } = await supabase.rpc("receive_stock_transfer", {
     p_transfer_id: transfer_id,
+    p_client_receipt_id: client_receipt_id,
     p_items: items,
     p_notes: notes,
   });
