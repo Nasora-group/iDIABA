@@ -121,7 +121,10 @@ declare
   v_trial_ends_at timestamptz;
   v_period_ends_at timestamptz;
   v_grace_ends_at timestamptz;
-  v_plan public.subscription_plans%rowtype;
+  v_max_users integer;
+  v_max_locations integer;
+  v_max_products integer;
+  v_max_monthly_sales integer;
   v_count bigint;
   v_limit integer;
   v_lock_key text;
@@ -136,8 +139,10 @@ begin
   v_lock_key := v_tenant_id::text || ':' || tg_table_name;
   perform pg_advisory_xact_lock(hashtextextended(v_lock_key,0));
 
-  select s.status,s.trial_ends_at,s.current_period_ends_at,s.grace_ends_at,p
-    into v_status,v_trial_ends_at,v_period_ends_at,v_grace_ends_at,v_plan
+  select s.status,s.trial_ends_at,s.current_period_ends_at,s.grace_ends_at,
+         p.max_users,p.max_locations,p.max_products,p.max_monthly_sales
+    into v_status,v_trial_ends_at,v_period_ends_at,v_grace_ends_at,
+         v_max_users,v_max_locations,v_max_products,v_max_monthly_sales
   from public.tenant_subscriptions s
   join public.subscription_plans p on p.id=s.plan_id
   where s.tenant_id=v_tenant_id and p.is_active=true
@@ -160,25 +165,25 @@ begin
 
   if not v_skip_limit then
   if tg_table_name='products' then
-    v_limit := v_plan.max_products;
+    v_limit := v_max_products;
     if v_limit is not null then
       select count(*) into v_count from public.products where tenant_id=v_tenant_id and is_active=true;
       if v_count >= v_limit then raise exception 'Limite de produits atteinte (%). Passez à une formule supérieure.',v_limit; end if;
     end if;
   elsif tg_table_name='stock_locations' then
-    v_limit := v_plan.max_locations;
+    v_limit := v_max_locations;
     if v_limit is not null then
       select count(*) into v_count from public.stock_locations where tenant_id=v_tenant_id and is_active=true;
       if v_count >= v_limit then raise exception 'Limite de dépôts atteinte (%). Passez à une formule supérieure.',v_limit; end if;
     end if;
   elsif tg_table_name='tenant_memberships' then
-    v_limit := v_plan.max_users;
+    v_limit := v_max_users;
     if v_limit is not null then
       select count(*) into v_count from public.tenant_memberships where tenant_id=v_tenant_id;
       if v_count >= v_limit then raise exception 'Limite d''utilisateurs atteinte (%). Passez à une formule supérieure.',v_limit; end if;
     end if;
   elsif tg_table_name='sales' then
-    v_limit := v_plan.max_monthly_sales;
+    v_limit := v_max_monthly_sales;
     if v_limit is not null then
       select count(*) into v_count from public.sales
       where tenant_id=v_tenant_id and status='completed'
