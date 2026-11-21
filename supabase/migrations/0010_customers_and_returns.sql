@@ -45,6 +45,9 @@ create table public.sale_returns (
 create index sale_returns_tenant_date_idx on public.sale_returns(tenant_id, created_at desc);
 create index sale_returns_tenant_sale_idx on public.sale_returns(tenant_id, sale_id, created_at desc);
 
+create unique index if not exists sale_items_tenant_id_uidx
+  on public.sale_items(tenant_id, id);
+
 create table public.sale_return_items (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null,
