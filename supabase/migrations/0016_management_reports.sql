@@ -68,6 +68,14 @@ begin
       select coalesce(sum(e.amount),0) from public.expenses e
       where e.tenant_id=p_tenant_id and e.expense_date>=p_from::date and e.expense_date<p_to::date
     ),
+    'returns_amount',(
+      select coalesce(sum(sr.refund_total),0) from public.sale_returns sr
+      where sr.tenant_id=p_tenant_id and sr.created_at>=p_from and sr.created_at<p_to
+    ),
+    'returns_count',(
+      select count(*) from public.sale_returns sr
+      where sr.tenant_id=p_tenant_id and sr.created_at>=p_from and sr.created_at<p_to
+    ),
     'purchases',(
       select coalesce(sum(po.total_amount),0) from public.purchase_orders po
       where po.tenant_id=p_tenant_id and po.ordered_at>=p_from and po.ordered_at<p_to
