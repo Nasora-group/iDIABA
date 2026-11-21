@@ -21,13 +21,10 @@ export default function AuthForm({ mode }: Props) {
     try {
       const supabase = createClient();
       if (mode === "signup") {
-        const { data, error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName, workspace_name: company.trim(), workspace_slug: company.trim().toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") } } });
+        const { data, error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName, workspace_name: company.trim(), workspace_slug: company.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") } } });
         if (signUpError) throw signUpError;
         if (!data.user) throw new Error("Création de compte impossible.");
         if (!data.session) { setMessage("Compte créé. Vérifiez votre e-mail pour confirmer votre inscription, puis connectez-vous."); return; }
-        const slug = company.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-        const { error: tenantError } = await supabase.rpc("create_tenant", { workspace_name: company.trim(), workspace_slug: slug });
-        if (tenantError) throw tenantError;
       } else {
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;

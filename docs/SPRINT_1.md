@@ -21,5 +21,5 @@
 - Les tables applicatives doivent utiliser tenant_id et RLS dans les prochains sprints.
 - Le RPC create_tenant vérifie l'utilisateur connecté et crée le membership owner dans la même transaction.
 - Les invitations et changement de rôle nécessiteront un flux serveur vérifié et audit.
-- Le formulaire d'inscription dépend du paramètre Supabase de confirmation e-mail. Si confirmation activée, l'entreprise sera créée après connexion (à traiter dans le flux de confirmation/complétion du profil lors d'une prochaine étape).
+- L'espace entreprise est créé par le trigger SQL lors de la création du compte, même si la confirmation e-mail est activée.
 - Aucun secret service-role ne doit être utilisé côté navigateur ni versionné.
