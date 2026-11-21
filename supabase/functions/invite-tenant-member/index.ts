@@ -43,7 +43,9 @@ Deno.serve(async(req:Request)=>{
     if(planError||!plan) return json(403,{error:"Formule d’abonnement indisponible"});
     const maxUsers=plan.max_users as number|null;
     if(maxUsers!==null&&(count??0)>=maxUsers) return json(403,{error:"Limite d’utilisateurs atteinte pour votre abonnement"});
-    const redirectTo=(Deno.env.get("APP_URL")??"https://idiaba.onrender.com")+"/login";
+    // Never let a local development URL leak into production invitation emails.
+    // Supabase Auth must allow this exact URL in Authentication > URL Configuration.
+    const redirectTo="https://idiaba.onrender.com/auth/accept-invite";
     const {data:invited,error:inviteError}=await admin.auth.admin.inviteUserByEmail(email,{redirectTo,data:{full_name:name,company_name:tenant.name,tenant_role:role}});
     if(inviteError){
       const duplicate=/already|registered|exists/i.test(inviteError.message);
