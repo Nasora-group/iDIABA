@@ -51,12 +51,12 @@ export default async function PurchasingPage({ searchParams }: {
         <nav className="product-nav"><Link href="/app">Mon espace</Link><Link href="/app/products">Catalogue</Link><Link href="/app/stock">Stocks</Link><Link href="/app/inventory">Inventaires</Link><Link href="/app/pos">Caisse</Link><span>Achats</span><Link href="/app/accounting">Comptabilité</Link></nav>
       </header>
       <section className="workspace catalog-workspace">
-        <p className="eyebrow">SPRINT 5 · ACHATS & APPROVISIONNEMENT</p>
+        <p className="eyebrow">ACHATS & APPROVISIONNEMENT</p>
         <h1>Fournisseurs et achats</h1>
-        <p className="lead">Centralisez vos fournisseurs, préparez les commandes et réceptionnez les marchandises directement dans le stock du dépôt choisi.</p>
+        <p className="lead">Centralisez vos fournisseurs, préparez des commandes multi-articles et réceptionnez les marchandises en une ou plusieurs fois.</p>
         {params.created && <p className="form-success">{params.created === "supplier" ? "Fournisseur enregistré." : "Commande d&apos;achat créée."}</p>}
-        {params.received && <p className="form-success">Réception enregistrée. Les quantités ont été ajoutées au stock et la commande mise à jour.</p>}
-        {params.error && <p className="form-error">Opération impossible. Vérifiez les informations, les droits et les références sélectionnées.</p>}
+        {params.received && <p className="form-success">Réception enregistrée. Les quantités reçues ont été ajoutées au stock et la commande mise à jour.</p>}
+        {params.error && <p className="form-error">{params.error === "lines" ? "Vérifiez les produits, quantités et coûts de chaque ligne. Un produit ne peut apparaître qu'une fois." : params.error === "receipt" ? "Aucune quantité valide à réceptionner, ou quantité supérieure au reliquat." : "Opération impossible. Vérifiez les informations, les droits et les références sélectionnées."}</p>}
         {!data.length && <p>Aucun espace entreprise associé à ce compte.</p>}
         {data.map(({ workspace, suppliers, products, locations, orders, error }) => (
           <section className="catalog-tenant" key={workspace.tenant_id}>
@@ -78,8 +78,15 @@ export default async function PurchasingPage({ searchParams }: {
                 <input type="hidden" name="tenant_id" value={workspace.tenant_id} />
                 <label>Fournisseur<select name="supplier_id" required defaultValue=""><option value="" disabled>Choisir un fournisseur</option>{suppliers.filter((supplier) => supplier.is_active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
                 <label>Dépôt de réception<select name="location_id" required defaultValue=""><option value="" disabled>Choisir un dépôt</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name} · {location.code}</option>)}</select></label>
-                <label>Produit<select name="product_id" required defaultValue=""><option value="" disabled>Choisir un produit</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</select></label>
-                <div className="catalog-fields"><label>Quantité<input name="quantity" type="number" min="0.001" step="0.001" required placeholder="Ex. 20" /></label><label>Coût unitaire (FCFA)<input name="unit_cost" type="number" min="0" step="0.01" required placeholder="Prix d&apos;achat" /></label></div>
+                <h4>Articles de la commande</h4>
+                <p className="catalog-help">Ajoutez jusqu&apos;à 5 articles sur ce formulaire. Chaque produit doit être unique dans la commande.</p>
+                {Array.from({ length: 5 }, (_, index) => (
+                  <div className="catalog-form" key={index}>
+                    <p><strong>Article {index + 1}</strong></p>
+                    <label>Produit<select name="product_id" required={index === 0} defaultValue=""><option value="">Choisir un produit</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</select></label>
+                    <div className="catalog-fields"><label>Quantité<input name="quantity" type="number" min="0.001" max="1000000000" step="0.001" required={index === 0} placeholder="Ex. 20" /></label><label>Coût unitaire (FCFA)<input name="unit_cost" type="number" min="0" max="999999999999" step="0.01" required={index === 0} placeholder="Prix d'achat" /></label></div>
+                  </div>
+                ))}
                 <label>Note / référence fournisseur<input name="notes" maxLength={1000} placeholder="Optionnel" /></label>
                 <button className="primary" type="submit" disabled={!suppliers.some((supplier) => supplier.is_active) || !products.length || !locations.length}>Créer la commande</button>
                 {(!suppliers.length || !products.length || !locations.length) && <p className="catalog-help">Ajoutez un fournisseur, un produit et un dépôt actif pour démarrer.</p>}
@@ -99,7 +106,19 @@ export default async function PurchasingPage({ searchParams }: {
                   <td>{order.location?.name ?? "Dépôt"}</td>
                   <td><strong>{Number(order.total_amount).toLocaleString("fr-FR")} F</strong></td>
                   <td><span className={order.status === "received" ? "catalog-state" : "catalog-state inactive"}>{statusLabel(order.status)}</span></td>
-                  <td>{["ordered", "partially_received"].includes(order.status) && <form action={receivePurchaseOrder}><input type="hidden" name="purchase_order_id" value={order.id} /><button className="archive-button" type="submit">Réceptionner le reliquat</button></form>}</td>
+                  <td>{["ordered", "partially_received"].includes(order.status) && <form action={receivePurchaseOrder}>
+                    <input type="hidden" name="purchase_order_id" value={order.id} />
+                    {order.items?.map((line) => {
+                      const remaining = Math.max(0, Number(line.quantity) - Number(line.received_quantity));
+                      return <div key={line.id}>
+                        <input type="hidden" name="order_item_id" value={line.id} />
+                        <label><small>{line.product?.name ?? "Produit"} · reste {remaining.toLocaleString("fr-FR")}</small>
+                          <input name="quantity" type="number" min="0" max={remaining} step="0.001" defaultValue={remaining} />
+                        </label>
+                      </div>;
+                    })}
+                    <button className="archive-button" type="submit">Enregistrer la réception</button>
+                  </form>}</td>
                 </tr>
               ))}</tbody></table> : <p className="catalog-empty">Aucune commande créée.</p>}
             </div>
