@@ -95,12 +95,16 @@ begin
   if not found or v_order.status not in ('partially_received','received') then
     raise exception 'Invoice must reference a received purchase order for this supplier';
   end if;
+  if not exists (
+    select 1 from public.purchase_order_items i
+    where i.tenant_id=p_tenant_id and i.purchase_order_id=p_purchase_order_id
+      and i.received_quantity > 0
+  ) then raise exception 'Purchase order has no received items'; end if;
   select coalesce(sum(round(i.received_quantity * i.unit_cost,2)),0)::numeric(14,2)
     into v_received_goods_amount
     from public.purchase_order_items i
     where i.tenant_id=p_tenant_id and i.purchase_order_id=p_purchase_order_id
       and i.received_quantity > 0;
-  if v_received_goods_amount <= 0 then raise exception 'Purchase order has no received items'; end if;
   v_amount_ht := round(p_amount - p_tax_amount,2);
 
   perform public.ensure_accounting_chart(p_tenant_id);
