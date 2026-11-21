@@ -49,7 +49,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  if (!event.id || !event.type || !event.data?.id) {
+  if (!event.id || !event.type) {
+    return Response.json({ error: "Invalid event" }, { status: 400 });
+  }
+  if (event.type === "test.test_event") {
+    return Response.json({ received: true, test: true });
+  }
+  if (!event.data?.id) {
     return Response.json({ error: "Invalid event" }, { status: 400 });
   }
   if (event.type === "checkout.session.completed" && event.data.payment_status !== "succeeded") {
