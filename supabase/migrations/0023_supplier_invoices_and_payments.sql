@@ -30,12 +30,16 @@ create table if not exists public.supplier_invoice_payments (
   payment_account_id uuid not null,
   amount numeric(14,2) not null check (amount > 0),
   paid_at date not null,
+  cash_session_id uuid,
+  idempotency_key uuid not null default gen_random_uuid(),
   reference text not null default '',
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   unique (tenant_id, id),
+  unique (tenant_id, idempotency_key),
   foreign key (tenant_id, invoice_id) references public.supplier_invoices(tenant_id, id),
-  foreign key (tenant_id, payment_account_id) references public.accounting_accounts(tenant_id, id)
+  foreign key (tenant_id, payment_account_id) references public.accounting_accounts(tenant_id, id),
+  foreign key (tenant_id, cash_session_id) references public.cash_sessions(tenant_id, id)
 );
 
 create index if not exists supplier_invoices_tenant_status_due_idx
@@ -159,7 +163,8 @@ create or replace function public.record_supplier_invoice_payment(
   p_amount numeric,
   p_paid_at date,
   p_reference text default '',
-  p_cash_session_id uuid default null
+  p_cash_session_id uuid default null,
+  p_idempotency_key uuid default null
 ) returns uuid
 language plpgsql security definer set search_path = ''
 as $$
@@ -173,9 +178,10 @@ declare
   v_payment_account_kind text;
   v_cash_session public.cash_sessions%rowtype;
   v_current_cash numeric(14,2);
+  v_existing_payment public.supplier_invoice_payments%rowtype;
 begin
   if auth.uid() is null or p_amount is null or p_amount <= 0
-    or p_amount > 999999999999 or p_paid_at is null
+    or p_amount > 999999999999 or p_paid_at is null or p_idempotency_key is null
     or length(trim(coalesce(p_reference,''))) > 100 then
     raise exception 'Invalid supplier payment';
   end if;
@@ -185,6 +191,20 @@ begin
   if not found or not public.has_tenant_role(
     v_invoice.tenant_id, array['owner','admin','manager','accountant']::public.tenant_role[]
   ) then raise exception 'Permission denied or invoice unavailable'; end if;
+
+  select * into v_existing_payment from public.supplier_invoice_payments
+    where tenant_id=v_invoice.tenant_id and idempotency_key=p_idempotency_key for update;
+  if found then
+    if v_existing_payment.invoice_id <> v_invoice.id
+      or v_existing_payment.payment_account_id <> p_payment_account_id
+      or v_existing_payment.cash_session_id is distinct from p_cash_session_id
+      or v_existing_payment.amount <> round(p_amount,2)
+      or v_existing_payment.paid_at <> p_paid_at
+      or v_existing_payment.reference <> left(trim(coalesce(p_reference,'')),100) then
+      raise exception 'Idempotency key was already used for a different payment';
+    end if;
+    return v_existing_payment.id;
+  end if;
 
   v_remaining := round(v_invoice.amount - v_invoice.paid_amount,2);
   if round(p_amount,2) > v_remaining then
@@ -225,10 +245,10 @@ begin
   if v_payable_account is null then raise exception 'Supplier payable account unavailable'; end if;
 
   insert into public.supplier_invoice_payments(
-    id,tenant_id,invoice_id,payment_account_id,amount,paid_at,reference,created_by
+    id,tenant_id,invoice_id,payment_account_id,amount,paid_at,reference,cash_session_id,idempotency_key,created_by
   ) values (
     v_payment_id,v_invoice.tenant_id,v_invoice.id,p_payment_account_id,
-    round(p_amount,2),p_paid_at,left(trim(coalesce(p_reference,'')),100),auth.uid()
+    round(p_amount,2),p_paid_at,left(trim(coalesce(p_reference,'')),100),p_cash_session_id,p_idempotency_key,auth.uid()
   );
 
   v_entry_number := 'FP-' || to_char(p_paid_at,'YYYYMMDD') || '-' ||
@@ -260,6 +280,6 @@ end;
 $$;
 
 revoke all on function public.create_supplier_invoice(uuid,uuid,uuid,text,date,date,numeric,text,numeric) from public;
-revoke all on function public.record_supplier_invoice_payment(uuid,uuid,numeric,date,text,uuid) from public;
+revoke all on function public.record_supplier_invoice_payment(uuid,uuid,numeric,date,text,uuid,uuid) from public;
 grant execute on function public.create_supplier_invoice(uuid,uuid,uuid,text,date,date,numeric,text,numeric) to authenticated;
-grant execute on function public.record_supplier_invoice_payment(uuid,uuid,numeric,date,text,uuid) to authenticated;
+grant execute on function public.record_supplier_invoice_payment(uuid,uuid,numeric,date,text,uuid,uuid) to authenticated;
