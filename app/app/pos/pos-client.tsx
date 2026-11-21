@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { enqueueOfflineSale, loadOfflineSales, removeOfflineSale } from "./offline-store";
 import { checkoutSale } from "./actions";
 
 type Product = { id: string; name: string; sku: string; unit: string; sale_price: string | number; tax_rate: string | number };
 type CartLine = { product_id: string; quantity: string };
 type PaymentLine = { method: string; amount: string };
-type Props = { tenantId: string; locationId: string; sessionId: string; clientSaleId: string; products: Product[] };
+type Props = { userId: string; tenantId: string; locationId: string; sessionId: string; clientSaleId: string; products: Product[] };
 
 function toCents(value: string | number) {
   const [whole, fraction = ""] = String(value).split(".");
@@ -16,7 +18,7 @@ function formatCents(cents: number) {
   return (cents / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export default function POSCheckout({ tenantId, locationId, sessionId, clientSaleId, products }: Props) {
+export default function POSCheckout({ userId, tenantId, locationId, sessionId, clientSaleId, products }: Props) {\n  const [activeSaleId, setActiveSaleId] = useState(clientSaleId);\n  const [offlineMessage, setOfflineMessage] = useState("");\n  const syncLock = useRef(false);
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [quantity, setQuantity] = useState("1");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -51,7 +53,7 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
       && Number.isFinite(amount) && amount > 0;
   }) && paidTotal === totals.total;
 
-  function addLine() {
+  useEffect(() => {\n    const syncPending = async () => {\n      if (!navigator.onLine || syncLock.current) return;\n      syncLock.current = true;\n      try {\n        const supabase = createClient();\n        const { data: { user } } = await supabase.auth.getUser();\n        if (!user || user.id !== userId) return;\n        const pending = await loadOfflineSales(userId);\n        for (const sale of pending) {\n          const { error } = await supabase.rpc("finalize_sale", {\n            p_tenant_id: sale.tenantId, p_location_id: sale.locationId,\n            p_cash_session_id: sale.sessionId, p_client_sale_id: sale.id,\n            p_items: sale.items, p_payments: sale.payments,\n          });\n          if (error) { setOfflineMessage("Une vente hors connexion reste en attente : " + error.message); break; }\n          await removeOfflineSale(sale.id);\n        }\n        if ((await loadOfflineSales(userId)).length === 0) setOfflineMessage("Les ventes hors connexion sont synchronisées.");\n      } catch { setOfflineMessage("Synchronisation impossible pour le moment. Les ventes restent conservées sur cet appareil."); }\n      finally { syncLock.current = false; }\n    };\n    window.addEventListener("online", syncPending);\n    void syncPending();\n    return () => window.removeEventListener("online", syncPending);\n  }, [userId]);\n\n  async function handleSubmit(event: FormEvent<HTMLFormElement>) {\n    if (navigator.onLine) return;\n    event.preventDefault();\n    if (!cart.length || totals.total <= 0 || !paymentsValid) return;\n    try {\n      await enqueueOfflineSale({\n        id: activeSaleId, userId, tenantId, locationId, sessionId,\n        items: cart, payments: effectivePayments, createdAt: Date.now(),\n      });\n      setCart([]);\n      setPayments([{ method: "cash", amount: "" }]);\n      setActiveSaleId(crypto.randomUUID());\n      setOfflineMessage("Vente enregistrée sur cet appareil. Elle sera synchronisée au retour du réseau.");\n    } catch {\n      setOfflineMessage("Impossible d’enregistrer la vente localement. Vérifiez l’espace de stockage du navigateur.");\n    }\n  }\n\n  function addLine() {
     const qty = Number(quantity);
     if (!productId || !Number.isFinite(qty) || qty <= 0 || qty > 1000000) return;
     setCart((current) => {
@@ -64,11 +66,11 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
   }
 
   return (
-    <form action={checkoutSale} className="pos-checkout">
+    <form action={checkoutSale} onSubmit={handleSubmit} className="pos-checkout">
       <input type="hidden" name="tenant_id" value={tenantId} />
       <input type="hidden" name="location_id" value={locationId} />
       <input type="hidden" name="session_id" value={sessionId} />
-      <input type="hidden" name="client_sale_id" value={clientSaleId} />
+      <input type="hidden" name="client_sale_id" value={activeSaleId} />
       <input type="hidden" name="items_json" value={JSON.stringify(cart)} />
       <input type="hidden" name="payments_json" value={JSON.stringify(effectivePayments)} />
       <h3>Nouvelle vente</h3>
@@ -117,7 +119,7 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
         <div className="pos-payment-total"><span>Montant réglé</span><strong>{formatCents(paidTotal)} F / {formatCents(totals.total)} F</strong></div>
         {!paymentsValid && cart.length > 0 && <p className="catalog-help">Répartissez le montant exact entre les moyens de paiement.</p>}
       </div>
-      <button className="primary" type="submit" disabled={!cart.length || totals.total <= 0 || !paymentsValid}>Valider et encaisser</button>
+      <button className="primary" type="submit" disabled={!cart.length || totals.total <= 0 || !paymentsValid}>Valider et encaisser</button>\n      {offlineMessage && <p className="form-success" role="status">{offlineMessage}</p>}
       <p className="catalog-help">La validation vérifie le stock et enregistre la vente, les différents paiements et les sorties de stock dans une seule transaction.</p>
     </form>
   );
