@@ -84,7 +84,7 @@ begin
   if length(trim(coalesce(p_invoice_number,''))) not between 1 and 100
     or p_invoice_date is null or (p_due_date is not null and p_due_date < p_invoice_date)
     or p_amount is null or p_amount <= 0 or p_amount > 999999999999
-    or p_tax_amount is null or p_tax_amount < 0 or p_tax_amount > p_amount
+    or p_tax_amount is null or p_tax_amount < 0 or p_tax_amount >= p_amount
     or length(trim(coalesce(p_description,''))) > 250 then
     raise exception 'Invalid supplier invoice';
   end if;
