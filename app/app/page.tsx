@@ -13,6 +13,7 @@ type Membership = {
 const modules = [
   { title: "Catalogue produits", description: "Références, catégories, prix et codes-barres.", href: "/app/products", action: "Gérer les produits", icon: Package },
   { title: "Stocks & dépôts", description: "Stocks disponibles, dépôts et journal des mouvements.", href: "/app/stock", action: "Consulter les stocks", icon: Boxes },
+  { title: "Accès par établissement", description: "Affectez les employés à leurs boutiques et dépôts.", href: "/app/locations", action: "Gérer les accès", icon: Users },
   { title: "Transferts de stock", description: "Expédiez et réceptionnez les marchandises entre vos boutiques et dépôts.", href: "/app/transfers", action: "Gérer les transferts", icon: Boxes },
   { title: "Caisse & ventes", description: "Encaissements, paiements multiples et clôture de caisse.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
   { title: "Achats & fournisseurs", description: "Commandes fournisseurs et réceptions de marchandises.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
@@ -21,6 +22,7 @@ const modules = [
   { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
   { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", href: "/app/customers", action: "Gérer les clients", icon: Users },
   { title: "Utilisateurs & équipe", description: "Ajoutez des employés et gérez leurs rôles et accès.", href: "/app/team", action: "Gérer l’équipe", icon: Users },
+  { title: "Accès boutiques", description: "Affectez chaque employé aux boutiques et dépôts autorisés.", href: "/app/locations", action: "Gérer les accès par site", icon: ShieldCheck },
   { title: "Abonnements & limites", description: "Formules, volumes et demandes de changement par entreprise.", href: "/app/subscription", action: "Gérer l’abonnement", icon: CreditCard },
   { title: "Paramètres entreprise", description: "Identité, RCCM, NINEA, coordonnées, devise et TVA par défaut.", href: "/app/company-settings", action: "Configurer l’entreprise", icon: ShieldCheck },
 ];
@@ -50,6 +52,7 @@ export default async function AppHome() {
         <nav className="app-actions" aria-label="Navigation principale">
           <Link href="/app/products">Produits</Link>
           <Link href="/app/stock">Stocks</Link>
+          <Link href="/app/locations">Établissements</Link>
           <Link href="/app/transfers">Transferts</Link>
           <Link href="/app/inventory">Inventaires</Link>
           <Link href="/app/customers">Clients</Link>
