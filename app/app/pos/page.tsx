@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { closeCashSession, openCashSession, recordCashMovement } from "./actions";
 import POSCheckout from "./pos-client";
+import OfflinePOSSeed from "./offline-seed";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
 type Location = { id: string; name: string; code: string };
@@ -56,6 +57,7 @@ export default async function POSPage({ searchParams }: {
         <p className="eyebrow">SPRINT 6 · CAISSE & RAPPROCHEMENT</p>
         <h1>Point de vente</h1>
         <p className="lead">Encaissez avec plusieurs moyens de paiement, suivez les entrées et sorties d&apos;espèces et contrôlez les écarts à la clôture.</p>
+        <p className="catalog-help"><Link href="/offline">Préparer / ouvrir la caisse hors connexion</Link> · Consultez cette page une première fois en ligne sur chaque appareil.</p>
         {params.opened && <p className="form-success">Session de caisse ouverte.</p>}
         {params.closed && <p className="form-success">Session clôturée. Le solde théorique et l&apos;écart ont été calculés.</p>}
         {params.sold && <p className="form-success">Vente enregistrée et stock mis à jour.</p>}
@@ -97,7 +99,7 @@ export default async function POSPage({ searchParams }: {
                     ) : <p className="catalog-empty">Aucun mouvement hors ventes.</p>}
                   </div>
                 </div>
-                {products.length ? <POSCheckout tenantId={workspace.tenant_id} locationId={session.location_id} sessionId={session.id} clientSaleId={randomUUID()} products={products} /> : <p className="catalog-empty">Ajoutez des produits actifs au catalogue avant de vendre.</p>}
+                {products.length ? <><OfflinePOSSeed userId={user.id} tenantId={workspace.tenant_id} tenantName={workspace.tenant?.name ?? "Entreprise"} locationId={session.location_id} locationName={session.location?.name ?? "Point de vente"} sessionId={session.id} products={products} /><POSCheckout tenantId={workspace.tenant_id} locationId={session.location_id} sessionId={session.id} clientSaleId={randomUUID()} products={products} /></> : <p className="catalog-empty">Ajoutez des produits actifs au catalogue avant de vendre.</p>}
               </div>
             ))}
             <div className="catalog-table-wrap">
