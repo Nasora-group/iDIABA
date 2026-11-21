@@ -99,7 +99,7 @@ export default async function SupplierInvoicesPage({ searchParams }: {
                 </div>
                 <label>Libellé / note<input name="description" maxLength={250} placeholder="Optionnel" /></label>
                 <button className="primary" type="submit" disabled={!suppliers.length || !orders.length}>Enregistrer la facture</button>
-                <p className="catalog-help">La facture doit correspondre au fournisseur de la commande et à une commande réceptionnée. Indiquez la TVA incluse si elle s'applique ; l'écart entre le montant HT et les marchandises reçues sera affiché.</p>
+                <p className="catalog-help">La facture doit correspondre au fournisseur de la commande et à une commande réceptionnée. Indiquez la TVA incluse si elle s’applique. L’écart entre le montant HT et les marchandises reçues sera affiché.</p>
               </form>
               <div className="catalog-table-wrap">
                 <h3>Factures et soldes fournisseurs</h3>
