@@ -192,7 +192,7 @@ $$;
 -- Gate creation of business records for every tenant-scoped table.
 -- Quota-specific checks are applied to products, locations, members and sales;
 -- all other tables still require a valid trial/active subscription.
-do $
+do $$
 declare
   v_table text;
   v_tables text[] := array[
@@ -209,7 +209,7 @@ begin
     execute format('create trigger subscription_guard before insert on public.%I for each row execute function public.enforce_tenant_subscription_quota()',v_table);
   end loop;
 end;
-$;
+$$;
 
 
 revoke all on function public.create_trial_subscription() from public,anon,authenticated;
