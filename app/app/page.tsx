@@ -53,6 +53,7 @@ export default async function AppHome() {
           <Link href="/app/accounting">Comptabilité</Link>
           <Link href="/app/subscription">Abonnement</Link>
           {canViewAudit && <Link href="/app/audit">Journal d’audit</Link>}
+          {canViewAudit && <Link href="/app/reports">Rapports</Link>}
           {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin">Admin SaaS</Link>}
           <form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form>
         </nav>
@@ -80,6 +81,7 @@ export default async function AppHome() {
               <span className="app-module-link">{action}<ArrowUpRight size={15} /></span>
             </Link>
           ))}
+          {canViewAudit && <Link href="/app/reports" className="app-module-card"><span className="app-module-icon"><ChartNoAxesCombined size={20} strokeWidth={1.9} /></span><div><strong>Rapports de gestion</strong><p>Chiffre d’affaires, dépenses, achats, retours et stock.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
           {canViewAudit && <Link href="/app/audit" className="app-module-card"><span className="app-module-icon"><ShieldCheck size={20} strokeWidth={1.9} /></span><div><strong>Journal d’audit</strong><p>Traçabilité des créations, modifications et suppressions.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
           {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin" className="app-module-card"><span className="app-module-icon"><CreditCard size={20} strokeWidth={1.9} /></span><div><strong>Administration iDIABA</strong><p>Tarifs, quotas et validation des abonnements.</p></div><span className="app-module-link">Ouvrir la console<ArrowUpRight size={15} /></span></Link>}
         </div>
