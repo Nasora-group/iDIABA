@@ -143,3 +143,39 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .inventory-post-form{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:14px}
 .inventory-post-form .catalog-help{margin:0}
 @media(max-width:760px){.inventory-count-card{padding:14px}.inventory-line-form{grid-template-columns:1fr}.inventory-line-form h4{grid-column:auto}.inventory-line-form button,.inventory-post-form button{width:100%}.inventory-post-form{display:grid}}
+
+
+/* Sprint 9 — customer relationship and returns */
+.customer-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(220px,.65fr);gap:16px;margin:18px 0}
+.customer-create-form{min-width:0}
+.customer-create-form h3{display:flex;align-items:center;gap:9px}
+.customer-step{display:grid;place-items:center;width:25px;height:25px;border-radius:8px;background:var(--brand-soft);color:var(--brand);font-size:11px;font-weight:850}
+.customer-summary{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-height:250px;padding:24px;border:1px solid #dcebe0;border-radius:14px;background:linear-gradient(145deg,#f1f8f3,#fff)}
+.customer-summary-icon{display:grid;place-items:center;width:42px;height:42px;margin-bottom:17px;border-radius:13px;background:#fff;color:var(--brand);font-size:23px;box-shadow:0 4px 12px rgba(25,48,35,.06)}
+.customer-summary strong{margin-top:6px;color:var(--brand-dark);font-size:34px;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.customer-summary>span{color:var(--muted);font-size:12px;font-weight:700}
+.customer-summary>p:last-child{margin:15px 0 0;color:var(--muted);font-size:12px;line-height:1.7}
+.customer-list{display:grid;gap:0}
+.customer-list-row{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid #edf1ed}
+.customer-list-row:last-child{border-bottom:0}
+.customer-avatar{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border-radius:12px;background:var(--brand-soft);color:var(--brand-dark);font-size:15px;font-weight:800}
+.customer-list-main{display:grid;gap:3px;flex:1;min-width:0}
+.customer-list-main strong{font-size:13px}
+.customer-list-main small{color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+.customer-sales-list{display:grid;gap:14px}
+.customer-sale-card{padding:16px;border:1px solid var(--line);border-radius:13px;background:#fbfcfb}
+.customer-sale-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.customer-sale-head h4{margin:5px 0 2px;font-size:14px}
+.customer-sale-head p{margin:0;color:var(--muted);font-size:12px}
+.customer-attach-form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px;margin:14px 0;padding:12px;border:1px dashed #d7e4da;border-radius:10px;background:#fff}
+.customer-attach-form label,.customer-return-form label{display:grid;gap:5px;color:#536158;font-size:11px;font-weight:700}
+.customer-attach-form select,.customer-return-form input,.customer-return-form select{width:100%;min-width:0;border:1px solid #dce5de;border-radius:8px;padding:9px 10px;background:#fff;color:var(--ink)}
+.customer-sale-lines{display:grid;gap:10px;margin-top:13px}
+.customer-return-line{display:grid;gap:10px;padding:13px;border:1px solid #e7ede8;border-radius:10px;background:#fff}
+.customer-return-product{display:grid;gap:3px}
+.customer-return-product strong{font-size:13px}
+.customer-return-product small{color:var(--muted);font-size:11px}
+.customer-return-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;align-items:end;gap:9px}
+.customer-return-form button{white-space:nowrap;min-height:37px}
+@media(max-width:900px){.customer-layout{grid-template-columns:1fr}.customer-summary{min-height:0}.customer-return-form{grid-template-columns:repeat(2,minmax(0,1fr))}.customer-return-form button{grid-column:1/-1}}
+@media(max-width:620px){.customer-layout{gap:12px}.customer-summary{padding:18px}.customer-sale-card{padding:12px}.customer-sale-head{display:grid}.customer-attach-form{grid-template-columns:1fr}.customer-attach-form button{width:100%}.customer-return-form{grid-template-columns:1fr}.customer-return-form button{grid-column:auto;width:100%}.customer-return-line{padding:10px}}

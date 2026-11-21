@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart } from "lucide-react";
+import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +17,7 @@ const modules = [
   { title: "Achats & fournisseurs", description: "Commandes fournisseurs et réceptions de marchandises.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
   { title: "Comptabilité", description: "Dépenses, écritures et balance comptable.", href: "/app/accounting", action: "Voir la comptabilité", icon: ChartNoAxesCombined },
   { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
+  { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", href: "/app/customers", action: "Gérer les clients", icon: Users },
 ];
 
 export default async function AppHome() {
@@ -44,6 +45,7 @@ export default async function AppHome() {
           <Link href="/app/products">Produits</Link>
           <Link href="/app/stock">Stocks</Link>
           <Link href="/app/inventory">Inventaires</Link>
+          <Link href="/app/customers">Clients</Link>
           <Link href="/app/pos">Caisse</Link>
           <Link href="/app/purchasing">Achats</Link>
           <Link href="/app/accounting">Comptabilité</Link>
