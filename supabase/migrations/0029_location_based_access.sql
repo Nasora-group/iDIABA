@@ -68,8 +68,10 @@ grant execute on function public.has_stock_location_access(uuid,uuid) to authent
 
 -- Restrict reads to assigned locations once assignments exist.
 drop policy if exists "members read stock locations" on public.stock_locations;
-create policy "members read assigned stock locations" on public.stock_locations
-  for select to authenticated using (public.has_stock_location_access(tenant_id,id));
+-- Site names are a tenant-wide directory so a source team can choose a destination.
+-- Operational records and stock quantities remain restricted by location.
+create policy "members read stock location directory" on public.stock_locations
+  for select to authenticated using (public.is_tenant_member(tenant_id));
 
 drop policy if exists "members read stock movements" on public.stock_movements;
 create policy "members read assigned stock movements" on public.stock_movements
@@ -318,3 +320,14 @@ create trigger location_access_guard before insert on public.stock_transfer_rece
 drop trigger if exists location_access_guard on public.supplier_invoice_payments;
 create trigger location_access_guard before insert on public.supplier_invoice_payments
   for each row execute function public.enforce_stock_location_access();
+
+
+-- Views bypass RLS by default. Run stock balance aggregation with the caller's
+-- permissions so stock_movements location policies also apply to the view.
+create or replace view public.stock_balances
+with (security_invoker = true)
+as
+  select tenant_id, location_id, product_id,
+         sum(quantity_delta)::numeric(14,3) as quantity_on_hand
+  from public.stock_movements
+  group by tenant_id, location_id, product_id;
