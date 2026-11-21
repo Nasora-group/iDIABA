@@ -10,11 +10,19 @@ type Plan = {
   price_monthly_fcfa: number | string | null; price_yearly_fcfa: number | string | null;
   max_users: number | null; max_locations: number | null; max_products: number | null; max_monthly_sales: number | null;
 };
+type Relation<T> = T | T[] | null;
 type RequestRow = {
   id: string; tenant_id: string; billing_interval: string; payment_method: string;
   payment_reference: string; created_at: string; status: string;
-  tenant: { name: string } | null; plan: { name: string; code: string } | null;
+  tenant: Relation<{ name: string }>; plan: Relation<{ name: string; code: string }>;
 };
+type SubscriptionRow = {
+  tenant_id: string; status: string;
+  tenant: Relation<{ name: string }>; plan: Relation<{ name: string }>;
+};
+function one<T>(value: Relation<T>): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
 function value(value: number | string | null) { return value === null ? "" : String(value); }
 function price(value: number | string | null) { return value === null ? "Non défini" : Number(value).toLocaleString("fr-FR") + " FCFA"; }
 
@@ -32,7 +40,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
   ]);
   const plans = (plansResult.data ?? []) as unknown as Plan[];
   const requests = (requestsResult.data ?? []) as unknown as RequestRow[];
-  const subscriptions = subscriptionsResult.data ?? [];
+  const subscriptions = (subscriptionsResult.data ?? []) as unknown as SubscriptionRow[];
 
   return (
     <main className="shell">
@@ -87,7 +95,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
 
         <section className="platform-admin-section">
           <h2>Abonnements des entreprises</h2>
-          <div className="platform-request-list">{subscriptions.map((sub: { tenant_id: string; status: string; plan: { name: string } | null; tenant: { name: string } | null }) => <div className="platform-request-card" key={sub.tenant_id}><strong>{sub.tenant?.name ?? sub.tenant_id}</strong><span>{sub.plan?.name ?? "Sans formule"} · {sub.status}</span></div>)}</div>
+          <div className="platform-request-list">{subscriptions.map((sub) => { const tenant = one(sub.tenant); const plan = one(sub.plan); return <div className="platform-request-card" key={sub.tenant_id}><strong>{tenant?.name ?? sub.tenant_id}</strong><span>{plan?.name ?? "Sans formule"} · {sub.status}</span></div>; })}</div>
         </section>
       </section>
     </main>
