@@ -17,6 +17,7 @@ declare
   v_membership_role public.tenant_role;
   v_count integer;
   v_max_users integer;
+  v_subscription_found boolean := false;
 begin
   if v_actor is null then raise exception 'Authentication required'; end if;
   if not public.has_tenant_role(p_tenant_id, array['owner','admin']::public.tenant_role[]) then
@@ -27,7 +28,7 @@ begin
      or (trim(p_email) !~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' and trim(p_email) !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') then
     raise exception 'Invalid email or user ID';
   end if;
-  if p_role in ('owner') then raise exception 'Owner role cannot be assigned through team management'; end if;
+  if p_role is null or p_role in ('owner') then raise exception 'Owner role cannot be assigned through team management'; end if;
   if p_role not in ('admin','manager','cashier','stock','accountant','viewer') then
     raise exception 'Unsupported role';
   end if;
@@ -47,7 +48,8 @@ begin
       from public.tenant_subscriptions ts join public.subscription_plans sp on sp.id=ts.plan_id
       where ts.tenant_id=p_tenant_id and ts.status in ('active','trialing')
       order by ts.created_at desc limit 1;
-    if v_max_users is null then
+    v_subscription_found := found;
+    if not v_subscription_found then
       select max_users into v_max_users from public.subscription_plans where code='trial' and is_active;
     end if;
     if v_max_users is not null and v_count >= v_max_users then
