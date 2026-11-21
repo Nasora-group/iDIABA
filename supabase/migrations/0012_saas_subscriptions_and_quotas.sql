@@ -182,18 +182,27 @@ begin
 end;
 $$;
 
-drop trigger if exists products_subscription_quota on public.products;
-create trigger products_subscription_quota before insert on public.products
-  for each row execute function public.enforce_tenant_subscription_quota();
-drop trigger if exists stock_locations_subscription_quota on public.stock_locations;
-create trigger stock_locations_subscription_quota before insert on public.stock_locations
-  for each row execute function public.enforce_tenant_subscription_quota();
-drop trigger if exists tenant_memberships_subscription_quota on public.tenant_memberships;
-create trigger tenant_memberships_subscription_quota before insert on public.tenant_memberships
-  for each row execute function public.enforce_tenant_subscription_quota();
-drop trigger if exists sales_subscription_quota on public.sales;
-create trigger sales_subscription_quota before insert on public.sales
-  for each row execute function public.enforce_tenant_subscription_quota();
+-- Gate creation of business records for every tenant-scoped table.
+-- Quota-specific checks are applied to products, locations, members and sales;
+-- all other tables still require a valid trial/active subscription.
+do $
+declare
+  v_table text;
+  v_tables text[] := array[
+    'accounting_accounts','cash_movements','cash_sessions','customers','expenses',
+    'inventory_count_items','inventory_counts','journal_entries','journal_lines',
+    'product_categories','products','purchase_order_items','purchase_orders',
+    'purchase_receipt_items','purchase_receipts','sale_items','sale_payments',
+    'sale_return_items','sale_returns','sales','stock_locations','stock_movements',
+    'suppliers','tenant_memberships'
+  ];
+begin
+  foreach v_table in array v_tables loop
+    execute format('drop trigger if exists subscription_guard on public.%I',v_table);
+    execute format('create trigger subscription_guard before insert on public.%I for each row execute function public.enforce_tenant_subscription_quota()',v_table);
+  end loop;
+end;
+$;
 
 create or replace function public.request_subscription_change(
   p_tenant_id uuid,
