@@ -1,6 +1,6 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -71,16 +71,24 @@ export async function startSubscriptionPayment(formData: FormData) {
 
   let response: Response;
   try {
+    const body = JSON.stringify({
+      amount: String(amount),
+      currency: "XOF",
+      client_reference: paymentId,
+      success_url: `${APP_URL}/app/subscription?payment=processing`,
+      error_url: `${APP_URL}/app/subscription?payment=failed`,
+    });
+    const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+    const requestSigningSecret = process.env.WAVE_REQUEST_SIGNING_SECRET;
+    if (requestSigningSecret) {
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const signature = createHmac("sha256", requestSigningSecret).update(timestamp + body).digest("hex");
+      headers["Wave-Signature"] = `t=${timestamp},v1=${signature}`;
+    }
     response = await fetch("https://api.wave.com/v1/checkout/sessions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: String(amount),
-        currency: "XOF",
-        client_reference: paymentId,
-        success_url: `${APP_URL}/app/subscription?payment=processing`,
-        error_url: `${APP_URL}/app/subscription?payment=failed`,
-      }),
+      headers,
+      body,
       signal: AbortSignal.timeout(10000),
       cache: "no-store",
     });
@@ -107,6 +115,3 @@ export async function startSubscriptionPayment(formData: FormData) {
   redirect(checkoutUrl.toString());
 }
 
-export async function requestSubscriptionChange(formData: FormData) {
-  return startSubscriptionPayment(formData);
-}
