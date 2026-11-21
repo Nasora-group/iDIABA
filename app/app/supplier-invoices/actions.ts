@@ -80,8 +80,9 @@ export async function recordSupplierPayment(fd: FormData) {
   const paymentAmount = amount(String(fd.get("amount") ?? ""));
   const reference = String(fd.get("reference") ?? "").trim().slice(0, 100);
   const cashSessionId = String(fd.get("cash_session_id") ?? "").trim() || null;
+  const idempotencyKey = String(fd.get("idempotency_key") ?? "").trim();
 
-  if (!uuid(invoiceId) || !uuid(accountId) || (cashSessionId !== null && !uuid(cashSessionId)) || !validDate(paidAt) || !paymentAmount) fail("payment");
+  if (!uuid(invoiceId) || !uuid(accountId) || !uuid(idempotencyKey) || (cashSessionId !== null && !uuid(cashSessionId)) || !validDate(paidAt) || !paymentAmount) fail("payment");
 
   const { error } = await supabase.rpc("record_supplier_invoice_payment", {
     p_invoice_id: invoiceId,
@@ -90,6 +91,7 @@ export async function recordSupplierPayment(fd: FormData) {
     p_paid_at: paidAt,
     p_reference: reference,
     p_cash_session_id: cashSessionId,
+    p_idempotency_key: idempotencyKey,
   });
   if (error) fail("payment");
   revalidatePath("/app/supplier-invoices");
