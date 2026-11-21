@@ -179,3 +179,18 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .customer-return-form button{white-space:nowrap;min-height:37px}
 @media(max-width:900px){.customer-layout{grid-template-columns:1fr}.customer-summary{min-height:0}.customer-return-form{grid-template-columns:repeat(2,minmax(0,1fr))}.customer-return-form button{grid-column:1/-1}}
 @media(max-width:620px){.customer-layout{gap:12px}.customer-summary{padding:18px}.customer-sale-card{padding:12px}.customer-sale-head{display:grid}.customer-attach-form{grid-template-columns:1fr}.customer-attach-form button{width:100%}.customer-return-form{grid-template-columns:1fr}.customer-return-form button{grid-column:auto;width:100%}.customer-return-line{padding:10px}}
+
+
+/* Sprint 10 — offline POS and installable PWA */
+.offline-panel{margin:18px 0;padding:18px;border:1px solid #dfe9e1;border-radius:14px;background:#fff;box-shadow:0 4px 16px rgba(25,48,35,.035)}
+.offline-panel .catalog-heading{align-items:center;flex-direction:row;gap:12px}
+.offline-panel .catalog-heading h2{margin:0 0 4px}
+.offline-panel .catalog-heading p{margin:0;color:var(--muted);font-size:12px}
+.offline-session-select{display:grid;gap:7px;max-width:520px;margin:18px 0;font-size:13px;font-weight:700}
+.offline-session-select select{width:100%;border:1px solid #dbe3dc;background:#fff;border-radius:8px;padding:10px;font:inherit}
+.offline-queue{display:grid;gap:0;list-style:none;margin:12px 0;padding:0}
+.offline-queue li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-bottom:1px solid #edf1ed;font-size:13px}
+.offline-queue li:last-child{border-bottom:0}
+.offline-queue small{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+.offline-queue strong{color:#93621a;font-size:12px}
+@media(max-width:650px){.offline-panel{padding:13px}.offline-panel .catalog-heading{align-items:flex-start;flex-direction:column}.offline-panel .catalog-heading button{width:100%}.offline-queue li{align-items:flex-start;flex-direction:column}}
