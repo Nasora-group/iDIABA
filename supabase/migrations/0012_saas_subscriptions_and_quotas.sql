@@ -190,7 +190,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 -- Gate creation of business records for every tenant-scoped table.
 -- Quota-specific checks are applied to products, locations, members and sales;
