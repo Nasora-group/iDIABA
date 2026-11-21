@@ -13,13 +13,10 @@ create table public.customers (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (tenant_id, id),
-  constraint customers_tenant_phone_key unique (tenant_id, phone)
-    deferrable initially immediate
+  unique (tenant_id, id)
 );
 
 -- Empty phone numbers are not unique customer identifiers.
-drop index if exists public.customers_tenant_phone_key;
 create unique index customers_tenant_phone_unique
   on public.customers(tenant_id, phone) where phone <> '';
 create index customers_tenant_name_idx on public.customers(tenant_id, lower(name));
