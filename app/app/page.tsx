@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart, Wallet } from "lucide-react";
+import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ const modules = [
   { title: "Caisse & ventes", description: "Encaissements, paiements multiples et clôture de caisse.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
   { title: "Achats & fournisseurs", description: "Commandes fournisseurs et réceptions de marchandises.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
   { title: "Comptabilité", description: "Dépenses, écritures et balance comptable.", href: "/app/accounting", action: "Voir la comptabilité", icon: ChartNoAxesCombined },
-  { title: "Inventaires", description: "Préparation des comptages et contrôle des écarts.", href: "/app/stock", action: "Accéder aux stocks", icon: ClipboardList },
+  { title: "Espaces entreprises", description: "Retrouvez les entreprises rattachées à votre compte et vos rôles.", href: "/app", action: "Voir mes entreprises", icon: ClipboardList },
 ];
 
 export default async function AppHome() {
