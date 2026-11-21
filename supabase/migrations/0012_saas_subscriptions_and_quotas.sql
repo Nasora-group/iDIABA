@@ -125,11 +125,12 @@ declare
   v_count bigint;
   v_limit integer;
   v_lock_key text;
+  v_skip_limit boolean := false;
 begin
   if tg_table_name='products' then
-    if new.is_active is distinct from true then return new; end if;
+    v_skip_limit := new.is_active is distinct from true;
   elsif tg_table_name='stock_locations' then
-    if new.is_active is distinct from true then return new; end if;
+    v_skip_limit := new.is_active is distinct from true;
   end if;
   v_tenant_id := new.tenant_id;
   v_lock_key := v_tenant_id::text || ':' || tg_table_name;
@@ -157,6 +158,7 @@ begin
     raise exception 'Délai de paiement dépassé. Contactez le support.';
   end if;
 
+  if not v_skip_limit then
   if tg_table_name='products' then
     v_limit := v_plan.max_products;
     if v_limit is not null then
@@ -185,9 +187,10 @@ begin
       if v_count >= v_limit then raise exception 'Limite de ventes mensuelles atteinte (%). Passez à une formule supérieure.',v_limit; end if;
     end if;
   end if;
+  end if;
   return new;
 end;
-$$;
+$;
 
 -- Gate creation of business records for every tenant-scoped table.
 -- Quota-specific checks are applied to products, locations, members and sales;
