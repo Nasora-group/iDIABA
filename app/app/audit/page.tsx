@@ -26,7 +26,7 @@ export default async function AuditPage() {
     .filter((item) => ["owner", "admin"].includes(item.role));
   const tenantIds = allowed.map((item) => item.tenant_id);
   if (!tenantIds.length) {
-    return <main className="shell"><section className="workspace"><h1>Journal d'audit</h1><p className="catalog-empty">Cette rubrique est réservée aux propriétaires et administrateurs.</p><Link href="/app">Retour au tableau de bord</Link></section></main>;
+    return <main className="shell"><section className="workspace"><h1>Journal d&apos;audit</h1><p className="catalog-empty">Cette rubrique est réservée aux propriétaires et administrateurs.</p><Link href="/app">Retour au tableau de bord</Link></section></main>;
   }
 
   const { data, error } = await supabase.from("audit_logs")
@@ -42,8 +42,8 @@ export default async function AuditPage() {
       </header>
       <section className="workspace">
         <p className="eyebrow">SÉCURITÉ & TRAÇABILITÉ</p>
-        <h1>Journal d'audit</h1>
-        <p className="lead">Historique des opérations sensibles réalisées sur vos entreprises. Les entrées sont ajoutées automatiquement et ne peuvent pas être modifiées depuis l'application.</p>
+        <h1>Journal d&apos;audit</h1>
+        <p className="lead">Historique des opérations sensibles réalisées sur vos entreprises. Les entrées sont ajoutées automatiquement et ne peuvent pas être modifiées depuis l&apos;application.</p>
         {error && <p className="form-error">Impossible de charger le journal. Réessayez.</p>}
         <div className="audit-summary"><strong>{logs.length}</strong><span>événements récents affichés · maximum 100</span></div>
         <div className="audit-list">
