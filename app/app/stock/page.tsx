@@ -3,19 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createStockLocation, recordStockMovement } from "./actions";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
-type Product = { id: string; name: string; sku: string; unit: string };
-type Location = { id: string; name: string; code: string };
+type Product = { id: string; name: string; sku: string; unit: string; is_active: boolean };
+type Location = { id: string; name: string; code: string; is_active: boolean };
 type Movement = {
   id: string; movement_type: string; quantity_delta: string | number; reference: string;
   note: string; created_at: string;
   product: { name: string; sku: string; unit: string } | null;
   location: { name: string; code: string } | null;
 };
-type Balance = {
-  quantity_on_hand: string | number;
-  product: { name: string; sku: string; unit: string } | null;
-  location: { name: string; code: string } | null;
-};
+type Balance = { product_id: string; location_id: string; quantity_on_hand: string | number };
 
 export const dynamic = "force-dynamic";
 
@@ -32,24 +28,27 @@ export default async function StockPage({ searchParams }: {
   const workspaces = (memberships ?? []) as unknown as Workspace[];
   const stockData = await Promise.all(workspaces.map(async (workspace) => {
     const [productResult, locationResult, movementResult, balanceResult] = await Promise.all([
-      supabase.from("products").select("id,name,sku,unit").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
-      supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
+      supabase.from("products").select("id,name,sku,unit,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
+      supabase.from("stock_locations").select("id,name,code,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
       supabase.from("stock_movements").select("id,movement_type,quantity_delta,reference,note,created_at,product:products(name,sku,unit),location:stock_locations(name,code)").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(500),
-      supabase.from("stock_balances").select("quantity_on_hand,product:products(name,sku,unit),location:stock_locations(name,code)").eq("tenant_id", workspace.tenant_id),
+      supabase.from("stock_balances").select("product_id,location_id,quantity_on_hand").eq("tenant_id", workspace.tenant_id),
     ]);
+    const allProducts = (productResult.data ?? []) as Product[];
+    const allLocations = (locationResult.data ?? []) as Location[];
+    const productsById = new Map(allProducts.map((product) => [product.id, product]));
+    const locationsById = new Map(allLocations.map((location) => [location.id, location]));
     const movements = (movementResult.data ?? []) as unknown as Movement[];
-    const balances = ((balanceResult.data ?? []) as unknown as Balance[])
-      .filter((balance) => balance.product && balance.location)
-      .map((balance) => ({
-        product: balance.product!,
-        location: balance.location!,
-        quantity: Number(balance.quantity_on_hand),
-      }))
+    const balances = ((balanceResult.data ?? []) as Balance[])
+      .flatMap((balance) => {
+        const product = productsById.get(balance.product_id);
+        const location = locationsById.get(balance.location_id);
+        return product && location ? [{ product, location, quantity: Number(balance.quantity_on_hand) }] : [];
+      })
       .sort((a, b) => a.product.name.localeCompare(b.product.name));
     return {
       workspace,
-      products: (productResult.data ?? []) as Product[],
-      locations: (locationResult.data ?? []) as Location[],
+      products: allProducts.filter((product) => product.is_active),
+      locations: allLocations.filter((location) => location.is_active),
       movements,
       balances,
       error: productResult.error?.message ?? locationResult.error?.message ?? movementResult.error?.message ?? balanceResult.error?.message ?? null,
@@ -73,7 +72,7 @@ export default async function StockPage({ searchParams }: {
           <section className="catalog-tenant" key={workspace.tenant_id}>
             <div className="catalog-heading">
               <div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>Rôle : {workspace.role}</p></div>
-              <span className="pill">{locations.length} dépôt(s) · {movements.length} mouvements récents</span>
+              <span className="pill">{locations.length} dépôt(s) actif(s) · {movements.length} mouvements récents</span>
             </div>
             {error && <p className="form-error">Erreur de chargement : {error}</p>}
             <div className="catalog-forms stock-forms">
@@ -106,9 +105,9 @@ export default async function StockPage({ searchParams }: {
                 <table className="catalog-table">
                   <thead><tr><th>Produit</th><th>Dépôt</th><th>Quantité disponible</th><th>Unité</th></tr></thead>
                   <tbody>{balances.map((balance) => (
-                    <tr key={balance.product.sku + balance.location.code}>
-                      <td><strong>{balance.product.name}</strong><small>{balance.product.sku}</small></td>
-                      <td>{balance.location.name}</td>
+                    <tr key={balance.product.id + balance.location.id}>
+                      <td><strong>{balance.product.name}</strong><small>{balance.product.sku}{!balance.product.is_active ? " · Archivé" : ""}</small></td>
+                      <td>{balance.location.name}{!balance.location.is_active ? " · Archivé" : ""}</td>
                       <td><strong>{balance.quantity.toLocaleString("fr-FR", { maximumFractionDigits: 3 })}</strong></td>
                       <td>{balance.product.unit}</td>
                     </tr>
