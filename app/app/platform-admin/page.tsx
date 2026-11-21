@@ -81,16 +81,20 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
 
         <section className="platform-admin-section">
           <h2>Demandes de souscription</h2>
-          {requests.length ? <div className="platform-request-list">{requests.map((request) => <article className="platform-request-card" key={request.id}>
-            <div className="platform-request-header"><div><strong>{request.tenant?.name ?? "Entreprise"}</strong><span>{request.plan?.name ?? "Formule"} · {request.billing_interval === "monthly" ? "Mensuel" : "Annuel"}</span></div><span className={"subscription-status " + (request.status === "pending" ? "pending" : "")}>{request.status === "pending" ? "En attente" : request.status === "approved" ? "Acceptée" : request.status === "rejected" ? "Refusée" : "Annulée"}</span></div>
-            <p>Moyen : {request.payment_method} · Référence : {request.payment_reference || "Non renseignée"}</p>
-            <small>Reçue le {new Date(request.created_at).toLocaleString("fr-FR")}</small>
-            {request.status === "pending" && <form action={reviewSubscriptionRequest} className="platform-review-form">
-              <input type="hidden" name="request_id" value={request.id} />
-              <label>Note interne<input name="admin_note" maxLength={500} placeholder="Contrôle du paiement, motif du refus…" /></label>
-              <div><button className="primary" name="decision" value="approve" type="submit">Valider le paiement et activer</button><button className="secondary" name="decision" value="reject" type="submit">Refuser</button></div>
-            </form>}
-          </article>)}</div> : <p className="catalog-empty">Aucune demande pour le moment.</p>}
+          {requests.length ? <div className="platform-request-list">{requests.map((request) => {
+            const tenant = one(request.tenant);
+            const plan = one(request.plan);
+            return <article className="platform-request-card" key={request.id}>
+              <div className="platform-request-header"><div><strong>{tenant?.name ?? "Entreprise"}</strong><span>{plan?.name ?? "Formule"} · {request.billing_interval === "monthly" ? "Mensuel" : "Annuel"}</span></div><span className={"subscription-status " + (request.status === "pending" ? "pending" : "")}>{request.status === "pending" ? "En attente" : request.status === "approved" ? "Acceptée" : request.status === "rejected" ? "Refusée" : "Annulée"}</span></div>
+              <p>Moyen : {request.payment_method} · Référence : {request.payment_reference || "Non renseignée"}</p>
+              <small>Reçue le {new Date(request.created_at).toLocaleString("fr-FR")}</small>
+              {request.status === "pending" && <form action={reviewSubscriptionRequest} className="platform-review-form">
+                <input type="hidden" name="request_id" value={request.id} />
+                <label>Note interne<input name="admin_note" maxLength={500} placeholder="Contrôle du paiement, motif du refus…" /></label>
+                <div><button className="primary" name="decision" value="approve" type="submit">Valider le paiement et activer</button><button className="secondary" name="decision" value="reject" type="submit">Refuser</button></div>
+              </form>}
+            </article>;
+          })}</div> : <p className="catalog-empty">Aucune demande pour le moment.</p>}
         </section>
 
         <section className="platform-admin-section">
