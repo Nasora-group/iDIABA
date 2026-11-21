@@ -1,0 +1,4 @@
+project_id = "iDIABA"
+
+[functions.invite-tenant-member]
+verify_jwt = true
