@@ -82,7 +82,7 @@ begin
   end if;
   v_amount := v_price::bigint;
 
-  select id into v_payment_id from public.subscription_payments where idempotency_key=p_idempotency_key;
+  select id into v_payment_id from public.subscription_payments where idempotency_key=p_idempotency_key and tenant_id=p_tenant_id;
   if v_payment_id is not null then
     return query select sp.id,sp.amount_fcfa from public.subscription_payments sp where sp.id=v_payment_id;
     return;
