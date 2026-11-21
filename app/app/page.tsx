@@ -19,7 +19,7 @@ const modules = [
   { title: "Comptabilité", description: "Dépenses, écritures et balance comptable.", href: "/app/accounting", action: "Voir la comptabilité", icon: ChartNoAxesCombined },
   { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
   { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", href: "/app/customers", action: "Gérer les clients", icon: Users },
-  { title: "Abonnements & limites", description: "Formules, volumes et demandes de changement par entreprise.", href: "/app/subscription", action: "Gérer l’abonnement", icon: CreditCard },
+  { title: "Utilisateurs & équipe", description: "Ajoutez des employés et gérez leurs rôles et accès.", href: "/app/team", action: "Gérer l’équipe", icon: Users },\n  { title: "Abonnements & limites", description: "Formules, volumes et demandes de changement par entreprise.", href: "/app/subscription", action: "Gérer l’abonnement", icon: CreditCard },
 ];
 
 export default async function AppHome() {
@@ -53,7 +53,7 @@ export default async function AppHome() {
           <Link href="/app/purchasing">Achats</Link>
           <Link href="/app/supplier-invoices">Factures fournisseurs</Link>
           <Link href="/app/accounting">Comptabilité</Link>
-          <Link href="/app/subscription">Abonnement</Link>
+          <Link href="/app/subscription">Abonnement</Link>\n          <Link href="/app/team">Équipe</Link>
           {canViewAudit && <Link href="/app/audit">Journal d’audit</Link>}
           {canViewAudit && <Link href="/app/reports">Rapports</Link>}
           {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin">Admin SaaS</Link>}
