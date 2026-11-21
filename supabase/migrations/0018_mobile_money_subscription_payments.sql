@@ -237,10 +237,12 @@ begin
     return 'paid';
   end if;
 
+  -- Wave may report several failed attempts before a later successful payment
+  -- on the same checkout session. Keep the intent payable until success or expiry.
   update public.subscription_payments
-    set status='failed',failure_reason='Paiement refusé par le prestataire',updated_at=now()
+    set status='processing',failure_reason='Dernière tentative refusée par le prestataire',updated_at=now()
     where id=v_payment.id;
-  return 'failed';
+  return 'payment_failed_retryable';
 end;
 $$;
 
