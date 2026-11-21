@@ -54,7 +54,7 @@ export default async function PurchasingPage({ searchParams }: {
         <p className="eyebrow">ACHATS & APPROVISIONNEMENT</p>
         <h1>Fournisseurs et achats</h1>
         <p className="lead">Centralisez vos fournisseurs, préparez des commandes multi-articles et réceptionnez les marchandises en une ou plusieurs fois.</p>
-        {params.created && <p className="form-success">{params.created === "supplier" ? "Fournisseur enregistré." : "Commande d&apos;achat créée."}</p>}
+        {params.created && <p className="form-success">{params.created === "supplier" ? "Fournisseur enregistré." : "Commande d'achat créée."}</p>}
         {params.received && <p className="form-success">Réception enregistrée. Les quantités reçues ont été ajoutées au stock et la commande mise à jour.</p>}
         {params.error && <p className="form-error">{params.error === "lines" ? "Vérifiez les produits, quantités et coûts de chaque ligne. Un produit ne peut apparaître qu'une fois." : params.error === "receipt" ? "Aucune quantité valide à réceptionner, ou quantité supérieure au reliquat." : "Opération impossible. Vérifiez les informations, les droits et les références sélectionnées."}</p>}
         {!data.length && <p>Aucun espace entreprise associé à ce compte.</p>}
