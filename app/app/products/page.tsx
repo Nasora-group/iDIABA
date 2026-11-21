@@ -56,7 +56,7 @@ export default async function ProductsPage({
     <main className="shell">
       <header className="topbar">
         <div className="brand"><span className="mark">i</span><span>iDIABA</span></div>
-        <nav className="product-nav"><Link href="/app">Mon espace</Link><span>Catalogue produits</span></nav>
+        <nav className="product-nav"><Link href="/app">Mon espace</Link><span>Catalogue produits</span><Link href="/app/stock">Stocks</Link><Link href="/app/inventory">Inventaires</Link><Link href="/app/pos">Caisse</Link><Link href="/app/purchasing">Achats</Link><Link href="/app/accounting">Comptabilité</Link></nav>
       </header>
       <section className="workspace catalog-workspace">
         <p className="eyebrow">SPRINT 2 · CATALOGUE</p>
