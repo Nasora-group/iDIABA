@@ -24,7 +24,8 @@ function formatPrice(value: number | string | null) {
   if (value === null) return "Tarif à définir";
   return Number(value) === 0 ? "Gratuit" : Number(value).toLocaleString("fr-FR") + " FCFA";
 }
-function statusLabel(status: string) {
+function statusLabel(status: string, trialEndsAt: string | null) {
+  if (status === "trialing" && trialEndsAt && new Date(trialEndsAt).getTime() <= Date.now()) return "Essai expiré";
   return ({ trialing: "Essai en cours", active: "Actif", past_due: "Paiement en attente", suspended: "Suspendu", canceled: "Résilié", expired: "Expiré" } as Record<string, string>)[status] ?? status;
 }
 
@@ -85,7 +86,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
           <section className="subscription-card" key={panel.tenantId}>
             <div className="subscription-header">
               <div><p className="eyebrow">ENTREPRISE</p><h2>{panel.tenantName}</h2></div>
-              <span className="subscription-status">{panel.subscription ? statusLabel(panel.subscription.status) : "Non configuré"}</span>
+              <span className="subscription-status">{panel.subscription ? statusLabel(panel.subscription.status, panel.subscription.trial_ends_at) : "Non configuré"}</span>
             </div>
             {panel.plan ? <>
               <div className="subscription-current">
@@ -104,12 +105,12 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
               <form action={requestSubscriptionChange}>
                 <input type="hidden" name="tenant_id" value={panel.tenantId} />
                 <div className="subscription-form-grid">
-                  <label>Formule souhaitée<select name="plan_code" required defaultValue="starter">{availablePlans.filter((plan) => plan.code !== "trial").map((plan) => <option value={plan.code} key={plan.id}>{plan.name} · {formatPrice(plan.price_monthly_fcfa)} / mois</option>)}</select></label>
+                  <label>Formule souhaitée<select name="plan_code" required defaultValue="starter">{availablePlans.filter((plan) => plan.code !== "trial" && plan.code !== panel.plan?.code).map((plan) => <option value={plan.code} key={plan.id}>{plan.name} · {formatPrice(plan.price_monthly_fcfa)} / mois</option>)}</select></label>
                   <label>Facturation<select name="billing_interval" defaultValue="monthly"><option value="monthly">Mensuelle</option><option value="yearly">Annuelle</option></select></label>
                   <label>Moyen de paiement<select name="payment_method" defaultValue="wave"><option value="wave">Wave</option><option value="orange_money">Orange Money</option><option value="bank_transfer">Virement bancaire</option><option value="cash">Espèces</option><option value="other">Autre</option></select></label>
                   <label>Référence de paiement (facultatif)<input name="payment_reference" maxLength={160} placeholder="Référence de transaction" /></label>
                 </div>
-                <p className="catalog-help">Les tarifs des formules payantes restent à configurer. Cette demande ne déclenche aucun prélèvement ni activation automatique.</p>
+                <p className="catalog-help">Les tarifs des formules payantes restent à configurer. La demande sera activée uniquement après validation administrative. Aucun prélèvement automatique n’est effectué.</p>
                 <button className="primary" type="submit">Envoyer la demande</button>
               </form>
             </details>
