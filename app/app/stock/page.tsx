@@ -4,7 +4,7 @@ import { createStockLocation, recordStockMovement } from "./actions";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
 type Product = { id: string; name: string; sku: string; unit: string; is_active: boolean };
-type Location = { id: string; name: string; code: string; is_active: boolean };
+type Location = { id: string; name: string; code: string; location_type: "store" | "warehouse"; address: string; phone: string; is_active: boolean };
 type Movement = {
   id: string; movement_type: string; quantity_delta: string | number; reference: string;
   note: string; created_at: string;
@@ -29,7 +29,7 @@ export default async function StockPage({ searchParams }: {
   const stockData = await Promise.all(workspaces.map(async (workspace) => {
     const [productResult, locationResult, movementResult, balanceResult] = await Promise.all([
       supabase.from("products").select("id,name,sku,unit,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
-      supabase.from("stock_locations").select("id,name,code,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
+      supabase.from("stock_locations").select("id,name,code,location_type,address,phone,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
       supabase.from("stock_movements").select("id,movement_type,quantity_delta,reference,note,created_at,product:products(name,sku,unit),location:stock_locations(name,code)").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(500),
       supabase.from("stock_balances").select("product_id,location_id,quantity_on_hand").eq("tenant_id", workspace.tenant_id),
     ]);
@@ -77,12 +77,15 @@ export default async function StockPage({ searchParams }: {
             {error && <p className="form-error">Erreur de chargement : {error}</p>}
             <div className="catalog-forms stock-forms">
               <form action={createStockLocation} className="catalog-form">
-                <h3>Créer un dépôt</h3>
+                <h3>Créer un point de vente ou un dépôt</h3>
                 <input type="hidden" name="tenant_id" value={workspace.tenant_id} />
-                <label>Nom du dépôt<input name="name" required maxLength={100} placeholder="Ex. Magasin principal" /></label>
+                <label>Nom<input name="name" required maxLength={100} placeholder="Ex. Boutique Dakar Centre" /></label>
+                <label>Type<select name="location_type" defaultValue="store"><option value="store">Boutique / point de vente</option><option value="warehouse">Dépôt / entrepôt</option></select></label>
                 <label>Code<input name="code" required maxLength={32} placeholder="DEPOT-01" /></label>
                 <label>Description<input name="description" maxLength={500} placeholder="Optionnel" /></label>
-                <button className="primary" type="submit">Créer le dépôt</button>
+                <label>Adresse<input name="address" maxLength={250} placeholder="Adresse de l’établissement" /></label>
+                <label>Téléphone<input name="phone" maxLength={40} placeholder="Téléphone de l’établissement" /></label>
+                <button className="primary" type="submit">Créer l’établissement</button>
               </form>
               <form action={recordStockMovement} className="catalog-form">
                 <h3>Enregistrer un mouvement</h3>
@@ -107,7 +110,7 @@ export default async function StockPage({ searchParams }: {
                   <tbody>{balances.map((balance) => (
                     <tr key={balance.product.id + balance.location.id}>
                       <td><strong>{balance.product.name}</strong><small>{balance.product.sku}{!balance.product.is_active ? " · Archivé" : ""}</small></td>
-                      <td>{balance.location.name}{!balance.location.is_active ? " · Archivé" : ""}</td>
+                      <td>{balance.location.name} · {balance.location.location_type === "store" ? "Boutique" : "Dépôt"}{!balance.location.is_active ? " · Archivé" : ""}</td>
                       <td><strong>{balance.quantity.toLocaleString("fr-FR", { maximumFractionDigits: 3 })}</strong></td>
                       <td>{balance.product.unit}</td>
                     </tr>
