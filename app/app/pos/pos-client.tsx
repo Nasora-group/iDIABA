@@ -7,7 +7,7 @@ import { checkoutSale } from "./actions";
 
 type Product = { id: string; name: string; sku: string; unit: string; sale_price: string | number; tax_rate: string | number };
 type CartLine = { product_id: string; quantity: string };
-type PaymentLine = { method: string; amount: string };
+type PaymentLine = { method: string; amount: string; reference?: string };
 type Props = { userId: string; tenantId: string; locationId: string; sessionId: string; clientSaleId: string; products: Product[] };
 
 function toCents(value: string | number) {
@@ -52,8 +52,9 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
   }, 0);
   const paymentsValid = effectivePayments.length > 0 && effectivePayments.every((payment) => {
     const amount = Number(payment.amount.replace(",", "."));
-    return ["cash", "mobile_money", "card", "bank_transfer"].includes(payment.method)
-      && Number.isFinite(amount) && amount > 0;
+    return ["cash", "mobile_money", "card", "bank_transfer", "wave", "orange_money"].includes(payment.method)
+      && Number.isFinite(amount) && amount > 0
+      && (!["wave", "orange_money"].includes(payment.method) || (payment.reference ?? "").trim().length >= 4);
   }) && paidTotal === totals.total;
 
   useEffect(() => {
@@ -155,12 +156,15 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
           <div className="pos-payment-row" key={index}>
             <label>Moyen de paiement
               <select value={payment.method} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, method: event.target.value } : item))}>
-                <option value="cash">Espèces</option><option value="mobile_money">Mobile Money</option><option value="card">Carte bancaire</option><option value="bank_transfer">Virement</option>
+                <option value="cash">Espèces</option><option value="wave">Wave</option><option value="orange_money">Orange Money</option><option value="mobile_money">Autre Mobile Money</option><option value="card">Carte bancaire</option><option value="bank_transfer">Virement</option>
               </select>
             </label>
             <label>Montant (FCFA)
               <input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, amount: event.target.value } : item))} required />
             </label>
+            {["wave", "orange_money"].includes(payment.method) && <label>Référence de transaction
+              <input value={payment.reference ?? ""} minLength={4} maxLength={160} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Référence affichée dans l'application" required />
+            </label>}
             {payments.length > 1 && <button type="button" className="archive-button" onClick={() => setPayments((current) => current.filter((_, i) => i !== index))}>Retirer</button>}
           </div>
         ))}

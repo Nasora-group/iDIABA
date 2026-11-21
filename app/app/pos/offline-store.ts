@@ -26,7 +26,7 @@ export type OfflineSale = {
   locationId: string;
   sessionId: string;
   items: { product_id: string; quantity: string }[];
-  payments: { method: string; amount: string }[];
+  payments: { method: string; amount: string; reference?: string }[];
   createdAt: number;
 };
 

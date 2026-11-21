@@ -26,7 +26,7 @@ export default function OfflinePOSClient() {
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [cart, setCart] = useState<{ product_id: string; quantity: string }[]>([]);
-  const [payments, setPayments] = useState<{ method: string; amount: string }[]>([{ method: "cash", amount: "" }]);
+  const [payments, setPayments] = useState<{ method: string; amount: string; reference?: string }[]>([{ method: "cash", amount: "" }]);
   const [userId, setUserId] = useState("");
   const [online, setOnline] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -51,7 +51,7 @@ export default function OfflinePOSClient() {
     : payments;
   const paidTotal = effectivePayments.reduce((sum, item) => sum + cents(item.amount), 0);
   const validPayments = effectivePayments.length > 0
-    && effectivePayments.every((item) => ["cash", "mobile_money", "card", "bank_transfer"].includes(item.method) && cents(item.amount) > 0)
+    && effectivePayments.every((item) => ["cash", "mobile_money", "card", "bank_transfer", "wave", "orange_money"].includes(item.method) && cents(item.amount) > 0 && (!["wave", "orange_money"].includes(item.method) || (item.reference ?? "").trim().length >= 4))
     && paidTotal === totals.total;
 
   const refreshQueue = useCallback(async (id: string) => {
@@ -209,7 +209,7 @@ export default function OfflinePOSClient() {
           <div className="pos-totals"><div><span>Sous-total HT</span><strong>{money(totals.subtotal)} F</strong></div><div><span>Taxes</span><strong>{money(totals.tax)} F</strong></div><div className="pos-grand-total"><span>Total à payer</span><strong>{money(totals.total)} F</strong></div></div>
           <div className="pos-payment-section">
             <div className="pos-payment-heading"><strong>Règlement</strong><button type="button" className="secondary" onClick={() => setPayments((current) => current.length < 4 ? [...(current.length === 1 ? [{ ...current[0], amount: (totals.total / 100).toFixed(2) }] : current), { method: "mobile_money", amount: "" }] : current)} disabled={payments.length >= 4}>Ajouter un moyen de paiement</button></div>
-            {effectivePayments.map((payment, index) => <div className="pos-payment-row" key={index}><label>Moyen de paiement<select value={payment.method} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, method: event.target.value } : item))}><option value="cash">Espèces</option><option value="mobile_money">Mobile Money</option><option value="card">Carte bancaire</option><option value="bank_transfer">Virement</option></select></label><label>Montant (FCFA)<input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, amount: event.target.value } : item))} required /></label>{payments.length > 1 && <button type="button" className="archive-button" onClick={() => setPayments((current) => current.filter((_, i) => i !== index))}>Retirer</button>}</div>)}
+            {effectivePayments.map((payment, index) => <div className="pos-payment-row" key={index}><label>Moyen de paiement<select value={payment.method} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, method: event.target.value } : item))}><option value="cash">Espèces</option><option value="wave">Wave</option><option value="orange_money">Orange Money</option><option value="mobile_money">Autre Mobile Money</option><option value="card">Carte bancaire</option><option value="bank_transfer">Virement</option></select></label><label>Montant (FCFA)<input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, amount: event.target.value } : item))} required /></label>{["wave", "orange_money"].includes(payment.method) && <label>Référence de transaction<input value={payment.reference ?? ""} minLength={4} maxLength={160} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Référence affichée dans l’application" required /></label>}{payments.length > 1 && <button type="button" className="archive-button" onClick={() => setPayments((current) => current.filter((_, i) => i !== index))}>Retirer</button>}</div>)}
             <div className="pos-payment-total"><span>Montant réglé</span><strong>{money(paidTotal)} F / {money(totals.total)} F</strong></div>
           </div>
           <button className="primary" type="button" onClick={queueSale} disabled={!cart.length || !validPayments || syncing}>Enregistrer la vente sur cet appareil</button>
