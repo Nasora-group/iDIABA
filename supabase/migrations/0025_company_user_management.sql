@@ -33,7 +33,7 @@ begin
   end if;
 
   select u.id into v_target from auth.users u
-    where lower(u.email)=lower(trim(p_email)) limit 1;
+    where lower(u.email)=lower(trim(p_email)) or u.id::text=trim(p_email) limit 1;
   if v_target is null then
     raise exception 'No account found for this email. The user must create an iDIABA account first.';
   end if;
