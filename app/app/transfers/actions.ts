@@ -46,7 +46,7 @@ export async function createStockTransfer(formData: FormData) {
   if (error) redirect("/app/transfers?error=create");
   revalidatePath("/app/transfers");
   revalidatePath("/app/stock");
-  redirect("/app/transfers?created=1");
+  redirect("/app/transfers?status=created");
 }
 
 export async function shipStockTransfer(formData: FormData) {
@@ -59,7 +59,7 @@ export async function shipStockTransfer(formData: FormData) {
   if (error) redirect("/app/transfers?error=ship");
   revalidatePath("/app/transfers");
   revalidatePath("/app/stock");
-  redirect("/app/transfers?shipped=1");
+  redirect("/app/transfers?status=shipped");
 }
 
 export async function receiveStockTransfer(formData: FormData) {
@@ -91,5 +91,5 @@ export async function receiveStockTransfer(formData: FormData) {
   if (error) redirect("/app/transfers?error=receive");
   revalidatePath("/app/transfers");
   revalidatePath("/app/stock");
-  redirect("/app/transfers?received=1");
+  redirect("/app/transfers?status=received");
 }
