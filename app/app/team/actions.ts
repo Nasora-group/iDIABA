@@ -31,8 +31,22 @@ export async function inviteMember(formData:FormData){
  const role=String(formData.get("role")??"cashier");
  if(!/^[0-9a-f-]{36}$/i.test(tenantId)||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||!allowed.includes(role)) go("validation");
  const {data,error}=await supabase.functions.invoke("invite-tenant-member",{body:{tenant_id:tenantId,email,full_name:fullName,role}});
- if(error) go("inviteerror");
- if(data?.error) go(data.error);
+ if(error){
+  let detail="";
+  const response=(error as {context?:Response}).context;
+  if(response&&typeof response.clone==="function"){
+   const payload=await response.clone().json().catch(()=>null) as {error?:string}|null;
+   detail=payload?.error??"";
+  }
+  if(/quota|limite d’utilisateurs/i.test(detail)) go("quota");
+  if(/abonnement|formule|essai|paiement/i.test(detail)) go("subscription");
+  go("inviteerror");
+ }
+ if(data?.error){
+  if(/quota|limite d’utilisateurs/i.test(String(data.error))) go("quota");
+  if(/abonnement|formule|essai|paiement/i.test(String(data.error))) go("subscription");
+  go("inviteerror");
+ }
  revalidatePath("/app/team");revalidatePath("/app");
  go("invited");
 }
