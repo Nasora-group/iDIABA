@@ -5,7 +5,8 @@ import { requestSubscriptionChange } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type Relation<T> = T | T[] | null;\ntype Membership = { tenant_id: string; role: string; tenant: Relation<{ id: string; name: string }> };
+type Relation<T> = T | T[] | null;
+type Membership = { tenant_id: string; role: string; tenant: Relation<{ id: string; name: string }> };
 type Plan = {
   id: string; code: string; name: string; description: string;
   price_monthly_fcfa: number | string | null; price_yearly_fcfa: number | string | null;
@@ -15,7 +16,8 @@ type Subscription = {
   status: string; billing_interval: string; trial_ends_at: string | null; current_period_ends_at: string | null;
   plan: Plan | Plan[] | null;
 };
-type RequestRow = { id: string; status: string; payment_method: string; payment_reference: string; created_at: string; plan: Relation<{ name: string }> };\nfunction one<T>(value: Relation<T>): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
+type RequestRow = { id: string; status: string; payment_method: string; payment_reference: string; created_at: string; plan: Relation<{ name: string }> };
+function one<T>(value: Relation<T>): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
 
 function formatLimit(value: number | null, unit: string) {
   return value === null ? "Illimité" : value.toLocaleString("fr-FR") + " " + unit;
