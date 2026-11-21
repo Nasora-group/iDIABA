@@ -32,6 +32,7 @@ Le parcours Wave est intégré au module Abonnements :
 Variables secrètes à configurer dans Render (service `idiaba`) :
 - `WAVE_API_KEY` : clé API Wave Business Checkout.
 - `WAVE_WEBHOOK_SECRET` : secret de signature fourni lors de l'enregistrement du webhook.
+- `WAVE_REQUEST_SIGNING_SECRET` : facultatif, à définir uniquement si la clé API Wave a été créée avec la signature des requêtes activée.
 - `SUPABASE_SERVICE_ROLE_KEY` : clé serveur Supabase, jamais exposée au navigateur.
 - `NEXT_PUBLIC_APP_URL` : URL publique, par exemple `https://idiaba.onrender.com`.
 
