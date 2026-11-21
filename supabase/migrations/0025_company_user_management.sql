@@ -24,8 +24,8 @@ begin
   end if;
   if p_action not in ('add','update','remove') then raise exception 'Invalid action'; end if;
   if p_email is null or length(trim(p_email)) not between 3 and 254
-     or trim(p_email) !~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
-    raise exception 'Invalid email';
+     or (trim(p_email) !~* '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$' and trim(p_email) !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') then
+    raise exception 'Invalid email or user ID';
   end if;
   if p_role in ('owner') then raise exception 'Owner role cannot be assigned through team management'; end if;
   if p_role not in ('admin','manager','cashier','stock','accountant','viewer') then
