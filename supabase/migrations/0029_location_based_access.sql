@@ -49,6 +49,7 @@ set search_path = pg_catalog, public
 as $$
   select case
     when auth.uid() is null then false
+    when target_tenant is null or target_location is null then false
     when public.has_tenant_role(target_tenant,array['owner','admin','manager']::public.tenant_role[]) then true
     when not public.is_tenant_member(target_tenant) then false
     -- Backward compatibility: a location remains tenant-wide until an admin assigns staff.
