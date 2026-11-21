@@ -46,20 +46,39 @@ export async function createPurchaseOrder(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
   const tenantId = String(formData.get("tenant_id") ?? "");
   const supplierId = String(formData.get("supplier_id") ?? "");
   const locationId = String(formData.get("location_id") ?? "");
-  const productId = String(formData.get("product_id") ?? "");
-  const quantity = decimal(formData.get("quantity"), 1000000000);
-  const unitCost = decimal(formData.get("unit_cost"), 999999999999, true);
   const notes = String(formData.get("notes") ?? "").trim().slice(0, 1000);
-  if (![tenantId, supplierId, locationId, productId].every(validUuid) || quantity === null || unitCost === null) fail("validation");
+  if (![tenantId, supplierId, locationId].every(validUuid)) fail("validation");
+
+  const productIds = formData.getAll("product_id");
+  const quantities = formData.getAll("quantity");
+  const unitCosts = formData.getAll("unit_cost");
+  if (productIds.length < 1 || productIds.length > 20
+      || productIds.length !== quantities.length || productIds.length !== unitCosts.length) fail("validation");
+
+  const items: { product_id: string; quantity: string; unit_cost: string }[] = [];
+  const seenProducts = new Set<string>();
+  for (let i = 0; i < productIds.length; i += 1) {
+    const productId = String(productIds[i] ?? "").trim();
+    const quantityRaw = String(quantities[i] ?? "").trim();
+    const costRaw = String(unitCosts[i] ?? "").trim();
+    if (!productId && !quantityRaw && !costRaw) continue;
+    const quantity = decimal(quantities[i], 1000000000);
+    const unitCost = decimal(unitCosts[i], 999999999999, true);
+    if (!validUuid(productId) || quantity === null || unitCost === null || seenProducts.has(productId)) fail("lines");
+    seenProducts.add(productId);
+    items.push({ product_id: productId, quantity, unit_cost: unitCost });
+  }
+  if (!items.length) fail("lines");
 
   const { error } = await supabase.rpc("create_purchase_order", {
     p_tenant_id: tenantId,
     p_supplier_id: supplierId,
     p_location_id: locationId,
-    p_items: [{ product_id: productId, quantity, unit_cost: unitCost }],
+    p_items: items,
     p_notes: notes,
   });
   if (error) fail("order");
@@ -74,26 +93,30 @@ export async function receivePurchaseOrder(formData: FormData) {
   const orderId = String(formData.get("purchase_order_id") ?? "");
   if (!validUuid(orderId)) fail("validation");
 
-  const { data: lines, error: linesError } = await supabase
-    .from("purchase_order_items")
-    .select("id,quantity,received_quantity")
-    .eq("purchase_order_id", orderId);
-  if (linesError || !lines?.length) fail("receipt");
-  const items = lines
-    .map((line) => ({
-      order_item_id: line.id,
-      quantity: (Number(line.quantity) - Number(line.received_quantity)).toFixed(3),
-    }))
-    .filter((line) => Number(line.quantity) > 0);
+  const lineIds = formData.getAll("order_item_id");
+  const quantities = formData.getAll("quantity");
+  if (!lineIds.length || lineIds.length > 100 || lineIds.length !== quantities.length) fail("receipt");
+
+  const seenLines = new Set<string>();
+  const items: { order_item_id: string; quantity: string }[] = [];
+  for (let i = 0; i < lineIds.length; i += 1) {
+    const lineId = String(lineIds[i] ?? "");
+    const rawQuantity = String(quantities[i] ?? "").trim();
+    const quantity = decimal(rawQuantity === "" ? "0" : rawQuantity, 1000000000, true);
+    if (!validUuid(lineId) || quantity === null || seenLines.has(lineId)) fail("receipt");
+    seenLines.add(lineId);
+    if (Number(quantity) > 0) items.push({ order_item_id: lineId, quantity });
+  }
   if (!items.length) fail("receipt");
 
   const { error } = await supabase.rpc("receive_purchase_order", {
     p_purchase_order_id: orderId,
     p_items: items,
-    p_notes: "Réception du reliquat de commande",
+    p_notes: "Réception de marchandises",
   });
   if (error) fail("receipt");
   revalidatePath("/app/purchasing");
   revalidatePath("/app/stock");
+  revalidatePath("/app");
   redirect("/app/purchasing?received=1");
 }
