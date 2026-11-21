@@ -20,3 +20,11 @@
 .pos-cash-history li:last-child{border-bottom:0}
 .pos-cash-history small{display:block;color:#758078;margin-top:3px}
 @media(max-width:700px){.pos-payment-row{grid-template-columns:1fr}.pos-payment-row .archive-button{justify-self:start}.pos-cash-tools{grid-template-columns:1fr}.pos-payment-heading button{width:100%}}
+
+.accounting-forms{grid-template-columns:repeat(2,minmax(0,1fr))}
+.accounting-forms select,.accounting-forms input{width:100%;min-width:0;border:1px solid #dbe3dc;background:white;border-radius:8px;padding:10px;font:inherit;font-size:13px}
+.accounting-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.accounting-kpis article{background:#fff;border:1px solid #e5ece6;border-radius:10px;padding:16px;display:grid;gap:8px}
+.accounting-kpis span{font-size:13px;color:#68756b}
+.accounting-kpis strong{font-size:20px;font-variant-numeric:tabular-nums}
+@media(max-width:760px){.accounting-forms{grid-template-columns:1fr}.accounting-kpis{grid-template-columns:1fr}.accounting-kpis strong{font-size:18px}}
