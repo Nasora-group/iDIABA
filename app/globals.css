@@ -321,3 +321,16 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .invite-actions .secondary{display:inline-flex;align-items:center}
 @media(max-width:980px){.company-bar-inner{padding:8px 22px}.invitation-item{grid-template-columns:1fr}}
 @media(max-width:680px){.company-bar-inner{padding:8px 15px}.company-bar-label span{display:none}.company-bar-label select{max-width:180px}.company-inline-form .primary{width:100%}}
+
+/* Consolidated multi-company overview */
+.overview-filter{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:22px 0 6px}
+.overview-filter label{display:grid;gap:6px;font-size:13px;font-weight:600}
+.overview-filter input{border:1px solid #dbe3dc;background:#fff;border-radius:8px;padding:10px;font:inherit;font-size:13px}
+.overview-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+.overview-bars{display:grid;gap:12px;margin-top:14px}
+.overview-bar-row{display:grid;grid-template-columns:minmax(120px,200px) minmax(0,1fr) minmax(150px,auto);align-items:center;gap:14px;font-size:13px}
+.overview-bar-name{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.overview-bar-track{height:12px;border-radius:999px;background:#edf1ed;overflow:hidden}
+.overview-bar-fill{height:100%;border-radius:999px;background:var(--brand)}
+.overview-bar-value{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+@media(max-width:760px){.overview-kpis{grid-template-columns:1fr}.overview-bar-row{grid-template-columns:1fr;gap:6px}.overview-bar-value{text-align:left}}

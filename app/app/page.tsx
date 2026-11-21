@@ -4,6 +4,7 @@ import { ArrowUpRight, Boxes, Building2, ChartNoAxesCombined, ClipboardList, Cre
 import { createClient } from "@/lib/supabase/server";
 import { getActiveTenantId } from "@/lib/tenant";
 import { ROLE_LABELS } from "@/lib/tenant-labels";
+import { canAccess, type ModuleKey } from "@/lib/permissions";
 import { switchCompany } from "./company/actions";
 
 export const dynamic = "force-dynamic";
@@ -16,15 +17,16 @@ type Membership = {
 };
 
 const modules = [
-  { title: "Catalogue produits", description: "Références, catégories, prix et codes-barres.", href: "/app/products", action: "Gérer les produits", icon: Package },
-  { title: "Stocks & dépôts", description: "Stocks disponibles, dépôts et journal des mouvements.", href: "/app/stock", action: "Consulter les stocks", icon: Boxes },
-  { title: "Caisse & ventes", description: "Encaissements, paiements multiples et clôture de caisse.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
-  { title: "Achats & fournisseurs", description: "Commandes fournisseurs et réceptions de marchandises.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
-  { title: "Comptabilité", description: "Dépenses, écritures et balance comptable.", href: "/app/accounting", action: "Voir la comptabilité", icon: ChartNoAxesCombined },
-  { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
-  { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", href: "/app/customers", action: "Gérer les clients", icon: Users },
-  { title: "Entreprise & équipe", description: "Membres, rôles, invitations et informations de l’entreprise active.", href: "/app/company", action: "Gérer l’équipe", icon: Building2 },
-  { title: "Abonnements & limites", description: "Formules, volumes et demandes de changement par entreprise.", href: "/app/subscription", action: "Gérer l’abonnement", icon: CreditCard },
+  { title: "Vue consolidée", description: "Chiffre d’affaires, dépenses et marge de toutes vos entreprises côte à côte.", key: "overview" as ModuleKey, href: "/app/overview", action: "Comparer mes entreprises", icon: ChartNoAxesCombined },
+  { title: "Catalogue produits", description: "Références, catégories, prix et codes-barres.", key: "products" as ModuleKey, href: "/app/products", action: "Gérer les produits", icon: Package },
+  { title: "Stocks & dépôts", description: "Stocks disponibles, dépôts et journal des mouvements.", key: "stock" as ModuleKey, href: "/app/stock", action: "Consulter les stocks", icon: Boxes },
+  { title: "Caisse & ventes", description: "Encaissements, paiements multiples et clôture de caisse.", key: "pos" as ModuleKey, href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
+  { title: "Achats & fournisseurs", description: "Commandes fournisseurs et réceptions de marchandises.", key: "purchasing" as ModuleKey, href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
+  { title: "Comptabilité", description: "Dépenses, écritures et balance comptable.", key: "accounting" as ModuleKey, href: "/app/accounting", action: "Voir la comptabilité", icon: ChartNoAxesCombined },
+  { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", key: "inventory" as ModuleKey, href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
+  { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", key: "customers" as ModuleKey, href: "/app/customers", action: "Gérer les clients", icon: Users },
+  { title: "Entreprise & équipe", description: "Membres, rôles, invitations et informations de l’entreprise active.", key: "company" as ModuleKey, href: "/app/company", action: "Gérer l’équipe", icon: Building2 },
+  { title: "Abonnements & limites", description: "Formules, volumes et demandes de changement par entreprise.", key: "subscription" as ModuleKey, href: "/app/subscription", action: "Gérer l’abonnement", icon: CreditCard },
 ];
 
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ company?: string; joined?: string; left?: string }> }) {
@@ -55,15 +57,16 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       <header className="topbar">
         <Link href="/app" className="brand"><span className="mark">i</span><span>iDIABA</span></Link>
         <nav className="app-actions" aria-label="Navigation principale">
-          <Link href="/app/products">Produits</Link>
-          <Link href="/app/stock">Stocks</Link>
-          <Link href="/app/inventory">Inventaires</Link>
-          <Link href="/app/customers">Clients</Link>
-          <Link href="/app/pos">Caisse</Link>
-          <Link href="/app/purchasing">Achats</Link>
-          <Link href="/app/accounting">Comptabilité</Link>
-          <Link href="/app/subscription">Abonnement</Link>
+          {canAccess(activeMembership?.role, "products") && <Link href="/app/products">Produits</Link>}
+          {canAccess(activeMembership?.role, "stock") && <Link href="/app/stock">Stocks</Link>}
+          {canAccess(activeMembership?.role, "inventory") && <Link href="/app/inventory">Inventaires</Link>}
+          {canAccess(activeMembership?.role, "customers") && <Link href="/app/customers">Clients</Link>}
+          {canAccess(activeMembership?.role, "pos") && <Link href="/app/pos">Caisse</Link>}
+          {canAccess(activeMembership?.role, "purchasing") && <Link href="/app/purchasing">Achats</Link>}
+          {canAccess(activeMembership?.role, "accounting") && <Link href="/app/accounting">Comptabilité</Link>}
+          {canAccess(activeMembership?.role, "subscription") && <Link href="/app/subscription">Abonnement</Link>}
           <Link href="/app/company">Équipe</Link>
+          {canViewAudit && <Link href="/app/overview">Vue consolidée</Link>}
           {canViewAudit && <Link href="/app/audit">Journal d’audit</Link>}
           {canViewAudit && <Link href="/app/reports">Rapports</Link>}
           {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin">Admin SaaS</Link>}
@@ -89,7 +92,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           <p>Les données affichées sont celles de l’entreprise active{activeMembership?.tenant ? ` : ${activeMembership.tenant.name}` : ""}.</p>
         </div>
         <div className="app-module-grid">
-          {modules.map(({ title, description, href, action, icon: Icon }) => (
+          {modules.filter((item) => canAccess(activeMembership?.role, item.key)).map(({ title, description, href, action, icon: Icon }) => (
             <Link href={href} className="app-module-card" key={title}>
               <span className="app-module-icon"><Icon size={20} strokeWidth={1.9} /></span>
               <div><strong>{title}</strong><p>{description}</p></div>

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { scopeToActiveTenant } from "@/lib/tenant";
+import { canAccess } from "@/lib/permissions";
+import AccessDenied from "../access-denied";
 import { attachCustomerToSale, createCustomer, registerSaleReturn } from "./actions";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
@@ -26,6 +28,7 @@ export default async function CustomersPage({ searchParams }: {
   const { data: memberships } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(name)").eq("user_id", user.id);
   const workspaces = await scopeToActiveTenant((memberships ?? []) as unknown as Workspace[]);
+  if (workspaces.length && !canAccess(workspaces[0].role, "customers")) return <AccessDenied module="customers" />;
   const data = await Promise.all(workspaces.map(async (workspace) => {
     const [customerResult, saleResult, itemResult, returnResult] = await Promise.all([
       supabase.from("customers").select("id,name,phone,email,is_active,created_at").eq("tenant_id", workspace.tenant_id).order("name").limit(500),

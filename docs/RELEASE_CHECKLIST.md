@@ -14,6 +14,7 @@
 - [x] Index de clés étrangères et optimisations RLS.
 - [x] Endpoint de santé HTTP /api/health.
 - [x] Multi-entreprise : entreprise active, équipe, invitations et rôles (migration 0023).
+- [x] Vue consolidée, menus par rôle, invitations par e-mail (optionnel) et tests automatisés en CI.
 
 ## Recette métier à effectuer avec un compte connecté
 - [ ] Créer une entreprise et vérifier l'attribution automatique de l'essai.
@@ -27,6 +28,7 @@
 - [ ] Consulter le journal d'audit et vérifier les données avant/après.
 - [ ] Générer un rapport sur une période et ouvrir le CSV dans Excel.
 - [ ] Installer la PWA, charger les écrans utiles, passer hors connexion, saisir une opération puis reconnecter et vérifier la synchronisation sans doublon.
+- [ ] Configurer RESEND_API_KEY et EMAIL_FROM (domaine vérifié chez Resend) pour l'envoi des invitations, ou continuer avec le lien à copier.
 - [ ] Appliquer la migration 0023 et exécuter la recette de docs/MULTI_COMPANY.md.
 - [ ] Tester l'isolation : un utilisateur d'une entreprise ne doit jamais voir les données d'une autre.
 - [ ] Tester les quotas en dépassant volontairement une limite sur une entreprise de test.

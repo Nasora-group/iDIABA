@@ -17,3 +17,4 @@
 - Sprint 15 : tableaux de bord, rapports et exports.
 - Sprint 16 : tests métier complets, recette multi-entreprises et préparation de lancement.
 - Sprint 17 : multi-entreprise (entreprise active, nouvelle entreprise, équipe, invitations, gestion des rôles). Voir docs/MULTI_COMPANY.md.
+- Sprint 18 : vue consolidée multi-entreprises, menus par rôle, invitations par e-mail et tests automatisés (Vitest + PGlite) en CI.

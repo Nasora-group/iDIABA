@@ -18,4 +18,6 @@ jobs:
           node -e "const audit=require('./npm-audit.json'); for (const [name, item] of Object.entries(audit.vulnerabilities || {})) console.log(name + ': ' + item.severity + '; range=' + item.range + '; fix=' + JSON.stringify(item.fixAvailable));"
       - run: npm run lint
       - run: npm run typecheck
+      - name: Unit and database tests (migrations, RLS, multi-company)
+        run: npm test
       - run: npm run build

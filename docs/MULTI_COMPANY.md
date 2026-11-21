@@ -13,6 +13,26 @@ Un même compte utilisateur peut appartenir à plusieurs entreprises, avec un r�
 - **Connexion / inscription** : le paramètre `next` ramène l'invité sur son lien après authentification. À l'inscription via invitation, le nom d'entreprise est facultatif.
 - **Profils** : les membres d'une même entreprise voient leurs noms (ex. caissier sur les tickets).
 
+## Sprint 18 — Compléments
+- **Vue consolidée** (`/app/overview`, propriétaires/administrateurs) : CA, ventes, marge brute, dépenses, achats, retours et écart de caisse de toutes les entreprises sur une période (max. 366 jours), avec part de chaque entreprise. Basée sur le RPC `get_tenant_management_report`, donc soumise à la RLS ; les entreprises où l'on n'est pas propriétaire/administrateur sont listées comme non incluses. Les montants sont additionnés en FCFA.
+- **Menus et accès par rôle** (`lib/permissions.ts`) : chaque rôle ne voit et n'ouvre que ses modules (sinon page « Accès limité »). La matrice reflète les droits d'**écriture** de la RLS ; en base, la **lecture** reste ouverte à tous les membres d'une entreprise (voir « Limites »).
+- **Invitations par e-mail** (`lib/email.ts`) : envoi via l'API Resend si `RESEND_API_KEY` et `EMAIL_FROM` sont définis côté serveur. Sans configuration, ou en cas d'échec, l'invitation est créée et le lien reste à copier.
+- **Tests automatisés** : `npm test` (Vitest). Tests unitaires (redirections, permissions, cookie d'entreprise active, e-mail) et tests de base de données sur PostgreSQL en mémoire (PGlite) qui rejouent toutes les migrations : isolation entre entreprises, écriture par rôle, invitations, quotas, dernier propriétaire, audit. Exécutés par la CI.
+
+### Matrice des modules par rôle
+| Module | owner/admin | manager | cashier | stock | accountant | viewer |
+|---|---|---|---|---|---|---|
+| Produits, stocks, inventaires, achats | oui | oui | non | oui | non | oui |
+| Caisse | oui | oui | oui | non | non | non |
+| Clients & retours | oui | oui | oui | non | non | oui |
+| Comptabilité | oui | oui | non | non | oui | oui |
+| Abonnement, rapports, audit, vue consolidée | oui | non | non | non | non | non |
+
+### Limites connues
+- La RLS autorise encore la lecture de toutes les tables d'une entreprise à tous ses membres (ex. un caissier pourrait lire la comptabilité en appelant l'API directement). Les menus masquent ces rubriques, mais pour une confidentialité stricte il faudra restreindre les policies `select` par rôle dans une prochaine migration.
+- Les barres de navigation internes de certains modules affichent encore tous les liens ; un rôle sans accès voit alors la page « Accès limité ».
+- La vue consolidée suppose une seule devise (FCFA).
+
 ## Règles de droits
 | Action | Propriétaire | Administrateur | Autres rôles |
 |---|---|---|---|
@@ -31,6 +51,8 @@ Une entreprise conserve toujours au moins un propriétaire.
 - Les changements d'équipe sont tracés dans le journal d'audit.
 
 ## Déploiement
+Variables optionnelles : `RESEND_API_KEY`, `EMAIL_FROM` (invitations par e-mail).
+
 Appliquer `supabase/migrations/0023_multi_company.sql` (SQL Editor ou Supabase CLI), puis déployer l'application.
 
 ## Recette multi-entreprise

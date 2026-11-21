@@ -74,7 +74,9 @@ export default async function CompanyPage({ searchParams }: { searchParams: Prom
         <p className="lead">Gérez les informations de <strong>{tenant?.name}</strong>, les membres de l&apos;équipe et leurs droits d&apos;accès. Les données de chaque entreprise restent strictement séparées.</p>
 
         {params.saved && <p className="form-success" role="status">Nom de l&apos;entreprise mis à jour.</p>}
-        {params.invited && <p className="form-success" role="status">Invitation créée. Copiez le lien ci-dessous et envoyez-le à la personne invitée.</p>}
+        {params.invited === "emailed" && <p className="form-success" role="status">Invitation envoyée par e-mail. Le lien reste disponible ci-dessous si besoin.</p>}
+        {params.invited === "mailfailed" && <p className="form-error" role="alert">Invitation créée, mais l&apos;e-mail n&apos;a pas pu être envoyé. Copiez le lien ci-dessous et transmettez-le vous-même.</p>}
+        {params.invited && !["emailed", "mailfailed"].includes(params.invited) && <p className="form-success" role="status">Invitation créée. Copiez le lien ci-dessous et envoyez-le à la personne invitée.</p>}
         {params.revoked && <p className="form-success" role="status">Invitation annulée.</p>}
         {params.updated && <p className="form-success" role="status">Rôle mis à jour.</p>}
         {params.removed && <p className="form-success" role="status">Membre retiré de l&apos;entreprise.</p>}

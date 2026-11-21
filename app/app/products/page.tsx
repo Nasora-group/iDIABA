@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { scopeToActiveTenant } from "@/lib/tenant";
+import { canAccess } from "@/lib/permissions";
+import AccessDenied from "../access-denied";
 import { archiveProduct, createCategory, createProduct } from "./actions";
 
 type Workspace = {
@@ -39,6 +41,7 @@ export default async function ProductsPage({
     .select("tenant_id, role, tenant:tenants(id,name,slug)")
     .eq("user_id", user.id);
   const workspaces = await scopeToActiveTenant((membershipData ?? []) as unknown as Workspace[]);
+  if (workspaces.length && !canAccess(workspaces[0].role, "products")) return <AccessDenied module="products" />;
 
   const catalogs = await Promise.all(workspaces.map(async (workspace) => {
     const [categoryResult, productResult] = await Promise.all([

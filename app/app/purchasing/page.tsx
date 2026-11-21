@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { scopeToActiveTenant } from "@/lib/tenant";
+import { canAccess } from "@/lib/permissions";
+import AccessDenied from "../access-denied";
 import { createPurchaseOrder, createSupplier, receivePurchaseOrder } from "./actions";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
@@ -25,6 +27,7 @@ export default async function PurchasingPage({ searchParams }: {
   const { data: memberships } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(name)").eq("user_id", user.id);
   const workspaces = await scopeToActiveTenant((memberships ?? []) as unknown as Workspace[]);
+  if (workspaces.length && !canAccess(workspaces[0].role, "purchasing")) return <AccessDenied module="purchasing" />;
 
   const data = await Promise.all(workspaces.map(async (workspace) => {
     const [supplierResult, productResult, locationResult, orderResult] = await Promise.all([

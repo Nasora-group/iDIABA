@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { scopeToActiveTenant } from "@/lib/tenant";
+import { canAccess } from "@/lib/permissions";
+import AccessDenied from "../access-denied";
 import { createStockLocation, recordStockMovement } from "./actions";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
@@ -27,6 +29,7 @@ export default async function StockPage({ searchParams }: {
   const { data: memberships } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(name)").eq("user_id", user.id);
   const workspaces = await scopeToActiveTenant((memberships ?? []) as unknown as Workspace[]);
+  if (workspaces.length && !canAccess(workspaces[0].role, "stock")) return <AccessDenied module="stock" />;
   const stockData = await Promise.all(workspaces.map(async (workspace) => {
     const [productResult, locationResult, movementResult, balanceResult] = await Promise.all([
       supabase.from("products").select("id,name,sku,unit,is_active").eq("tenant_id", workspace.tenant_id).order("name"),

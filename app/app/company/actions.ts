@@ -1,11 +1,12 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ACTIVE_TENANT_COOKIE, isUuid, safeAppPath } from "@/lib/tenant";
-import { ASSIGNABLE_ROLES } from "@/lib/tenant-labels";
+import { ASSIGNABLE_ROLES, ROLE_LABELS } from "@/lib/tenant-labels";
+import { invitationEmail, sendEmail } from "@/lib/email";
 
 const INVITE_TOKEN = /^[0-9a-f]{64}$/;
 
@@ -106,15 +107,33 @@ export async function renameCompany(formData: FormData) {
 }
 
 export async function inviteMember(formData: FormData) {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const path = "/app/company";
   const tenantId = readTenantId(formData.get("tenant_id"), path);
   const role = readRole(formData.get("role"), path);
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const { error } = await supabase.rpc("create_invitation", { target_tenant: tenantId, invitee_email: email, invitee_role: role });
-  if (error) failTo(path, error.message);
+  const { data: token, error } = await supabase.rpc("create_invitation", { target_tenant: tenantId, invitee_email: email, invitee_role: role });
+  if (error || typeof token !== "string") failTo(path, error?.message ?? "Invitation impossible.");
+
+  // Best effort e-mail: the invitation exists either way and its link stays copyable.
+  const { data: tenant } = await supabase.from("tenants").select("name").eq("id", tenantId).maybeSingle();
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const origin = host
+    ? `${requestHeaders.get("x-forwarded-proto") ?? "https"}://${host}`
+    : (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
+  const inviterName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
+  const mail = await sendEmail({
+    to: email,
+    ...invitationEmail({
+      companyName: tenant?.name ?? "votre entreprise",
+      inviterName,
+      roleLabel: ROLE_LABELS[role] ?? role,
+      link: `${origin}/app/invite/${token}`,
+    }),
+  });
   revalidatePath(path);
-  redirect(`${path}?invited=1`);
+  redirect(`${path}?invited=${mail === "sent" ? "emailed" : mail === "failed" ? "mailfailed" : "link"}`);
 }
 
 export async function revokeInvitation(formData: FormData) {
