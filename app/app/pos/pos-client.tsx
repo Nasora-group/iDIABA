@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { checkoutSale } from "./actions";
 
 type Product = { id: string; name: string; sku: string; unit: string; sale_price: string | number; tax_rate: string | number };
@@ -37,19 +37,15 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
     return { subtotal, tax, total: subtotal + tax };
   }, [cart, products]);
 
-  useEffect(() => {
-    if (payments.length === 1) {
-      const amount = (totals.total / 100).toFixed(2);
-      setPayments((current) => current.length === 1 && current[0].amount !== amount
-        ? [{ ...current[0], amount }] : current);
-    }
-  }, [payments.length, totals.total]);
+  const effectivePayments = payments.length === 1
+    ? [{ ...payments[0], amount: (totals.total / 100).toFixed(2) }]
+    : payments;
 
-  const paidTotal = payments.reduce((sum, payment) => {
+  const paidTotal = effectivePayments.reduce((sum, payment) => {
     const amount = Number(payment.amount.replace(",", "."));
     return sum + (Number.isFinite(amount) && amount > 0 ? toCents(payment.amount.replace(",", ".")) : 0);
   }, 0);
-  const paymentsValid = payments.length > 0 && payments.every((payment) => {
+  const paymentsValid = effectivePayments.length > 0 && effectivePayments.every((payment) => {
     const amount = Number(payment.amount.replace(",", "."));
     return ["cash", "mobile_money", "card", "bank_transfer"].includes(payment.method)
       && Number.isFinite(amount) && amount > 0;
@@ -74,7 +70,7 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
       <input type="hidden" name="session_id" value={sessionId} />
       <input type="hidden" name="client_sale_id" value={clientSaleId} />
       <input type="hidden" name="items_json" value={JSON.stringify(cart)} />
-      <input type="hidden" name="payments_json" value={JSON.stringify(payments)} />
+      <input type="hidden" name="payments_json" value={JSON.stringify(effectivePayments)} />
       <h3>Nouvelle vente</h3>
       <div className="pos-add-row">
         <label>Produit
@@ -104,8 +100,8 @@ export default function POSCheckout({ tenantId, locationId, sessionId, clientSal
         <div className="pos-grand-total"><span>Total à payer</span><strong>{formatCents(totals.total)} F</strong></div>
       </div>
       <div className="pos-payment-section">
-        <div className="pos-payment-heading"><strong>Règlement</strong><button type="button" className="secondary" onClick={() => setPayments((current) => current.length < 4 ? [...current, { method: "mobile_money", amount: "" }] : current)} disabled={payments.length >= 4}>Ajouter un moyen de paiement</button></div>
-        {payments.map((payment, index) => (
+        <div className="pos-payment-heading"><strong>Règlement</strong><button type="button" className="secondary" onClick={() => setPayments((current) => current.length < 4 ? [...(current.length === 1 ? [{ ...current[0], amount: (totals.total / 100).toFixed(2) }] : current), { method: "mobile_money", amount: "" }] : current)} disabled={payments.length >= 4}>Ajouter un moyen de paiement</button></div>
+        {effectivePayments.map((payment, index) => (
           <div className="pos-payment-row" key={index}>
             <label>Moyen de paiement
               <select value={payment.method} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, method: event.target.value } : item))}>

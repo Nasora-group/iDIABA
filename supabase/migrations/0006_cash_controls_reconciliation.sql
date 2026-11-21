@@ -42,6 +42,7 @@ create or replace function public.create_cash_movement(
 as $$
 declare
   s public.cash_sessions%rowtype;
+  current_cash numeric(14,2);
   new_movement_id uuid;
 begin
   if auth.uid() is null
@@ -62,6 +63,21 @@ begin
   if s.opened_by <> auth.uid()
      and not public.has_tenant_role(s.tenant_id,array['owner','admin','manager']::public.tenant_role[]) then
     raise exception 'This cash session belongs to another cashier';
+  end if;
+
+  select round(
+    s.opening_cash
+    + coalesce((select sum(sp.amount) from public.sale_payments sp
+        join public.sales sa on sa.id=sp.sale_id and sa.tenant_id=sp.tenant_id
+        where sp.tenant_id=s.tenant_id and sa.cash_session_id=s.id
+          and sa.status='completed' and sp.payment_method='cash'),0)
+    + coalesce((select sum(cm.amount) from public.cash_movements cm
+        where cm.tenant_id=s.tenant_id and cm.cash_session_id=s.id and cm.movement_type='cash_in'),0)
+    - coalesce((select sum(cm.amount) from public.cash_movements cm
+        where cm.tenant_id=s.tenant_id and cm.cash_session_id=s.id and cm.movement_type='cash_out'),0)
+  ,2) into current_cash;
+  if p_movement_type='cash_out' and round(p_amount,2) > current_cash then
+    raise exception 'Cash-out exceeds available cash balance: %', current_cash;
   end if;
 
   insert into public.cash_movements(tenant_id,cash_session_id,movement_type,amount,reason,created_by)
