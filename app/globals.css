@@ -219,3 +219,28 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .subscription-history>div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #edf1ed;font-size:12px}
 .subscription-history strong{color:#176b43}
 @media(max-width:650px){.subscription-card{padding:14px}.subscription-current{grid-template-columns:1fr}.subscription-usage{grid-template-columns:repeat(2,minmax(0,1fr))}.subscription-form-grid{grid-template-columns:1fr}.subscription-header{align-items:flex-start;flex-direction:column}}
+
+
+/* Platform admin console */
+.platform-admin-section{margin:28px 0}
+.platform-admin-section>h2{font-size:20px;margin:0 0 10px}
+.platform-plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px}
+.platform-plan-card,.platform-request-card{min-width:0;padding:17px;border:1px solid #dfe9e1;border-radius:13px;background:#fff}
+.platform-plan-heading,.platform-request-header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+.platform-plan-heading strong,.platform-request-header strong{font-size:16px}
+.platform-plan-heading span{font-size:11px;color:var(--muted);text-transform:uppercase}
+.platform-plan-card>label,.platform-review-form>label{display:grid;gap:6px;margin:10px 0;font-size:12px;font-weight:650}
+.platform-plan-card input,.platform-review-form input{width:100%;min-width:0;padding:9px 10px;border:1px solid #dbe3dc;border-radius:8px;background:#fff;font:inherit}
+.platform-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.platform-form-grid label{display:grid;gap:5px;font-size:12px;font-weight:650}
+.platform-request-list{display:grid;gap:12px;margin-top:14px}
+.platform-request-header{align-items:flex-start}
+.platform-request-header>div{display:grid;gap:4px}
+.platform-request-header span{font-size:12px;color:var(--muted)}
+.platform-request-card>p{margin:8px 0;font-size:13px}
+.platform-request-card>small{color:var(--muted);font-size:11px}
+.platform-review-form{margin-top:14px;padding-top:12px;border-top:1px solid #edf1ed}
+.platform-review-form>div{display:flex;gap:9px;flex-wrap:wrap}
+.platform-review-form button{flex:1}
+.subscription-status.pending{background:#fff4dc;color:#8a5b11}
+@media(max-width:720px){.platform-plan-grid{grid-template-columns:1fr}.platform-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.platform-review-form>div{flex-direction:column}.platform-review-form button{width:100%}}
