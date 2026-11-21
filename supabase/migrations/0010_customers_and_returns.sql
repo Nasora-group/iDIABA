@@ -169,7 +169,14 @@ declare
   v_already_returned numeric(14,3);
   v_returnable numeric(14,3);
   v_refund numeric(14,2);
+  v_subtotal numeric(14,2);
+  v_tax numeric(14,2);
   v_return_id uuid;
+  v_journal_id uuid := gen_random_uuid();
+  v_journal_number text;
+  v_sales_account uuid;
+  v_vat_account uuid;
+  v_payment_account uuid;
 begin
   if auth.uid() is null or not public.has_tenant_role(p_tenant_id, array['owner','admin','manager','cashier']::public.tenant_role[]) then
     raise exception 'Permission denied to register sale return';
@@ -221,6 +228,38 @@ begin
     p_tenant_id,v_sale.location_id,v_item.product_id,'sale_return',p_quantity,
     'RETURN-'||v_return_id::text,'Retour client : '||trim(p_reason),auth.uid()
   );
+
+  -- Post the return as an immutable reversal in the existing double-entry ledger.
+  perform public.seed_default_accounting_chart(p_tenant_id);
+  insert into public.accounting_accounts(tenant_id,code,name,account_class,account_kind)
+  values(p_tenant_id,'419000','Clients créditeurs - avoirs','liability','customer')
+  on conflict(tenant_id,code) do nothing;
+  select id into v_sales_account from public.accounting_accounts where tenant_id=p_tenant_id and code='701000';
+  select id into v_vat_account from public.accounting_accounts where tenant_id=p_tenant_id and code='443000';
+  if p_refund_method='cash' then
+    select id into v_payment_account from public.accounting_accounts where tenant_id=p_tenant_id and code='571000';
+  elsif p_refund_method='credit_note' then
+    select id into v_payment_account from public.accounting_accounts where tenant_id=p_tenant_id and code='419000';
+  else
+    select id into v_payment_account from public.accounting_accounts where tenant_id=p_tenant_id and code='521000';
+  end if;
+  v_subtotal := round(p_quantity * v_item.unit_price,2);
+  v_tax := v_refund - v_subtotal;
+  v_journal_number := 'RT-'||to_char(now(),'YYYYMMDD')||'-'||upper(substr(replace(v_journal_id::text,'-',''),1,8));
+  insert into public.journal_entries(id,tenant_id,entry_number,entry_date,description,source_type,source_id,created_by)
+  values(v_journal_id,p_tenant_id,v_journal_number,current_date,'Retour vente '||left(v_sale.id::text,8),'sale',v_return_id,auth.uid());
+  if v_subtotal > 0 then
+    insert into public.journal_lines(tenant_id,journal_entry_id,account_id,description,debit,credit)
+    values(p_tenant_id,v_journal_id,v_sales_account,'Annulation partielle de vente',v_subtotal,0);
+  end if;
+  if v_tax > 0 then
+    insert into public.journal_lines(tenant_id,journal_entry_id,account_id,description,debit,credit)
+    values(p_tenant_id,v_journal_id,v_vat_account,'Annulation TVA vente',v_tax,0);
+  end if;
+  insert into public.journal_lines(tenant_id,journal_entry_id,account_id,description,debit,credit)
+  values(p_tenant_id,v_journal_id,v_payment_account,
+    case when p_refund_method='credit_note' then 'Avoir client émis' else 'Remboursement client' end,
+    0,v_refund);
 
   return v_return_id;
 end;
