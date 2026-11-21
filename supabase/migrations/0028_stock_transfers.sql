@@ -111,7 +111,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = pg_catalog, public
-as $
+as $$
 declare
   v_transfer_id uuid := gen_random_uuid();
   v_transfer_number text;
@@ -249,7 +249,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = pg_catalog, public
-as $
+as $$
 declare
   v_transfer public.stock_transfers%rowtype;
   v_item public.stock_transfer_items%rowtype;
