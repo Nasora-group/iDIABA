@@ -268,3 +268,20 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .audit-json-grid strong{font-size:12px}
 .audit-json-grid pre{max-height:320px;overflow:auto;padding:10px;border-radius:8px;background:#f6f8f6;font-size:10px;white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:650px){.audit-row{padding:12px}.audit-row-heading time{width:100%;margin-left:0}.audit-json-grid{grid-template-columns:1fr}}
+
+
+/* Management reports */
+.report-filter{display:grid;grid-template-columns:minmax(180px,1.5fr) repeat(2,minmax(130px,1fr)) auto auto;gap:10px;align-items:end;margin:20px 0;padding:15px;border:1px solid #dfe9e1;border-radius:13px;background:#fff}
+.report-filter label{display:grid;gap:6px;font-size:12px;font-weight:650}
+.report-filter input,.report-filter select{width:100%;min-width:0;padding:10px;border:1px solid #dbe3dc;border-radius:8px;background:#fff;font:inherit}
+.report-filter button,.report-filter a{min-height:39px;display:inline-flex;align-items:center;justify-content:center}
+.report-export{text-decoration:none;padding:9px 12px;border:1px solid #dbe3dc;border-radius:8px;color:#176b43;font-size:13px;font-weight:650}
+.report-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0}
+.report-stat-grid article{display:grid;gap:7px;padding:17px;border:1px solid #dfe9e1;border-radius:13px;background:#fff}
+.report-stat-grid span{font-size:12px;color:var(--muted)}
+.report-stat-grid strong{font-size:21px;overflow-wrap:anywhere}
+.report-stat-grid small{font-size:11px;color:var(--muted)}
+.report-section{margin:24px 0}
+.report-section h2{font-size:18px;margin:0 0 12px}
+@media(max-width:850px){.report-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.report-filter label:first-child{grid-column:1/-1}}
+@media(max-width:560px){.report-filter{grid-template-columns:1fr}.report-filter label:first-child{grid-column:auto}.report-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.report-stat-grid article{padding:13px}.report-stat-grid strong{font-size:17px}}
