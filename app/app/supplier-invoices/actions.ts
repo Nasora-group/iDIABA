@@ -41,7 +41,8 @@ export async function createSupplierInvoice(fd: FormData) {
   const dueDateRaw = String(fd.get("due_date") ?? "").trim();
   const dueDate = dueDateRaw || null;
   const invoiceAmount = amount(String(fd.get("amount") ?? ""));
-  const taxAmount = nonNegativeAmount(String(fd.get("tax_amount") ?? "0"));
+  const taxRaw = String(fd.get("tax_amount") ?? "").trim() || "0";
+  const taxAmount = nonNegativeAmount(taxRaw);
   const description = String(fd.get("description") ?? "").trim().slice(0, 250);
 
   if (!uuid(tenantId) || !uuid(supplierId) || !uuid(orderId)
