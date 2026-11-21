@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 import { createClient } from "@/lib/supabase/server";
@@ -27,12 +28,16 @@ export default async function AppHome() {
     <main className="shell">
       <header className="topbar">
         <div className="brand"><span className="mark">i</span><span>iDIABA</span></div>
-        <form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form>
+        <div className="app-actions"><Link href="/app/products">Catalogue produits</Link><form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form></div>
       </header>
       <section className="workspace">
         <p className="eyebrow">ESPACE DE TRAVAIL</p>
         <h1>Bienvenue{user.user_metadata?.full_name ? `, ${user.user_metadata.full_name}` : ""}</h1>
         <p className="lead">Votre compte est connecté. Les modules de gestion seront activés progressivement.</p>
+        <div className="app-module-card">
+          <div><strong>Catalogue produits</strong><p>Gérez les références, les prix, les catégories et les codes-barres de vos entreprises.</p></div>
+          <Link className="primary" href="/app/products">Ouvrir le catalogue</Link>
+        </div>
         <h2>Vos entreprises</h2>
         {memberships.length ? (
           <div className="workspace-list">
