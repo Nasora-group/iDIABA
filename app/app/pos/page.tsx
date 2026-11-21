@@ -99,7 +99,7 @@ export default async function POSPage({ searchParams }: {
                     ) : <p className="catalog-empty">Aucun mouvement hors ventes.</p>}
                   </div>
                 </div>
-                {products.length ? <><OfflinePOSSeed userId={user.id} tenantId={workspace.tenant_id} tenantName={workspace.tenant?.name ?? "Entreprise"} locationId={session.location_id} locationName={session.location?.name ?? "Point de vente"} sessionId={session.id} products={products} /><POSCheckout tenantId={workspace.tenant_id} locationId={session.location_id} sessionId={session.id} clientSaleId={randomUUID()} products={products} /></> : <p className="catalog-empty">Ajoutez des produits actifs au catalogue avant de vendre.</p>}
+                {products.length ? <><OfflinePOSSeed userId={user.id} tenantId={workspace.tenant_id} tenantName={workspace.tenant?.name ?? "Entreprise"} locationId={session.location_id} locationName={session.location?.name ?? "Point de vente"} sessionId={session.id} products={products} /><POSCheckout userId={user.id} tenantId={workspace.tenant_id} locationId={session.location_id} sessionId={session.id} clientSaleId={randomUUID()} products={products} /></> : <p className="catalog-empty">Ajoutez des produits actifs au catalogue avant de vendre.</p>}
               </div>
             ))}
             <div className="catalog-table-wrap">
