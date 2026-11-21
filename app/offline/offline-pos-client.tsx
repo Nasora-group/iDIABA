@@ -88,7 +88,7 @@ export default function OfflinePOSClient() {
         await removeOfflineSale(sale.id);
       }
       await refreshQueue(userId);
-      if ((await loadOfflineSales(userId)).length === 0) setMessage("Toutes les ventes en attente ont été synchronisées.");
+      if (pending.length > 0 && (await loadOfflineSales(userId)).length === 0) setMessage("Toutes les ventes en attente ont été synchronisées.");
     } catch {
       setMessage("Connexion interrompue. Les ventes restent enregistrées sur cet appareil.");
     } finally {
