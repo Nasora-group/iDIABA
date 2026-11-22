@@ -2,6 +2,7 @@ export type OfflineProduct = {
   id: string;
   name: string;
   sku: string;
+  barcode?: string | null;
   unit: string;
   sale_price: string | number;
   tax_rate: string | number;
