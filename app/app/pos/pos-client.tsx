@@ -23,7 +23,10 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
   const [offlineMessage, setOfflineMessage] = useState("");
   const syncLock = useRef(false);
   const [productId, setProductId] = useState(products[0]?.id ?? "");
-  const [quantity, setQuantity] = useState("1");\n  const [barcodeQuery, setBarcodeQuery] = useState("");\n  const [barcodeMessage, setBarcodeMessage] = useState("");\n  const barcodeInput = useRef<HTMLInputElement>(null);
+  const [quantity, setQuantity] = useState("1");
+  const [barcodeQuery, setBarcodeQuery] = useState("");
+  const [barcodeMessage, setBarcodeMessage] = useState("");
+  const barcodeInput = useRef<HTMLInputElement>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [payments, setPayments] = useState<PaymentLine[]>([{ method: "cash", amount: "" }]);
 
