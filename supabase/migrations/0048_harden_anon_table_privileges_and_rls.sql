@@ -1,15 +1,11 @@
 -- Defense in depth: anonymous clients must not hold direct table or sequence grants.
--- Public tables already have RLS enabled; this removes the extra SQL privilege layer
--- and prevents future tables created by either migration owner from inheriting anon grants.
+-- Public tables already have RLS enabled; this removes the extra SQL privilege layer.
+-- The default ACL changes apply to the current migration owner (postgres).
 revoke all privileges on all tables in schema public from anon;
 revoke all privileges on all sequences in schema public from anon;
-alter default privileges for role postgres in schema public
+alter default privileges in schema public
   revoke all privileges on tables from anon;
-alter default privileges for role postgres in schema public
-  revoke all privileges on sequences from anon;
-alter default privileges for role supabase_admin in schema public
-  revoke all privileges on tables from anon;
-alter default privileges for role supabase_admin in schema public
+alter default privileges in schema public
   revoke all privileges on sequences from anon;
 
 -- The tenant-peer profile policy already includes the current user's own profile.
