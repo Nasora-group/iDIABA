@@ -47,6 +47,7 @@ export default async function AppHome() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  if (user.app_metadata?.role === "platform_admin") redirect("/app/platform-admin");
 
   const { data, error } = await supabase.from("tenant_memberships")
     .select("tenant_id,role,tenant:tenants(id,name,slug)")
