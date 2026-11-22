@@ -316,3 +316,42 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .pos-reconciliation-payments>div>span{padding:7px 10px;border-radius:7px;background:white;border:1px solid #e4ece4;font-size:12px}
 .pos-reconciliation>p{margin:0;color:#718075;font-size:12px}
 @media(max-width:600px){.pos-reconciliation-grid{grid-template-columns:1fr}.pos-reconciliation-total strong{font-size:20px}}
+
+
+/* Super Admin dashboard refresh */
+.platform-shell{max-width:1560px}
+.platform-workspace{max-width:1320px}
+.platform-topbar .brand small{display:inline-flex;vertical-align:middle;margin-left:5px;padding:3px 6px;border-radius:5px;background:#eaf5ee;color:#176b43;font-size:9px;letter-spacing:.08em}
+.platform-topbar .app-actions{gap:3px}
+.platform-hero{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:30px;margin-bottom:28px;border:1px solid #dcebe0;border-radius:18px;background:linear-gradient(115deg,#f0f8f2 0%,#fff 78%)}
+.platform-hero h1{margin:6px 0 9px;font-size:clamp(29px,3.4vw,39px)}
+.platform-hero-aside{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:5px 9px;padding:12px 15px;border:1px solid #dcebe0;border-radius:12px;background:#fff;color:#176b43;font-size:12px;font-weight:750;white-space:nowrap}
+.platform-hero-aside small{grid-column:2;color:var(--muted);font-size:10px;font-weight:500}
+.platform-live-dot{width:8px;height:8px;border-radius:50%;background:#20a05d;box-shadow:0 0 0 4px #e5f5eb}
+.platform-section-title{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:14px}
+.platform-section-title h2{margin:3px 0 0;font-size:21px}
+.platform-section-title>span{color:var(--muted);font-size:12px}
+.platform-overview{margin:26px 0 34px}
+.platform-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-top:15px}
+.platform-kpi{min-width:0;display:grid;gap:8px;padding:18px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 4px 14px rgba(25,48,35,.025)}
+.platform-kpi>span{color:#5c6b61;font-size:12px;font-weight:650}
+.platform-kpi strong{font-size:clamp(20px,2vw,26px);letter-spacing:-.04em;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.platform-kpi small{color:var(--muted);font-size:10px}
+.platform-admin-section{scroll-margin-top:95px;margin:34px 0}
+.platform-request-meta{display:flex;gap:9px 22px;flex-wrap:wrap;margin:12px 0}
+.platform-request-meta>span{display:grid;gap:2px;color:var(--muted);font-size:10px}
+.platform-request-meta strong{color:var(--ink);font-size:12px;font-weight:650;overflow-wrap:anywhere}
+.platform-payment-line{padding:9px 11px;border-radius:8px;background:#f5f8f5;color:#59685e}
+.platform-tenant-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:13px;background:#fff}
+.platform-tenant-table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}
+.platform-tenant-table th{padding:12px 15px;background:#f6f8f6;color:#647268;font-size:10px;text-transform:uppercase;letter-spacing:.07em}
+.platform-tenant-table td{padding:13px 15px;border-top:1px solid #edf1ed}
+.platform-tenant-table td strong,.platform-tenant-table td small{display:block}
+.platform-tenant-table td small{margin-top:3px;color:var(--muted);font-size:10px}
+.platform-state{display:inline-flex;padding:5px 9px;border-radius:999px;background:#f2f4f2;color:#657168;font-size:10px;font-weight:750}
+.platform-state.is-active{background:#eaf5ee;color:#176b43}
+.platform-empty{display:grid;gap:4px;padding:25px;border:1px dashed #d5e2d8;border-radius:13px;background:#fbfdfb;text-align:center}
+.platform-empty strong{font-size:14px}
+.platform-empty span{color:var(--muted);font-size:12px}
+@media(max-width:900px){.platform-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.platform-hero{align-items:flex-start}}
+@media(max-width:680px){.platform-hero{display:grid;padding:20px;gap:16px}.platform-hero-aside{justify-self:start}.platform-section-title{align-items:flex-start;flex-direction:column;gap:5px}.platform-kpi-grid{gap:9px}.platform-kpi{padding:13px}.platform-kpi strong{font-size:19px}.platform-request-meta{display:grid;grid-template-columns:1fr 1fr}.platform-tenant-table{min-width:440px}.platform-topbar .app-actions{max-width:calc(100vw - 110px)}}
