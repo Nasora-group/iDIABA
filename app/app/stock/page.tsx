@@ -29,7 +29,7 @@ export default async function StockPage({ searchParams }: {
   const workspaces = (memberships ?? []) as unknown as Workspace[];
   const stockData = await Promise.all(workspaces.map(async (workspace) => {
     const [productResult, locationResult, movementResult, balanceResult, thresholdResult] = await Promise.all([
-      supabase.from("products").select("id,name,sku,unit,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
+      supabase.from("products").select("id,name,sku,unit,is_active").eq("tenant_id", workspace.tenant_id).eq("track_stock", true).order("name"),
       supabase.from("stock_locations").select("id,name,code,location_type,address,phone,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
       supabase.from("stock_movements").select("id,movement_type,quantity_delta,reference,note,created_at,product:products(name,sku,unit),location:stock_locations(name,code)").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(500),
       supabase.from("stock_balances").select("product_id,location_id,quantity_on_hand").eq("tenant_id", workspace.tenant_id),

@@ -56,6 +56,9 @@ export async function createProduct(formData: FormData) {
   const barcode = String(formData.get("barcode") ?? "").trim() || null;
   if (barcode && barcode.length > 80) redirect("/app/products?error=validation");
   const unit = requiredText(formData.get("unit"), "L'unité", 24);
+  const productKind = String(formData.get("product_kind") ?? "product");
+  if (!["product", "service"].includes(productKind)) redirect("/app/products?error=validation");
+  const trackStock = productKind === "product" && formData.get("track_stock") === "on";
   const purchasePrice = nonNegativeAmount(formData.get("purchase_price"), "Le prix d'achat", 999999999999);
   const salePrice = nonNegativeAmount(formData.get("sale_price"), "Le prix de vente", 999999999999);
   const taxRate = nonNegativeAmount(formData.get("tax_rate"), "La taxe", 100);
@@ -69,6 +72,8 @@ export async function createProduct(formData: FormData) {
     sku,
     barcode,
     unit,
+    product_kind: productKind,
+    track_stock: trackStock,
     purchase_price: purchasePrice,
     sale_price: salePrice,
     tax_rate: taxRate,
@@ -110,6 +115,9 @@ export async function updateProduct(formData: FormData) {
   const barcode = String(formData.get("barcode") ?? "").trim() || null;
   if (barcode && barcode.length > 80) redirect("/app/products?error=validation");
   const unit = requiredText(formData.get("unit"), "L'unité", 24);
+  const productKind = String(formData.get("product_kind") ?? "product");
+  if (!["product", "service"].includes(productKind)) redirect("/app/products?error=validation");
+  const trackStock = productKind === "product" && formData.get("track_stock") === "on";
   const purchasePrice = nonNegativeAmount(formData.get("purchase_price"), "Le prix d'achat", 999999999999);
   const salePrice = nonNegativeAmount(formData.get("sale_price"), "Le prix de vente", 999999999999);
   const taxRate = nonNegativeAmount(formData.get("tax_rate"), "La taxe", 100);
@@ -119,6 +127,7 @@ export async function updateProduct(formData: FormData) {
 
   const { error } = await supabase.from("products").update({
     category_id: categoryId, name, sku, barcode, unit,
+    product_kind: productKind, track_stock: trackStock,
     purchase_price: purchasePrice, sale_price: salePrice, tax_rate: taxRate,
   }).eq("id", productId).eq("tenant_id", tenantId);
   if (error) redirect("/app/products?error=update");
