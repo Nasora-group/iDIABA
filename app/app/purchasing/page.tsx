@@ -152,11 +152,11 @@ export default async function PurchasingPage({ searchParams }: {
                         <label><small>{line.product?.name ?? "Produit"} · reste {remaining.toLocaleString("fr-FR")}</small>
                           <input name="quantity" type="number" min="0" max={remaining} step="0.001" defaultValue={remaining} />
                         </label>
+                        {line.product?.track_lots && remaining > 0 ? <div className="catalog-fields">
+                          <label>Numéro de lot<input name="lot_code" required maxLength={80} placeholder="N° du lot fournisseur" /></label>
+                          <label>Date de péremption<input name="expiry_date" type="date" required /></label>
+                        </div> : <><input type="hidden" name="lot_code" value="" /><input type="hidden" name="expiry_date" value="" /></>}
                       </div>;
-                      {line.product?.track_lots && remaining > 0 ? <div className="catalog-fields">
-                        <label>Numéro de lot<input name="lot_code" required maxLength={80} placeholder="N° du lot fournisseur" /></label>
-                        <label>Date de péremption<input name="expiry_date" type="date" required /></label>
-                      </div> : <><input type="hidden" name="lot_code" value="" /><input type="hidden" name="expiry_date" value="" /></>}
                     })}
                     <button className="archive-button" type="submit">Enregistrer la réception</button>
                   </form>}</td>
