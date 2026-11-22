@@ -4,6 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+const allowedBusinessTypes = new Set([
+  "general", "grocery", "hardware", "fashion", "pharmacy", "restaurant",
+  "auto_parts", "electronics", "beauty", "wholesale", "services", "other",
+]);
+const coreModules = ["catalog", "sales", "stock", "purchases", "customers", "cash", "reports"];
+const optionalModules = new Set([
+  "inventory", "locations", "transfers", "supplier_invoices",
+  "accounting", "audit", "online_store",
+]);
+
 export async function updateCompanySettings(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -13,6 +23,12 @@ export async function updateCompanySettings(formData: FormData) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tenant_id)) {
     redirect("/app/company-settings?status=invalid");
   }
+
+  const business_type = String(formData.get("business_type") ?? "general");
+  if (!allowedBusinessTypes.has(business_type)) redirect("/app/company-settings?status=invalid");
+  const selectedModules = formData.getAll("enabled_modules").map(String).filter((module) => optionalModules.has(module));
+  const enabled_modules = [...coreModules, ...new Set(selectedModules)];
+
   const name = String(formData.get("name") ?? "").trim();
   const rccm = String(formData.get("rccm") ?? "").trim().slice(0, 80);
   const ninea = String(formData.get("ninea") ?? "").trim().slice(0, 80);
@@ -26,6 +42,7 @@ export async function updateCompanySettings(formData: FormData) {
     || !Number.isFinite(default_tax_rate) || default_tax_rate < 0 || default_tax_rate > 100) {
     redirect("/app/company-settings?status=invalid");
   }
+
   let logo_url: string | null = null;
   if (logoRaw) {
     try {
@@ -41,6 +58,12 @@ export async function updateCompanySettings(formData: FormData) {
     name, rccm, ninea, address, phone, currency_code, default_tax_rate, logo_url, updated_at: new Date().toISOString(),
   }).eq("id", tenant_id).select("id").maybeSingle();
   if (error || !data) redirect("/app/company-settings?status=denied");
+
+  const { error: profileError } = await supabase.from("tenant_business_profiles").upsert({
+    tenant_id, business_type, enabled_modules, updated_at: new Date().toISOString(),
+  }, { onConflict: "tenant_id" });
+  if (profileError) redirect("/app/company-settings?status=denied");
+
   revalidatePath("/app");
   revalidatePath("/app/company-settings");
   redirect("/app/company-settings?status=saved");
