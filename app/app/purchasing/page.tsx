@@ -55,7 +55,10 @@ export default async function PurchasingPage({ searchParams }: {
         <h1>Fournisseurs et achats</h1>
         <p className="lead">Centralisez vos fournisseurs, préparez des commandes multi-articles et réceptionnez les marchandises en une ou plusieurs fois.</p>
         {params.created && <p className="form-success">{params.created === "supplier" ? "Fournisseur enregistré." : "Commande d'achat créée."}</p>}
-        {params.received && <p className="form-success">Réception enregistrée. Les quantités reçues ont été ajoutées au stock et la commande mise à jour.</p>}\n        {params.updated && <p className="form-success">Fournisseur mis à jour.</p>}\n        {params.archived && <p className="form-success">Fournisseur archivé. Les commandes existantes sont conservées.</p>}\n        {params.restored && <p className="form-success">Fournisseur réactivé.</p>}
+        {params.received && <p className="form-success">Réception enregistrée. Les quantités reçues ont été ajoutées au stock et la commande mise à jour.</p>}
+        {params.updated && <p className="form-success">Fournisseur mis à jour.</p>}
+        {params.archived && <p className="form-success">Fournisseur archivé. Les commandes existantes sont conservées.</p>}
+        {params.restored && <p className="form-success">Fournisseur réactivé.</p>}
         {params.error && <p className="form-error">{params.error === "lines" ? "Vérifiez les produits, quantités et coûts de chaque ligne. Un produit ne peut apparaître qu'une fois." : params.error === "receipt" ? "Aucune quantité valide à réceptionner, ou quantité supérieure au reliquat." : "Opération impossible. Vérifiez les informations, les droits et les références sélectionnées."}</p>}
         {!data.length && <p>Aucun espace entreprise associé à ce compte.</p>}
         {data.map(({ workspace, suppliers, products, locations, orders, error }) => (
