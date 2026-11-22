@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { attachCustomerToSale, createCustomer, registerSaleReturn, setCustomerActive, updateCustomer } from "./actions";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
-type Customer = { id: string; name: string; phone: string; email: string; is_active: boolean; created_at: string };
+type Customer = { id: string; name: string; phone: string; email: string; address: string; notes: string; is_active: boolean; created_at: string };
 type Sale = { id: string; customer_id: string | null; total: string | number; created_at: string };
 type SaleItem = { id: string; sale_id: string; product_id: string; product_name: string; sku: string; quantity: string | number; unit_price: string | number; tax_rate: string | number; line_total: string | number };
 type ReturnItem = { sale_item_id: string; quantity: string | number };
@@ -27,7 +27,7 @@ export default async function CustomersPage({ searchParams }: {
   const workspaces = (memberships ?? []) as unknown as Workspace[];
   const data = await Promise.all(workspaces.map(async (workspace) => {
     const [customerResult, saleResult, itemResult, returnResult] = await Promise.all([
-      supabase.from("customers").select("id,name,phone,email,is_active,created_at").eq("tenant_id", workspace.tenant_id).order("name").limit(500),
+      supabase.from("customers").select("id,name,phone,email,address,notes,is_active,created_at").eq("tenant_id", workspace.tenant_id).order("name").limit(500),
       supabase.from("sales").select("id,customer_id,total,created_at").eq("tenant_id", workspace.tenant_id).eq("status", "completed").order("created_at", { ascending: false }).limit(50),
       supabase.from("sale_items").select("id,sale_id,product_id,product_name,sku,quantity,unit_price,tax_rate,line_total").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: true }).limit(1000),
       supabase.from("sale_returns").select("id,sale_id,refund_method,refund_total,reason,created_at").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(50),
@@ -62,7 +62,10 @@ export default async function CustomersPage({ searchParams }: {
         <p className="lead">Centralisez vos clients, rattachez les tickets de caisse et gérez les retours partiels avec remise en stock et émission d’un remboursement ou d’un avoir.</p>
         {params.created === "customer" && <p className="form-success">Client enregistré.</p>}
         {params.created === "assignment" && <p className="form-success">Client rattaché au ticket.</p>}
-        {params.created === "return" && <p className="form-success">Retour enregistré et quantité remise en stock.</p>}\n        {params.updated && <p className="form-success">Fiche client mise à jour.</p>}\n        {params.archived && <p className="form-success">Client archivé; les tickets et retours sont conservés.</p>}\n        {params.restored && <p className="form-success">Client réactivé.</p>}
+        {params.created === "return" && <p className="form-success">Retour enregistré et quantité remise en stock.</p>}
+        {params.updated && <p className="form-success">Fiche client mise à jour.</p>}
+        {params.archived && <p className="form-success">Client archivé; les tickets et retours sont conservés.</p>}
+        {params.restored && <p className="form-success">Client réactivé.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les informations, les droits et la quantité encore retournable.</p>}
         {!data.length && <p>Aucun espace entreprise associé à ce compte.</p>}
         {data.map(({ workspace, customers, sales, saleItems, returns, returnedByLine, error }) => (
