@@ -156,3 +156,38 @@ export async function setSupplierActive(formData: FormData) {
   revalidatePath("/app/purchasing");
   redirect(active ? "/app/purchasing?restored=supplier" : "/app/purchasing?archived=supplier");
 }
+
+
+export async function createReorderPurchaseOrder(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  const supplierId = String(formData.get("supplier_id") ?? "");
+  const locationId = String(formData.get("location_id") ?? "");
+  if (![tenantId, supplierId, locationId].every(validUuid)) fail("validation");
+
+  const [thresholdResult, balanceResult, productResult] = await Promise.all([
+    supabase.from("stock_reorder_thresholds").select("product_id,minimum_quantity").eq("tenant_id", tenantId).eq("location_id", locationId),
+    supabase.from("stock_balances").select("product_id,quantity_on_hand").eq("tenant_id", tenantId).eq("location_id", locationId),
+    supabase.from("products").select("id,purchase_price,is_active").eq("tenant_id", tenantId).eq("is_active", true),
+  ]);
+  if (thresholdResult.error || balanceResult.error || productResult.error) fail("reorder");
+  const balances = new Map((balanceResult.data ?? []).map((row) => [row.product_id, Number(row.quantity_on_hand)]));
+  const products = new Map((productResult.data ?? []).map((row) => [row.id, row]));
+  const items = (thresholdResult.data ?? []).flatMap((threshold) => {
+    const product = products.get(threshold.product_id);
+    const available = balances.get(threshold.product_id) ?? 0;
+    const need = Math.max(0, Number(threshold.minimum_quantity) - available);
+    return product && need > 0 ? [{ product_id: threshold.product_id, quantity: String(need), unit_cost: String(product.purchase_price ?? 0) }] : [];
+  });
+  if (!items.length) fail("no_reorder");
+  const { error } = await supabase.rpc("create_purchase_order", {
+    p_tenant_id: tenantId, p_supplier_id: supplierId, p_location_id: locationId,
+    p_items: items, p_notes: "Réapprovisionnement automatique suggéré par iDIABA (seuil minimum).",
+  });
+  if (error) fail("reorder");
+  revalidatePath("/app/purchasing");
+  revalidatePath("/app/stock");
+  redirect("/app/purchasing?created=reorder");
+}
