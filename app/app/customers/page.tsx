@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
-import { attachCustomerToSale, createCustomer, registerSaleReturn } from "./actions";
+import { attachCustomerToSale, createCustomer, registerSaleReturn, setCustomerActive, updateCustomer } from "./actions";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
-type Customer = { id: string; name: string; phone: string; email: string; is_active: boolean; created_at: string };
+type Customer = { id: string; name: string; phone: string; email: string; address: string; notes: string; is_active: boolean; created_at: string };
 type Sale = { id: string; customer_id: string | null; total: string | number; created_at: string };
 type SaleItem = { id: string; sale_id: string; product_id: string; product_name: string; sku: string; quantity: string | number; unit_price: string | number; tax_rate: string | number; line_total: string | number };
 type ReturnItem = { sale_item_id: string; quantity: string | number };
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const money = (value: string | number) => Number(value).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 
 export default async function CustomersPage({ searchParams }: {
-  searchParams: Promise<{ created?: string; error?: string }>;
+  searchParams: Promise<{ created?: string; updated?: string; archived?: string; restored?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -27,7 +27,7 @@ export default async function CustomersPage({ searchParams }: {
   const workspaces = (memberships ?? []) as unknown as Workspace[];
   const data = await Promise.all(workspaces.map(async (workspace) => {
     const [customerResult, saleResult, itemResult, returnResult] = await Promise.all([
-      supabase.from("customers").select("id,name,phone,email,is_active,created_at").eq("tenant_id", workspace.tenant_id).order("name").limit(500),
+      supabase.from("customers").select("id,name,phone,email,address,notes,is_active,created_at").eq("tenant_id", workspace.tenant_id).order("name").limit(500),
       supabase.from("sales").select("id,customer_id,total,created_at").eq("tenant_id", workspace.tenant_id).eq("status", "completed").order("created_at", { ascending: false }).limit(50),
       supabase.from("sale_items").select("id,sale_id,product_id,product_name,sku,quantity,unit_price,tax_rate,line_total").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: true }).limit(1000),
       supabase.from("sale_returns").select("id,sale_id,refund_method,refund_total,reason,created_at").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(50),
@@ -63,6 +63,9 @@ export default async function CustomersPage({ searchParams }: {
         {params.created === "customer" && <p className="form-success">Client enregistré.</p>}
         {params.created === "assignment" && <p className="form-success">Client rattaché au ticket.</p>}
         {params.created === "return" && <p className="form-success">Retour enregistré et quantité remise en stock.</p>}
+        {params.updated && <p className="form-success">Fiche client mise à jour.</p>}
+        {params.archived && <p className="form-success">Client archivé; les tickets et retours sont conservés.</p>}
+        {params.restored && <p className="form-success">Client réactivé.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les informations, les droits et la quantité encore retournable.</p>}
         {!data.length && <p>Aucun espace entreprise associé à ce compte.</p>}
         {data.map(({ workspace, customers, sales, saleItems, returns, returnedByLine, error }) => (
@@ -97,6 +100,8 @@ export default async function CustomersPage({ searchParams }: {
                   <div className="customer-avatar">{customer.name.trim().charAt(0).toUpperCase()}</div>
                   <div className="customer-list-main"><strong>{customer.name}</strong><small>{customer.phone || "Téléphone non renseigné"}{customer.email ? " · " + customer.email : ""}</small></div>
                   <span className={customer.is_active ? "catalog-state" : "catalog-state inactive"}>{customer.is_active ? "Actif" : "Archivé"}</span>
+                  <details className="customer-edit-details"><summary>Modifier</summary><form action={updateCustomer} className="catalog-form customer-edit-form"><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="customer_id" value={customer.id} /><label>Nom / raison sociale<input name="name" defaultValue={customer.name} required minLength={2} maxLength={160} /></label><div className="catalog-fields"><label>Téléphone<input name="phone" defaultValue={customer.phone} maxLength={40} /></label><label>E-mail<input name="email" type="email" defaultValue={customer.email} maxLength={254} /></label></div><label>Adresse<input name="address" defaultValue={customer.address} maxLength={500} /></label><label>Notes<textarea name="notes" defaultValue={customer.notes} rows={2} maxLength={1000} /></label><button className="secondary" type="submit">Enregistrer</button></form></details>
+                  {customer.is_active ? <form action={setCustomerActive}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="customer_id" value={customer.id} /><input type="hidden" name="active" value="false" /><button className="archive-button" type="submit">Archiver</button></form> : <form action={setCustomerActive}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="customer_id" value={customer.id} /><input type="hidden" name="active" value="true" /><button className="secondary" type="submit">Réactiver</button></form>}
                 </article>
               ))}</div> : <p className="catalog-empty">Aucun client pour le moment. Ajoutez votre premier client ci-dessus.</p>}
             </div>
