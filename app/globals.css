@@ -285,4 +285,5 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .report-section h2{font-size:18px;margin:0 0 12px}
 @media(max-width:850px){.report-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.report-filter label:first-child{grid-column:1/-1}}
 @media(max-width:560px){.report-filter{grid-template-columns:1fr}.report-filter label:first-child{grid-column:auto}.report-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.report-stat-grid article{padding:13px}.report-stat-grid strong{font-size:17px}}
-\n.stock-threshold-form{max-width:680px;margin:18px 0}.stock-alerts{border-color:#f0d2a5}.stock-alert-quantity{font-weight:700;color:#a25b12}\n
+
+.stock-threshold-form{max-width:680px;margin:18px 0}.stock-alerts{border-color:#f0d2a5}.stock-alert-quantity{font-weight:700;color:#a25b12}
