@@ -332,7 +332,7 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .platform-section-title h2{margin:3px 0 0;font-size:21px}
 .platform-section-title>span{color:var(--muted);font-size:12px}
 .platform-overview{margin:26px 0 34px}
-.platform-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-top:15px}
+.platform-kpi-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:13px;margin-top:15px}
 .platform-kpi{min-width:0;display:grid;gap:8px;padding:18px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 4px 14px rgba(25,48,35,.025)}
 .platform-kpi>span{color:#5c6b61;font-size:12px;font-weight:650}
 .platform-kpi strong{font-size:clamp(20px,2vw,26px);letter-spacing:-.04em;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
