@@ -95,17 +95,29 @@ export async function receivePurchaseOrder(formData: FormData) {
 
   const lineIds = formData.getAll("order_item_id");
   const quantities = formData.getAll("quantity");
-  if (!lineIds.length || lineIds.length > 100 || lineIds.length !== quantities.length) fail("receipt");
+  const lotCodes = formData.getAll("lot_code");
+  const expiryDates = formData.getAll("expiry_date");
+  if (!lineIds.length || lineIds.length > 100 || lineIds.length !== quantities.length
+      || lineIds.length !== lotCodes.length || lineIds.length !== expiryDates.length) fail("receipt");
 
   const seenLines = new Set<string>();
-  const items: { order_item_id: string; quantity: string }[] = [];
+  const items: { order_item_id: string; quantity: string; lot_code?: string; expiry_date?: string }[] = [];
   for (let i = 0; i < lineIds.length; i += 1) {
     const lineId = String(lineIds[i] ?? "");
     const rawQuantity = String(quantities[i] ?? "").trim();
     const quantity = decimal(rawQuantity === "" ? "0" : rawQuantity, 1000000000, true);
     if (!validUuid(lineId) || quantity === null || seenLines.has(lineId)) fail("receipt");
     seenLines.add(lineId);
-    if (Number(quantity) > 0) items.push({ order_item_id: lineId, quantity });
+    if (Number(quantity) > 0) {
+      const lotCode = String(lotCodes[i] ?? "").trim();
+      const expiryDate = String(expiryDates[i] ?? "").trim();
+      if (lotCode || expiryDate) {
+        if (!lotCode || lotCode.length > 80 || !/^\d{4}-\d{2}-\d{2}$/.test(expiryDate)) fail("receipt");
+        items.push({ order_item_id: lineId, quantity, lot_code: lotCode, expiry_date: expiryDate });
+      } else {
+        items.push({ order_item_id: lineId, quantity });
+      }
+    }
   }
   if (!items.length) fail("receipt");
 
