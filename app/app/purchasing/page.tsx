@@ -12,7 +12,7 @@ type Order = {
   id: string; order_number: string; status: string; ordered_at: string; total_amount: string | number;
   supplier: { name: string } | null; location: { name: string } | null;
 };
-type OrderLine = { id: string; quantity: string | number; received_quantity: string | number; unit_cost: string | number; product: { name: string; sku: string } | null };
+type OrderLine = { id: string; quantity: string | number; received_quantity: string | number; unit_cost: string | number; product: { name: string; sku: string; track_lots: boolean } | null };
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +32,7 @@ export default async function PurchasingPage({ searchParams }: {
       supabase.from("suppliers").select("id,name,phone,contact_name,email,address,notes,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
       supabase.from("products").select("id,name,sku,purchase_price").eq("tenant_id", workspace.tenant_id).eq("is_active", true).eq("track_stock", true).order("name"),
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
-      supabase.from("purchase_orders").select("id,order_number,status,ordered_at,total_amount,supplier:suppliers(name),location:stock_locations(name),items:purchase_order_items(id,quantity,received_quantity,unit_cost,product:products(name,sku))").eq("tenant_id", workspace.tenant_id).order("ordered_at", { ascending: false }).limit(100),
+      supabase.from("purchase_orders").select("id,order_number,status,ordered_at,total_amount,supplier:suppliers(name),location:stock_locations(name),items:purchase_order_items(id,quantity,received_quantity,unit_cost,product:products(name,sku,track_lots))").eq("tenant_id", workspace.tenant_id).order("ordered_at", { ascending: false }).limit(100),
       supabase.from("stock_reorder_thresholds").select("product_id,location_id,minimum_quantity").eq("tenant_id", workspace.tenant_id),
       supabase.from("stock_balances").select("product_id,location_id,quantity_on_hand").eq("tenant_id", workspace.tenant_id),
     ]);
@@ -153,6 +153,10 @@ export default async function PurchasingPage({ searchParams }: {
                           <input name="quantity" type="number" min="0" max={remaining} step="0.001" defaultValue={remaining} />
                         </label>
                       </div>;
+                      {line.product?.track_lots && remaining > 0 ? <div className="catalog-fields">
+                        <label>Numéro de lot<input name="lot_code" required maxLength={80} placeholder="N° du lot fournisseur" /></label>
+                        <label>Date de péremption<input name="expiry_date" type="date" required /></label>
+                      </div> : <><input type="hidden" name="lot_code" value="" /><input type="hidden" name="expiry_date" value="" /></>}
                     })}
                     <button className="archive-button" type="submit">Enregistrer la réception</button>
                   </form>}</td>
