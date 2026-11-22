@@ -115,7 +115,7 @@ export async function checkoutSale(formData: FormData) {
   });
   if (normalizedPayments.some((payment) => payment === null)) fail("payment");
 
-  const { error } = await supabase.rpc("finalize_sale", {
+  const { data: saleId, error } = await supabase.rpc("finalize_sale", {
     p_tenant_id: tenantId,
     p_location_id: locationId,
     p_cash_session_id: sessionId,
@@ -123,8 +123,8 @@ export async function checkoutSale(formData: FormData) {
     p_items: normalizedItems,
     p_payments: normalizedPayments,
   });
-  if (error) fail("checkout");
+  if (error || !validUuid(String(saleId ?? ""))) fail("checkout");
   revalidatePath("/app/pos");
   revalidatePath("/app/stock");
-  redirect("/app/pos?sold=1");
+  redirect(`/app/pos/receipt/${saleId}`);
 }
