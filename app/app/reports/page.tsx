@@ -11,6 +11,7 @@ type TopProduct = {
   gross_margin: number | null; costed_lines: number; total_lines: number;
 };
 type RecentSale = { id: string; total: number; completed_at: string };
+type DailySale = { day: string; revenue: number; sales_count: number };
 type Report = {
   revenue: number; sales_count: number; average_ticket: number;
   costed_revenue: number; cost_of_goods_sold: number; gross_margin: number;
@@ -49,6 +50,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     && endExclusive > start && endExclusive.getTime()-start.getTime() <= 366*24*60*60*1000;
 
   let report: Report | null = null;
+  let dailySales: DailySale[] = [];
   let reportError = false;
   if (validRange) {
     const { data, error } = await supabase.rpc("get_tenant_management_report", {
@@ -57,7 +59,15 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       p_to: endExclusive.toISOString(),
     });
     if (error) reportError = true;
-    else report = data as unknown as Report;
+    else {
+      report = data as unknown as Report;
+      const trend = await supabase.rpc("get_tenant_sales_trend", {
+        p_tenant_id: tenant.tenant_id,
+        p_from: start.toISOString(),
+        p_to: endExclusive.toISOString(),
+      });
+      if (!trend.error && Array.isArray(trend.data)) dailySales = trend.data as DailySale[];
+    }
   }
 
   const exportHref = "/app/reports/export?tenant_id=" + encodeURIComponent(tenant.tenant_id)
@@ -100,6 +110,26 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           </div>
 
           {report.uncosted_lines > 0 && <p className="catalog-help">Attention : {report.uncosted_lines} ligne(s) de vente n&apos;ont pas de coût d&apos;achat historique connu. La marge affichée porte uniquement sur les lignes valorisées ({costCoverage}% du chiffre d&apos;affaires). Les anciennes ventes ne sont pas recalculées avec un coût estimé.</p>}
+
+          <section className="report-section">
+            <h2>Évolution quotidienne du chiffre d&apos;affaires</h2>
+            {dailySales.length ? (() => {
+              const peak = Math.max(1, ...dailySales.map((item) => Number(item.revenue ?? 0)));
+              return <div style={{ overflowX: "auto", padding: "12px 0" }}>
+                <div role="img" aria-label="Histogramme du chiffre d'affaires quotidien" style={{ display: "grid", gridTemplateColumns: `repeat(${dailySales.length}, minmax(24px, 1fr))`, gap: "6px", alignItems: "end", minWidth: `${dailySales.length * 30}px`, height: "220px", borderBottom: "1px solid var(--border, #d1d5db)" }}>
+                  {dailySales.map((item) => {
+                    const value = Number(item.revenue ?? 0);
+                    const height = value > 0 ? Math.max(3, Math.round((value / peak) * 170)) : 2;
+                    return <div key={item.day} title={new Date(item.day + "T12:00:00").toLocaleDateString("fr-FR") + " : " + money(value) + " (" + item.sales_count + " ventes)"} style={{ display: "flex", flexDirection: "column", justifyContent: "end", alignItems: "center", height: "100%", gap: "5px" }}>
+                      <div style={{ width: "100%", height: height + "px", background: "var(--accent, #16845b)", borderRadius: "4px 4px 0 0" }} />
+                      <small style={{ fontSize: "10px", color: "var(--muted, #64748b)", whiteSpace: "nowrap" }}>{new Date(item.day + "T12:00:00").getDate()}</small>
+                    </div>;
+                  })}
+                </div>
+                <p className="catalog-help">Chaque barre représente le chiffre d&apos;affaires d&apos;une journée. Survolez une barre pour voir le montant et le nombre de ventes.</p>
+              </div>;
+            })() : <p className="catalog-empty">Aucune donnée quotidienne disponible sur cette période.</p>}
+          </section>
 
           <section className="report-section">
             <h2>Produits les plus rentables</h2>
