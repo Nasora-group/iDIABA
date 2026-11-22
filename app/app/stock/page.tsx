@@ -69,6 +69,7 @@ export default async function StockPage({ searchParams }: {
       movements,
       balances,
       thresholds,
+      configuredThresholds,
       reorderAlerts,
       error: productResult.error?.message ?? locationResult.error?.message ?? movementResult.error?.message ?? balanceResult.error?.message ?? thresholdResult.error?.message ?? null,
     };
