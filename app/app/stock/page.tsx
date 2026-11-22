@@ -11,7 +11,8 @@ type Movement = {
   product: { name: string; sku: string; unit: string } | null;
   location: { name: string; code: string } | null;
 };
-type Balance = { product_id: string; location_id: string; quantity_on_hand: string | number };\ntype Threshold = { product_id: string; location_id: string; minimum_quantity: string | number };
+type Balance = { product_id: string; location_id: string; quantity_on_hand: string | number };
+type Threshold = { product_id: string; location_id: string; minimum_quantity: string | number };
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,8 @@ export default async function StockPage({ searchParams }: {
       supabase.from("products").select("id,name,sku,unit,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
       supabase.from("stock_locations").select("id,name,code,location_type,address,phone,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
       supabase.from("stock_movements").select("id,movement_type,quantity_delta,reference,note,created_at,product:products(name,sku,unit),location:stock_locations(name,code)").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(500),
-      supabase.from("stock_balances").select("product_id,location_id,quantity_on_hand").eq("tenant_id", workspace.tenant_id),\n      supabase.from("stock_reorder_thresholds").select("product_id,location_id,minimum_quantity").eq("tenant_id", workspace.tenant_id),
+      supabase.from("stock_balances").select("product_id,location_id,quantity_on_hand").eq("tenant_id", workspace.tenant_id),
+      supabase.from("stock_reorder_thresholds").select("product_id,location_id,minimum_quantity").eq("tenant_id", workspace.tenant_id),
     ]);
     const allProducts = (productResult.data ?? []) as Product[];
     const allLocations = (locationResult.data ?? []) as Location[];
@@ -65,7 +67,8 @@ export default async function StockPage({ searchParams }: {
         <p className="eyebrow">SPRINT 3 · STOCKS</p>
         <h1>Gestion des stocks</h1>
         <p className="lead">Suivez les dépôts, les entrées, les sorties et l&apos;historique des mouvements. Le stock disponible est calculé sur l&apos;ensemble du journal, sans limite sur le nombre de mouvements.</p>
-        {params.created && <p className="form-success">Enregistrement effectué.</p>}\n        {params.threshold && <p className="form-success">Seuil d’alerte enregistré.</p>}
+        {params.created && <p className="form-success">Enregistrement effectué.</p>}
+        {params.threshold && <p className="form-success">Seuil d’alerte enregistré.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les droits et le stock disponible.</p>}
         {!stockData.length && <p>Aucun espace entreprise associé à ce compte.</p>}
         {stockData.map(({ workspace, products, locations, movements, balances, thresholds, reorderAlerts, error }) => (
