@@ -49,7 +49,7 @@ export default async function StockPage({ searchParams }: {
       .sort((a, b) => a.product.name.localeCompare(b.product.name));
     const thresholds = (thresholdResult.data ?? []) as Threshold[];
     const quantityByKey = new Map(balances.map((balance) => [balance.location.id + ":" + balance.product.id, balance.quantity]));
-    const reorderAlerts = thresholds.flatMap((threshold) => {
+    const configuredThresholds = thresholds.flatMap((threshold) => {\n      const product = productsById.get(threshold.product_id);\n      const location = locationsById.get(threshold.location_id);\n      return product && location ? [{ product, location, minimum: Number(threshold.minimum_quantity) }] : [];\n    }).sort((a, b) => a.product.name.localeCompare(b.product.name));\n    const reorderAlerts = thresholds.flatMap((threshold) => {
       const product = productsById.get(threshold.product_id);
       const location = locationsById.get(threshold.location_id);
       const quantity = quantityByKey.get(threshold.location_id + ":" + threshold.product_id) ?? 0;
@@ -83,7 +83,7 @@ export default async function StockPage({ searchParams }: {
         {params.threshold && <p className="form-success">Seuil d’alerte enregistré.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les droits et le stock disponible.</p>}
         {!stockData.length && <p>Aucun espace entreprise associé à ce compte.</p>}
-        {stockData.map(({ workspace, products, locations, movements, balances, thresholds, reorderAlerts, error }) => (
+        {stockData.map(({ workspace, products, locations, movements, balances, thresholds, configuredThresholds, reorderAlerts, error }) => (
           <section className="catalog-tenant" key={workspace.tenant_id}>
             <div className="catalog-heading">
               <div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>Rôle : {workspace.role}</p></div>
@@ -126,6 +126,10 @@ export default async function StockPage({ searchParams }: {
               <p className="catalog-help">Saisissez 0 pour supprimer le seuil. Les alertes s’affichent lorsque le stock est inférieur ou égal au seuil.</p>
               <button className="secondary" type="submit" disabled={!products.length || !locations.length}>Enregistrer le seuil</button>
             </form>
+            <div className="catalog-table-wrap">
+              <h3>Seuils configurés</h3>
+              {configuredThresholds.length ? <table className="catalog-table"><thead><tr><th>Produit</th><th>Dépôt</th><th>Minimum</th></tr></thead><tbody>{configuredThresholds.map((item) => <tr key={item.product.id + item.location.id}><td><strong>{item.product.name}</strong><small>{item.product.sku}</small></td><td>{item.location.name}</td><td>{item.minimum.toLocaleString("fr-FR",{maximumFractionDigits:3})} {item.product.unit}</td></tr>)}</tbody></table> : <p className="catalog-empty">Aucun seuil configuré.</p>}
+            </div>
             <div className="catalog-table-wrap stock-alerts">
               <h3>Alertes de réapprovisionnement</h3>
               {reorderAlerts.length ? <table className="catalog-table"><thead><tr><th>Produit</th><th>Dépôt</th><th>Stock actuel</th><th>Seuil</th><th>À commander au minimum</th></tr></thead><tbody>{reorderAlerts.map((alert) => <tr key={alert.product.id + alert.location.id}><td><strong>{alert.product.name}</strong><small>{alert.product.sku}</small></td><td>{alert.location.name}</td><td><span className="stock-alert-quantity">{alert.quantity.toLocaleString("fr-FR",{maximumFractionDigits:3})} {alert.product.unit}</span></td><td>{alert.minimum.toLocaleString("fr-FR",{maximumFractionDigits:3})} {alert.product.unit}</td><td>{Math.max(0,alert.minimum-alert.quantity).toLocaleString("fr-FR",{maximumFractionDigits:3})} {alert.product.unit}</td></tr>)}</tbody></table> : <p className="catalog-empty">{thresholds.length ? "Aucun produit n’a atteint son seuil." : "Définissez les seuils minimum pour activer les alertes."}</p>}
