@@ -143,3 +143,33 @@ export async function restoreProduct(formData: FormData) {
   revalidatePath("/app/stock");
   redirect("/app/products?restored=1");
 }
+
+export async function updateCategory(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const tenantId = validTenantId(formData.get("tenant_id"));
+  const categoryId = String(formData.get("category_id") ?? "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(categoryId)) redirect("/app/products?error=validation");
+  const name = requiredText(formData.get("name"), "Le nom de la catégorie", 80);
+  const description = String(formData.get("description") ?? "").trim().slice(0, 500);
+  const { error } = await supabase.from("product_categories").update({ name, description }).eq("id", categoryId).eq("tenant_id", tenantId);
+  if (error) redirect("/app/products?error=category_update");
+  revalidatePath("/app/products");
+  redirect("/app/products?categoryUpdated=1");
+}
+
+export async function setCategoryActive(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const tenantId = validTenantId(formData.get("tenant_id"));
+  const categoryId = String(formData.get("category_id") ?? "");
+  const active = String(formData.get("active") ?? "") === "true";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(categoryId)) redirect("/app/products?error=validation");
+  const { error } = await supabase.from("product_categories").update({ is_active: active }).eq("id", categoryId).eq("tenant_id", tenantId);
+  if (error) redirect("/app/products?error=category_update");
+  revalidatePath("/app/products");
+  revalidatePath("/app/pos");
+  redirect(active ? "/app/products?categoryRestored=1" : "/app/products?categoryArchived=1");
+}
