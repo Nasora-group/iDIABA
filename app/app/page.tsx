@@ -142,7 +142,7 @@ export default async function AppHome() {
               </article>
             ))}
           </div>
-        ) : <p className="catalog-empty">Aucun espace entreprise n'est encore associé à ce compte.</p>}
+        ) : <p className="catalog-empty">Aucun espace entreprise n&apos;est encore associé à ce compte.</p>}
       </section>
     </main>
   );
