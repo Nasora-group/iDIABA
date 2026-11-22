@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { archiveProduct, createCategory, createProduct, restoreProduct, updateProduct } from "./actions";
+import { archiveProduct, createCategory, createProduct, restoreProduct, updateProduct, setCategoryActive, updateCategory } from "./actions";
 
 type Workspace = {
   tenant_id: string;
   role: string;
   tenant: { id: string; name: string; slug: string } | null;
 };
-type Category = { id: string; name: string };
+type Category = { id: string; name: string; description: string; is_active: boolean };
 type Product = {
   id: string;
   name: string;
@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ created?: string; updated?: string; archived?: string; restored?: string; error?: string }>;
+  searchParams: Promise<{ created?: string; updated?: string; archived?: string; restored?: string; categoryUpdated?: string; categoryArchived?: string; categoryRestored?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -42,7 +42,7 @@ export default async function ProductsPage({
 
   const catalogs = await Promise.all(workspaces.map(async (workspace) => {
     const [categoryResult, productResult] = await Promise.all([
-      supabase.from("product_categories").select("id,name").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
+      supabase.from("product_categories").select("id,name,description,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
       supabase.from("products").select("id,name,sku,barcode,category_id,unit,purchase_price,sale_price,tax_rate,is_active,category:product_categories(name)").eq("tenant_id", workspace.tenant_id).order("name"),
     ]);
     return {
@@ -66,7 +66,10 @@ export default async function ProductsPage({
         {params.created && <p className="form-success">Enregistrement effectué.</p>}
         {params.updated && <p className="form-success">Produit mis à jour.</p>}
         {params.archived && <p className="form-success">Produit archivé. Son historique est conservé.</p>}
-        {params.restored && <p className="form-success">Produit réactivé.</p>}
+        {params.restored && <p className="form-success">Produit réactivé.</p>
+        {params.categoryUpdated && <p className="form-success">Catégorie mise à jour.</p>
+        {params.categoryArchived && <p className="form-success">Catégorie archivée; les produits associés sont conservés.</p>
+        {params.categoryRestored && <p className="form-success">Catégorie réactivée.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les doublons SKU/code-barres et vos droits d&apos;accès.</p>}
         {membershipError && <p className="form-error">Impossible de charger les espaces entreprise.</p>}
         {!catalogs.length && <p>Aucun espace entreprise n&apos;est associé à ce compte.</p>}
@@ -87,7 +90,7 @@ export default async function ProductsPage({
                   <label>Code-barres<input name="barcode" maxLength={80} placeholder="Optionnel" /></label>
                 </div>
                 <div className="catalog-fields">
-                  <label>Catégorie<select name="category_id" defaultValue=""><option value="">Sans catégorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+                  <label>Catégorie<select name="category_id" defaultValue=""><option value="">Sans catégorie</option>{categories.filter((category) => category.is_active).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
                   <label>Unité<input name="unit" required maxLength={24} defaultValue="unité" /></label>
                 </div>
                 <div className="catalog-fields">
@@ -103,8 +106,12 @@ export default async function ProductsPage({
                 <label>Nom<input name="name" required maxLength={80} placeholder="Ex. Épicerie" /></label>
                 <label>Description<input name="description" maxLength={500} placeholder="Optionnel" /></label>
                 <button className="secondary" type="submit">Ajouter la catégorie</button>
-                <p className="catalog-help">{categories.length} catégorie(s) active(s)</p>
+                <p className="catalog-help">{categories.filter((category) => category.is_active).length} catégorie(s) active(s)</p>
               </form>
+            </div>
+            <div className="catalog-table-wrap category-management">
+              <h3>Catégories</h3>
+              {categories.length ? <table className="catalog-table"><thead><tr><th>Nom</th><th>Description</th><th>État</th><th>Actions</th></tr></thead><tbody>{categories.map((category) => <tr key={category.id}><td><strong>{category.name}</strong></td><td>{category.description || "—"}</td><td>{category.is_active ? "Active" : "Archivée"}</td><td><details className="category-edit-details"><summary>Modifier</summary><form action={updateCategory} className="catalog-form category-edit-form"><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="category_id" value={category.id} /><label>Nom<input name="name" defaultValue={category.name} required maxLength={80} /></label><label>Description<input name="description" defaultValue={category.description} maxLength={500} /></label><button className="secondary" type="submit">Enregistrer</button></form></details>{category.is_active ? <form action={setCategoryActive}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="category_id" value={category.id} /><input type="hidden" name="active" value="false" /><button className="archive-button" type="submit">Archiver</button></form> : <form action={setCategoryActive}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="category_id" value={category.id} /><input type="hidden" name="active" value="true" /><button className="secondary" type="submit">Réactiver</button></form>}</td></tr>)}</tbody></table> : <p className="catalog-empty">Aucune catégorie enregistrée.</p>}
             </div>
             <div className="catalog-table-wrap">
               <h3>Références enregistrées</h3>
