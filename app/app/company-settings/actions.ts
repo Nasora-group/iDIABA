@@ -11,7 +11,7 @@ const allowedBusinessTypes = new Set([
 const coreModules = ["catalog", "sales", "stock", "purchases", "customers", "cash", "reports"];
 const optionalModules = new Set([
   "inventory", "locations", "transfers", "supplier_invoices",
-  "accounting", "audit", "online_store",
+  "accounting", "audit",
 ]);
 
 export async function updateCompanySettings(formData: FormData) {
