@@ -125,7 +125,7 @@ export default async function StockPage({ searchParams }: {
             <form action={setStockAlertThreshold} className="catalog-form stock-threshold-form">
               <h3>Définir un seuil d’alerte</h3>
               <input type="hidden" name="tenant_id" value={workspace.tenant_id} />
-              <label>Produit<select name="product_id" required defaultValue=""><option value="" disabled>Choisir un produit</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>}</select></label>
+              <label>Produit<select name="product_id" required defaultValue=""><option value="" disabled>Choisir un produit</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</select></label>
               <label>Dépôt<select name="location_id" required defaultValue=""><option value="" disabled>Choisir un dépôt</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name} · {location.code}</option>)}</select></label>
               <label>Quantité minimum<input name="minimum_quantity" type="number" min="0" step="0.001" required placeholder="Ex. 5" /></label>
               <p className="catalog-help">Saisissez 0 pour supprimer le seuil. Les alertes s’affichent lorsque le stock est inférieur ou égal au seuil.</p>
