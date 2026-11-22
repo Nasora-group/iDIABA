@@ -47,13 +47,25 @@ export default async function StockPage({ searchParams }: {
         return product && location ? [{ product, location, quantity: Number(balance.quantity_on_hand) }] : [];
       })
       .sort((a, b) => a.product.name.localeCompare(b.product.name));
+    const thresholds = (thresholdResult.data ?? []) as Threshold[];
+    const quantityByKey = new Map(balances.map((balance) => [balance.location.id + ":" + balance.product.id, balance.quantity]));
+    const reorderAlerts = thresholds.flatMap((threshold) => {
+      const product = productsById.get(threshold.product_id);
+      const location = locationsById.get(threshold.location_id);
+      const quantity = quantityByKey.get(threshold.location_id + ":" + threshold.product_id) ?? 0;
+      const minimum = Number(threshold.minimum_quantity);
+      return product && location && product.is_active && location.is_active && quantity <= minimum
+        ? [{ product, location, quantity, minimum }] : [];
+    }).sort((a, b) => a.quantity - b.quantity);
     return {
       workspace,
       products: allProducts.filter((product) => product.is_active),
       locations: allLocations.filter((location) => location.is_active),
       movements,
       balances,
-      error: productResult.error?.message ?? locationResult.error?.message ?? movementResult.error?.message ?? balanceResult.error?.message ?? null,
+      thresholds,
+      reorderAlerts,
+      error: productResult.error?.message ?? locationResult.error?.message ?? movementResult.error?.message ?? balanceResult.error?.message ?? thresholdResult.error?.message ?? null,
     };
   }));
 
