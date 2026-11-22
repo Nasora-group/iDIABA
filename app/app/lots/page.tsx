@@ -5,7 +5,7 @@ import { receiveStockLot } from "./actions";
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
 type Product = { id: string; name: string; sku: string; unit: string; track_lots: boolean };
 type Location = { id: string; name: string; code: string };
-type Lot = { id: string; product_id: string; location_id: string; lot_code: string; expiry_date: string; received_at: string };
+type Lot = { id: string; product_id: string; location_id: string; lot_code: string; expiry_date: string; received_at: string; is_quarantined: boolean };
 type LotBalance = { lot_id: string; quantity_on_hand: string | number };
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ export default async function LotsPage({ searchParams }: {
         .eq("tenant_id", workspace.tenant_id).eq("track_stock", true).eq("is_active", true).order("name"),
       supabase.from("stock_locations").select("id,name,code")
         .eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
-      supabase.from("stock_lots").select("id,product_id,location_id,lot_code,expiry_date,received_at")
+      supabase.from("stock_lots").select("id,product_id,location_id,lot_code,expiry_date,received_at,is_quarantined")
         .eq("tenant_id", workspace.tenant_id).order("expiry_date").limit(500),
       supabase.from("stock_lot_balances").select("lot_id,quantity_on_hand").eq("tenant_id", workspace.tenant_id),
     ]);
@@ -98,7 +98,7 @@ export default async function LotsPage({ searchParams }: {
                       <td>{lot.lot_code}</td><td>{lot.location?.name}</td>
                       <td>{new Date(lot.expiry_date + "T00:00:00").toLocaleDateString("fr-FR")}</td>
                       <td><strong>{lot.quantity.toLocaleString("fr-FR",{maximumFractionDigits:3})} {lot.product?.unit}</strong></td>
-                      <td>{lot.daysLeft < 0 ? <span className="stock-alert-quantity">Périmé</span> : lot.daysLeft <= 30 ? <span className="stock-alert-quantity">Expire dans {lot.daysLeft} j</span> : <span className="pill">Valide</span>}</td>
+                      <td>{lot.is_quarantined ? <span className="stock-alert-quantity">Quarantaine</span> : lot.daysLeft < 0 ? <span className="stock-alert-quantity">Périmé</span> : lot.daysLeft <= 30 ? <span className="stock-alert-quantity">Expire dans {lot.daysLeft} j</span> : <span className="pill">Valide</span>}</td>
                     </tr>
                   ))}</tbody>
                 </table>
