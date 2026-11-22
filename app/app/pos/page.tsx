@@ -28,10 +28,18 @@ export default async function POSPage({ searchParams }: {
   const workspaces = (memberships ?? []) as unknown as Workspace[];
 
   const data = await Promise.all(workspaces.map(async (workspace) => {
+    let openSessionsQuery = supabase.from("cash_sessions")
+      .select("id,tenant_id,location_id,opening_cash,opened_at,location:stock_locations(name,code)")
+      .eq("tenant_id", workspace.tenant_id)
+      .eq("status", "open");
+    // Managers can reconcile all sessions in their assigned locations; cashiers see only their own.
+    if (!["owner", "admin", "manager"].includes(workspace.role)) {
+      openSessionsQuery = openSessionsQuery.eq("opened_by", user.id);
+    }
     const [locationsResult, productsResult, sessionsResult, closedResult, salesResult, movementResult] = await Promise.all([
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("location_type", "store").eq("is_active", true).order("name"),
       supabase.from("products").select("id,name,sku,barcode,unit,product_kind,track_stock,sale_price,tax_rate,is_active").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
-      supabase.from("cash_sessions").select("id,tenant_id,location_id,opening_cash,opened_at,location:stock_locations(name,code)").eq("tenant_id", workspace.tenant_id).eq("opened_by", user.id).eq("status", "open").order("opened_at", { ascending: false }),
+      openSessionsQuery.order("opened_at", { ascending: false }),
       supabase.from("cash_sessions").select("id,opening_cash,expected_cash,closing_cash,cash_variance,opened_at,closed_at,location:stock_locations(name)").eq("tenant_id", workspace.tenant_id).eq("status", "closed").order("closed_at", { ascending: false }).limit(10),
       supabase.from("sales").select("id,total,subtotal,tax_total,created_at,cashier:profiles(full_name)").eq("tenant_id", workspace.tenant_id).eq("status", "completed").order("created_at", { ascending: false }).limit(20),
       supabase.from("cash_movements").select("id,cash_session_id,movement_type,amount,reason,created_at").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(50),
