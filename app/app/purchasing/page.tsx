@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { createPurchaseOrder, createSupplier, receivePurchaseOrder } from "./actions";
+import { createPurchaseOrder, createSupplier, receivePurchaseOrder, setSupplierActive, updateSupplier } from "./actions";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
-type Supplier = { id: string; name: string; phone: string; contact_name: string; is_active: boolean };
+type Supplier = { id: string; name: string; phone: string; contact_name: string; email: string; address: string; notes: string; is_active: boolean };
 type Product = { id: string; name: string; sku: string; purchase_price: string | number };
 type Location = { id: string; name: string; code: string };
 type Order = {
@@ -15,7 +15,7 @@ type OrderLine = { id: string; quantity: string | number; received_quantity: str
 export const dynamic = "force-dynamic";
 
 export default async function PurchasingPage({ searchParams }: {
-  searchParams: Promise<{ created?: string; received?: string; error?: string }>;
+  searchParams: Promise<{ created?: string; received?: string; updated?: string; archived?: string; restored?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -27,7 +27,7 @@ export default async function PurchasingPage({ searchParams }: {
 
   const data = await Promise.all(workspaces.map(async (workspace) => {
     const [supplierResult, productResult, locationResult, orderResult] = await Promise.all([
-      supabase.from("suppliers").select("id,name,phone,contact_name,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
+      supabase.from("suppliers").select("id,name,phone,contact_name,email,address,notes,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
       supabase.from("products").select("id,name,sku,purchase_price").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       supabase.from("purchase_orders").select("id,order_number,status,ordered_at,total_amount,supplier:suppliers(name),location:stock_locations(name),items:purchase_order_items(id,quantity,received_quantity,unit_cost,product:products(name,sku))").eq("tenant_id", workspace.tenant_id).order("ordered_at", { ascending: false }).limit(100),
@@ -56,6 +56,9 @@ export default async function PurchasingPage({ searchParams }: {
         <p className="lead">Centralisez vos fournisseurs, préparez des commandes multi-articles et réceptionnez les marchandises en une ou plusieurs fois.</p>
         {params.created && <p className="form-success">{params.created === "supplier" ? "Fournisseur enregistré." : "Commande d'achat créée."}</p>}
         {params.received && <p className="form-success">Réception enregistrée. Les quantités reçues ont été ajoutées au stock et la commande mise à jour.</p>}
+        {params.updated && <p className="form-success">Fournisseur mis à jour.</p>}
+        {params.archived && <p className="form-success">Fournisseur archivé. Les commandes existantes sont conservées.</p>}
+        {params.restored && <p className="form-success">Fournisseur réactivé.</p>}
         {params.error && <p className="form-error">{params.error === "lines" ? "Vérifiez les produits, quantités et coûts de chaque ligne. Un produit ne peut apparaître qu'une fois." : params.error === "receipt" ? "Aucune quantité valide à réceptionner, ou quantité supérieure au reliquat." : "Opération impossible. Vérifiez les informations, les droits et les références sélectionnées."}</p>}
         {!data.length && <p>Aucun espace entreprise associé à ce compte.</p>}
         {data.map(({ workspace, suppliers, products, locations, orders, error }) => (
@@ -94,7 +97,7 @@ export default async function PurchasingPage({ searchParams }: {
             </div>
             <div className="catalog-table-wrap">
               <h3>Fournisseurs enregistrés</h3>
-              {suppliers.length ? <table className="catalog-table"><thead><tr><th>Fournisseur</th><th>Contact</th><th>Téléphone</th><th>État</th></tr></thead><tbody>{suppliers.map((supplier) => <tr key={supplier.id}><td><strong>{supplier.name}</strong></td><td>{supplier.contact_name || "—"}</td><td>{supplier.phone || "—"}</td><td>{supplier.is_active ? "Actif" : "Archivé"}</td></tr>)}</tbody></table> : <p className="catalog-empty">Aucun fournisseur enregistré.</p>}
+              {suppliers.length ? <table className="catalog-table"><thead><tr><th>Fournisseur</th><th>Contact</th><th>Téléphone</th><th>E-mail</th><th>État</th><th>Actions</th></tr></thead><tbody>{suppliers.map((supplier) => <tr key={supplier.id}><td><strong>{supplier.name}</strong><small>{supplier.address || "—"}</small></td><td>{supplier.contact_name || "—"}</td><td>{supplier.phone || "—"}</td><td>{supplier.email || "—"}</td><td>{supplier.is_active ? "Actif" : "Archivé"}</td><td><details className="supplier-edit-details"><summary>Modifier</summary><form action={updateSupplier} className="catalog-form supplier-edit-form"><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="supplier_id" value={supplier.id} /><label>Nom<input name="name" defaultValue={supplier.name} required maxLength={160} /></label><label>Contact<input name="contact_name" defaultValue={supplier.contact_name} maxLength={120} /></label><div className="catalog-fields"><label>Téléphone<input name="phone" defaultValue={supplier.phone} maxLength={40} /></label><label>E-mail<input name="email" type="email" defaultValue={supplier.email} maxLength={160} /></label></div><label>Adresse<input name="address" defaultValue={supplier.address} maxLength={500} /></label><label>Notes<input name="notes" defaultValue={supplier.notes} maxLength={1000} /></label><button className="secondary" type="submit">Enregistrer</button></form></details>{supplier.is_active ? <form action={setSupplierActive}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="supplier_id" value={supplier.id} /><input type="hidden" name="active" value="false" /><button className="archive-button" type="submit">Archiver</button></form> : <form action={setSupplierActive}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="supplier_id" value={supplier.id} /><input type="hidden" name="active" value="true" /><button className="secondary" type="submit">Réactiver</button></form>}</td></tr>)}</tbody></table> : <p className="catalog-empty">Aucun fournisseur enregistré.</p>}
             </div>
             <div className="catalog-table-wrap">
               <h3>Commandes d&apos;achat</h3>
