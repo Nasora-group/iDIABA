@@ -1,30 +1,46 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, Boxes, ChartNoAxesCombined, ClipboardList, CreditCard, Package, ShoppingCart, ShieldCheck, Users } from "lucide-react";
+import {
+  ArrowUpRight, BarChart3, Boxes, ClipboardList, CreditCard,
+  Package, ShoppingCart, Users, Warehouse, Settings2, FileText, ShieldCheck,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 type Membership = {
+  tenant_id: string;
   role: string;
   tenant: { id: string; name: string; slug: string } | null;
 };
+type BusinessProfile = { tenant_id: string; business_type: string; enabled_modules: string[] };
 
-const modules = [
-  { title: "Catalogue produits", description: "Références, catégories, prix et codes-barres.", href: "/app/products", action: "Gérer les produits", icon: Package },
-  { title: "Stocks & dépôts", description: "Stocks disponibles, dépôts et journal des mouvements.", href: "/app/stock", action: "Consulter les stocks", icon: Boxes },
-  { title: "Accès par établissement", description: "Affectez les employés à leurs boutiques et dépôts.", href: "/app/locations", action: "Gérer les accès", icon: Users },
-  { title: "Transferts de stock", description: "Expédiez et réceptionnez les marchandises entre vos boutiques et dépôts.", href: "/app/transfers", action: "Gérer les transferts", icon: Boxes },
-  { title: "Caisse & ventes", description: "Encaissements, paiements multiples et clôture de caisse.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
-  { title: "Achats & fournisseurs", description: "Commandes fournisseurs et réceptions de marchandises.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
-  { title: "Factures fournisseurs", description: "Dettes, échéances et règlements partiels ou complets.", href: "/app/supplier-invoices", action: "Suivre les factures", icon: ClipboardList },
-  { title: "Comptabilité", description: "Dépenses, écritures et balance comptable.", href: "/app/accounting", action: "Voir la comptabilité", icon: ChartNoAxesCombined },
-  { title: "Inventaires physiques", description: "Comptez les articles, contrôlez les écarts et ajustez le stock de façon tracée.", href: "/app/inventory", action: "Gérer les inventaires", icon: ClipboardList },
-  { title: "Clients & retours", description: "Fichier clients, historique des tickets, retours partiels et avoirs.", href: "/app/customers", action: "Gérer les clients", icon: Users },
-  { title: "Utilisateurs & équipe", description: "Ajoutez des employés et gérez leurs rôles et accès.", href: "/app/team", action: "Gérer l’équipe", icon: Users },
-  { title: "Accès boutiques", description: "Affectez chaque employé aux boutiques et dépôts autorisés.", href: "/app/locations", action: "Gérer les accès par site", icon: ShieldCheck },
-  { title: "Abonnements & limites", description: "Formules, volumes et demandes de changement par entreprise.", href: "/app/subscription", action: "Gérer l’abonnement", icon: CreditCard },
-  { title: "Paramètres entreprise", description: "Identité, RCCM, NINEA, coordonnées, devise et TVA par défaut.", href: "/app/company-settings", action: "Configurer l’entreprise", icon: ShieldCheck },
+const sectorNames: Record<string, string> = {
+  general: "Commerce général", grocery: "Alimentation et supermarché",
+  hardware: "Quincaillerie et matériaux", fashion: "Mode et habillement",
+  pharmacy: "Pharmacie et parapharmacie", restaurant: "Restauration",
+  auto_parts: "Pièces détachées et automobile", electronics: "Électronique et informatique",
+  beauty: "Beauté et cosmétiques", wholesale: "Grossiste et distribution",
+  services: "Prestations de services", other: "Autre activité",
+};
+
+const coreModules = [
+  { title: "Caisse et ventes", description: "Encaisser, imprimer les tickets et suivre les ventes.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
+  { title: "Catalogue", description: "Produits, services, catégories, références et tarifs.", href: "/app/products", action: "Gérer le catalogue", icon: Package },
+  { title: "Stocks", description: "Disponibilités, mouvements et seuils de réapprovisionnement.", href: "/app/stock", action: "Voir les stocks", icon: Boxes },
+  { title: "Achats", description: "Fournisseurs, commandes et réceptions.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
+  { title: "Clients", description: "Fiches clients, historique et retours.", href: "/app/customers", action: "Voir les clients", icon: Users },
+  { title: "Rapports", description: "Chiffre d’affaires, marges et activité commerciale.", href: "/app/reports", action: "Consulter les rapports", icon: BarChart3 },
+];
+
+const managementModules = [
+  { title: "Inventaires", description: "Comptages et ajustements contrôlés.", href: "/app/inventory", action: "Gérer", icon: ClipboardList },
+  { title: "Boutiques et dépôts", description: "Organiser plusieurs établissements.", href: "/app/locations", action: "Gérer", icon: Warehouse },
+  { title: "Transferts", description: "Déplacer les marchandises entre sites.", href: "/app/transfers", action: "Gérer", icon: Boxes },
+  { title: "Factures fournisseurs", description: "Échéances et règlements.", href: "/app/supplier-invoices", action: "Suivre", icon: FileText },
+  { title: "Comptabilité", description: "Dépenses, écritures et balance.", href: "/app/accounting", action: "Consulter", icon: BarChart3 },
+  { title: "Équipe", description: "Utilisateurs, rôles et autorisations.", href: "/app/team", action: "Gérer", icon: Users },
+  { title: "Paramètres", description: "Secteur, modules, identité et fiscalité.", href: "/app/company-settings", action: "Configurer", icon: Settings2 },
 ];
 
 export default async function AppHome() {
@@ -32,16 +48,21 @@ export default async function AppHome() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data, error } = await supabase
-    .from("tenant_memberships")
-    .select("role, tenant:tenants(id,name,slug)")
+  const { data, error } = await supabase.from("tenant_memberships")
+    .select("tenant_id,role,tenant:tenants(id,name,slug)")
     .eq("user_id", user.id);
-
   if (error) {
     return <main className="shell"><h1>Votre espace</h1><p className="form-error">Impossible de charger vos entreprises. Réessayez dans quelques instants.</p></main>;
   }
 
   const memberships = (data ?? []) as unknown as Membership[];
+  const tenantIds = memberships.map((membership) => membership.tenant_id);
+  const { data: profileData } = tenantIds.length
+    ? await supabase.from("tenant_business_profiles").select("tenant_id,business_type,enabled_modules").in("tenant_id", tenantIds)
+    : { data: [] as BusinessProfile[] };
+  const profiles = new Map(((profileData ?? []) as BusinessProfile[]).map((profile) => [profile.tenant_id, profile]));
+  const firstTenant = memberships.find((membership) => membership.tenant);
+  const firstProfile = firstTenant ? profiles.get(firstTenant.tenant_id) : undefined;
   const displayName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
   const canViewAudit = memberships.some((membership) => ["owner", "admin"].includes(membership.role));
 
@@ -50,23 +71,12 @@ export default async function AppHome() {
       <header className="topbar">
         <Link href="/app" className="brand"><span className="mark">i</span><span>iDIABA</span></Link>
         <nav className="app-actions" aria-label="Navigation principale">
-          <Link href="/app/products">Produits</Link>
-          <Link href="/app/stock">Stocks</Link>
-          <Link href="/app/locations">Établissements</Link>
-          <Link href="/app/transfers">Transferts</Link>
-          <Link href="/app/inventory">Inventaires</Link>
-          <Link href="/app/customers">Clients</Link>
           <Link href="/app/pos">Caisse</Link>
-          <Link href="/app/purchasing">Achats</Link>
-          <Link href="/app/supplier-invoices">Factures fournisseurs</Link>
-          <Link href="/app/accounting">Comptabilité</Link>
-          <Link href="/app/subscription">Abonnement</Link>
-          <Link href="/app/team">Équipe</Link>
-          <Link href="/app/company-settings">Entreprise</Link>
-          <Link href="/app/security">Sécurité</Link>
-          {canViewAudit && <Link href="/app/audit">Journal d’audit</Link>}
-          {canViewAudit && <Link href="/app/reports">Rapports</Link>}
-          {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin">Admin SaaS</Link>}
+          <Link href="/app/products">Catalogue</Link>
+          <Link href="/app/stock">Stocks</Link>
+          <Link href="/app/reports">Rapports</Link>
+          <Link href="/app/company-settings">Configuration</Link>
+          {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin">Administration SaaS</Link>}
           <form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form>
         </nav>
       </header>
@@ -74,28 +84,49 @@ export default async function AppHome() {
       <section className="workspace">
         <div className="app-welcome">
           <div>
-            <p className="eyebrow">VOTRE ESPACE DE GESTION</p>
+            <p className="eyebrow">VOTRE GESTION COMMERCIALE</p>
             <h1>Bonjour{displayName ? `, ${displayName}` : ""} 👋</h1>
-            <p className="lead">Retrouvez vos outils de gestion au même endroit. Sélectionnez un module pour commencer votre activité.</p>
+            <p className="lead">Toutes les opérations de votre commerce dans un seul espace, sur ordinateur comme sur téléphone.</p>
           </div>
           <span className="welcome-chip"><span aria-hidden="true">●</span> Espace sécurisé</span>
         </div>
 
+        {firstTenant?.tenant && (
+          <div className="business-context">
+            <div><span className="eyebrow">COMMERCE ACTIF</span><strong>{firstTenant.tenant.name}</strong></div>
+            <span className="pill">{sectorNames[firstProfile?.business_type ?? "general"] ?? "Commerce général"}</span>
+            <Link href="/app/company-settings">Modifier le profil <ArrowUpRight size={14} /></Link>
+          </div>
+        )}
+
         <div className="app-section-heading">
-          <div><p className="eyebrow">PILOTAGE QUOTIDIEN</p><h2>Vos modules</h2></div>
-          <p>Les données affichées sont celles de vos entreprises.</p>
+          <div><p className="eyebrow">OPÉRATIONS QUOTIDIENNES</p><h2>Accès rapide</h2></div>
+          <p>Les outils essentiels pour gérer votre activité.</p>
         </div>
         <div className="app-module-grid">
-          {modules.map(({ title, description, href, action, icon: Icon }) => (
+          {coreModules.map(({ title, description, href, action, icon: Icon }) => (
             <Link href={href} className="app-module-card" key={title}>
               <span className="app-module-icon"><Icon size={20} strokeWidth={1.9} /></span>
               <div><strong>{title}</strong><p>{description}</p></div>
               <span className="app-module-link">{action}<ArrowUpRight size={15} /></span>
             </Link>
           ))}
-          {canViewAudit && <Link href="/app/reports" className="app-module-card"><span className="app-module-icon"><ChartNoAxesCombined size={20} strokeWidth={1.9} /></span><div><strong>Rapports de gestion</strong><p>Chiffre d’affaires, dépenses, achats, retours et stock.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
-          {canViewAudit && <Link href="/app/audit" className="app-module-card"><span className="app-module-icon"><ShieldCheck size={20} strokeWidth={1.9} /></span><div><strong>Journal d’audit</strong><p>Traçabilité des créations, modifications et suppressions.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
-          {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin" className="app-module-card"><span className="app-module-icon"><CreditCard size={20} strokeWidth={1.9} /></span><div><strong>Administration iDIABA</strong><p>Tarifs, quotas et validation des abonnements.</p></div><span className="app-module-link">Ouvrir la console<ArrowUpRight size={15} /></span></Link>}
+        </div>
+
+        <div className="app-section-heading">
+          <div><p className="eyebrow">GESTION ET ADMINISTRATION</p><h2>Autres outils</h2></div>
+          <p>Activez et configurez les fonctions adaptées à votre organisation.</p>
+        </div>
+        <div className="app-module-grid">
+          {managementModules.map(({ title, description, href, action, icon: Icon }) => (
+            <Link href={href} className="app-module-card" key={title}>
+              <span className="app-module-icon"><Icon size={20} strokeWidth={1.9} /></span>
+              <div><strong>{title}</strong><p>{description}</p></div>
+              <span className="app-module-link">{action}<ArrowUpRight size={15} /></span>
+            </Link>
+          ))}
+          {canViewAudit && <Link href="/app/audit" className="app-module-card"><span className="app-module-icon"><ShieldCheck size={20} /></span><div><strong>Journal d’audit</strong><p>Historique des opérations sensibles et des modifications.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
+          {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin" className="app-module-card"><span className="app-module-icon"><CreditCard size={20} /></span><div><strong>Administration SaaS</strong><p>Abonnements, formules, quotas et entreprises.</p></div><span className="app-module-link">Ouvrir<ArrowUpRight size={15} /></span></Link>}
         </div>
 
         <div className="app-section-heading">
@@ -107,7 +138,7 @@ export default async function AppHome() {
             {memberships.filter((membership) => membership.tenant).map((membership) => (
               <article key={membership.tenant!.id} className="workspace-item">
                 <div><strong>{membership.tenant!.name}</strong><small>{membership.tenant!.slug}</small></div>
-                <span className="role">{membership.role}</span>
+                <span className="role">{sectorNames[profiles.get(membership.tenant_id)?.business_type ?? "general"] ?? "Commerce général"} · {membership.role}</span>
               </article>
             ))}
           </div>

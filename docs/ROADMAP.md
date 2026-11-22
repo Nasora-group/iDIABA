@@ -1,18 +1,38 @@
-# Roadmap
+# Roadmap — iDIABA commerce universel
 
-- Sprint 1 : authentification, entreprises, établissements, rôles et RLS.
-- Sprint 2 : catalogue produits, catégories et fournisseurs.
-- Sprint 3 : dépôts, mouvements de stock et soldes.
-- Sprint 4 : caisse, ventes, paiements et clôtures.
-- Sprint 5 : commandes fournisseurs et réceptions.
-- Sprint 6 : mouvements de caisse, dépenses et trésorerie.
-- Sprint 7 : comptabilité SYSCOHADA et balance.
-- Sprint 8 : inventaires physiques et ajustements contrôlés.
-- Sprint 9 : clients, historique et retours de ventes.
-- Sprint 10 : PWA, caisse hors connexion et synchronisation idempotente.
-- Sprint 11 : abonnements SaaS, quotas et demandes de changement de formule.
-- Sprint 12 : sécurité, index de clés étrangères et optimisation RLS.
-- Sprint 13 : console plateforme, configuration des tarifs et validation des paiements.
-- Sprint 14 : journal d'audit multi-entreprises et traçabilité des opérations.
-- Sprint 15 : tableaux de bord, rapports et exports.
-- Sprint 16 : tests métier complets, recette multi-entreprises et préparation de lancement.
+## Phase 1 — Socle universel
+- Profil d'activité par entreprise et modules configurables.
+- Paramètres de devise, fiscalité, identité et établissements.
+- Navigation simplifiée et tableau de bord orienté tâches.
+- Catalogue générique produits/services, variantes et unités configurables.
+
+## Phase 2 — Opérations quotidiennes
+- Caisse rapide, tickets, paiements, retours et clôtures.
+- Stocks, achats, réceptions, inventaires et alertes.
+- Clients, fournisseurs, crédits et historique.
+- Rapports de ventes, marges et trésorerie.
+
+## Phase 3 — Adaptateurs sectoriels
+- Alimentation : lots, dates limites et promotions.
+- Quincaillerie : unités fractionnaires et conditionnements.
+- Mode : tailles, couleurs et variantes.
+- Restaurant : menus, recettes et commandes.
+- Pharmacie : traçabilité et contraintes réglementaires.
+- Automobile : compatibilité et équivalences.
+- Services : prestations et devis sans stock obligatoire.
+
+## Phase 4 — SaaS et croissance
+- Abonnements, quotas, facturation et paiements mobile money.
+- Boutique en ligne, commandes et livraisons.
+- Multi-sites, droits par établissement et consolidation.
+- Exports comptables et intégrations.
+
+## Règles de livraison
+- Audit avant suppression de code ou de table.
+- Migrations additives uniquement; sauvegarde avant changement de données.
+- PR dédiée par fonctionnalité, lint, typecheck, build et tests SQL.
+- Fusion uniquement après contrôles verts.
+- Vérifier le déploiement Render et les migrations Supabase séparément.
+
+
+Le profil commercial constitue la première brique de configuration; les règles sectorielles seront livrées par adaptateurs métier testés indépendamment.

@@ -1,0 +1,12 @@
+
+/* Universal commerce configuration */
+.module-preferences{margin:8px 0 18px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fbfdfb;min-width:0}
+.module-preferences legend{padding:0 6px;font-size:13px;font-weight:750;color:var(--ink)}
+.module-preferences-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin-top:10px}
+.module-preferences-grid label{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:550}
+.module-preferences-grid input{width:16px;height:16px;accent-color:var(--brand)}
+.business-context{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:20px 0;padding:15px 18px;border:1px solid var(--line);border-radius:13px;background:#fff}
+.business-context>div{display:grid;gap:3px;margin-right:auto}
+.business-context>div strong{font-size:15px}
+.business-context>a{display:inline-flex;align-items:center;gap:5px;color:var(--brand-dark);font-size:12px;font-weight:750}
+@media(max-width:650px){.module-preferences-grid{grid-template-columns:1fr}.business-context{align-items:flex-start}.business-context>a{width:100%}}

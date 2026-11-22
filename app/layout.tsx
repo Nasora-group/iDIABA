@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import PWARegister from "./pwa-register";
 import "./globals.css";
+import "./universal-commerce.css";
 
 export const metadata: Metadata = {
   title: "iDIABA | Gestion commerciale",
