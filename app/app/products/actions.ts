@@ -96,3 +96,34 @@ export async function archiveProduct(formData: FormData) {
   revalidatePath("/app/products");
   redirect("/app/products?archived=1");
 }
+
+export async function updateProduct(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const tenantId = validTenantId(formData.get("tenant_id"));
+  const productId = String(formData.get("product_id") ?? "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(productId)) redirect("/app/products?error=validation");
+  const name = requiredText(formData.get("name"), "Le nom du produit", 160);
+  const sku = requiredText(formData.get("sku"), "La référence SKU", 64).toUpperCase();
+  const barcode = String(formData.get("barcode") ?? "").trim() || null;
+  if (barcode && barcode.length > 80) redirect("/app/products?error=validation");
+  const unit = requiredText(formData.get("unit"), "L'unité", 24);
+  const purchasePrice = nonNegativeAmount(formData.get("purchase_price"), "Le prix d'achat", 999999999999);
+  const salePrice = nonNegativeAmount(formData.get("sale_price"), "Le prix de vente", 999999999999);
+  const taxRate = nonNegativeAmount(formData.get("tax_rate"), "La taxe", 100);
+  const categoryValue = String(formData.get("category_id") ?? "").trim();
+  const categoryId = categoryValue || null;
+  if (categoryId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(categoryId)) redirect("/app/products?error=validation");
+
+  const { error } = await supabase.from("products").update({
+    category_id: categoryId, name, sku, barcode, unit,
+    purchase_price: purchasePrice, sale_price: salePrice, tax_rate: taxRate,
+  }).eq("id", productId).eq("tenant_id", tenantId);
+  if (error) redirect("/app/products?error=update");
+  revalidatePath("/app/products");
+  revalidatePath("/app/pos");
+  revalidatePath("/app/stock");
+  redirect("/app/products?updated=product");
+}
