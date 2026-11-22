@@ -18,8 +18,11 @@ type RequestRow = {
 };
 type PaymentRow = { id: string; subscription_request_id: string; provider: string; status: string; amount_fcfa: number | string; provider_transaction_id: string | null; paid_at: string | null };
 type SubscriptionRow = {
-  tenant_id: string; status: string;
-  tenant: Relation<{ name: string }>; plan: Relation<{ name: string }>;
+  tenant_id: string; status: string; plan: Relation<{ name: string }>;
+};
+type TenantRow = {
+  id: string; name: string; slug: string; created_at: string;
+  phone: string; currency_code: string;
 };
 function one<T>(value: Relation<T>): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
 function value(value: number | string | null) { return value === null ? "" : String(value); }
@@ -42,18 +45,31 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
   if (!user) redirect("/login");
   if (user.app_metadata?.role !== "platform_admin") redirect("/app");
 
-  const [plansResult, requestsResult, subscriptionsResult, paymentsResult] = await Promise.all([
+  const [plansResult, requestsResult, tenantsResult, subscriptionsResult, paymentsResult] = await Promise.all([
     supabase.from("subscription_plans").select("id,code,name,description,price_monthly_fcfa,price_yearly_fcfa,max_users,max_locations,max_products,max_monthly_sales").order("code"),
     supabase.from("subscription_requests").select("id,tenant_id,billing_interval,payment_method,payment_reference,created_at,status,tenant:tenants(name),plan:subscription_plans(name,code)").order("created_at", { ascending: false }).limit(100),
-    supabase.from("tenant_subscriptions").select("tenant_id,status,plan:subscription_plans(name),tenant:tenants(name)").order("created_at", { ascending: false }).limit(100),
+    supabase.from("tenants").select("id,name,slug,created_at,phone,currency_code", { count: "exact" }).order("created_at", { ascending: false }).limit(200),
+    supabase.from("tenant_subscriptions").select("tenant_id,status,plan:subscription_plans(name)").order("created_at", { ascending: false }).limit(500),
     supabase.from("subscription_payments").select("id,subscription_request_id,provider,status,amount_fcfa,provider_transaction_id,paid_at").order("created_at", { ascending: false }).limit(200),
   ]);
   const plans = (plansResult.data ?? []) as unknown as Plan[];
   const requests = (requestsResult.data ?? []) as unknown as RequestRow[];
+  const tenants = (tenantsResult.data ?? []) as unknown as TenantRow[];
   const subscriptions = (subscriptionsResult.data ?? []) as unknown as SubscriptionRow[];
   const payments = (paymentsResult.data ?? []) as unknown as PaymentRow[];
+  const latestSubscriptionByTenant = new Map<string, SubscriptionRow>();
+  for (const subscription of subscriptions) {
+    if (!latestSubscriptionByTenant.has(subscription.tenant_id)) latestSubscriptionByTenant.set(subscription.tenant_id, subscription);
+  }
   const pendingCount = requests.filter((request) => request.status === "pending").length;
   const activeCount = subscriptions.filter((subscription) => subscription.status === "active").length;
+  const loadErrors = [
+    plansResult.error && "formules",
+    requestsResult.error && "demandes",
+    tenantsResult.error && "entreprises",
+    subscriptionsResult.error && "abonnements",
+    paymentsResult.error && "paiements",
+  ].filter(Boolean) as string[];
   const paidPayments = payments.filter((payment) => payment.status === "paid");
   const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount_fcfa || 0), 0);
   const displayName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
@@ -82,13 +98,15 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
         {params.saved && <p className="form-success" role="status">Formule mise à jour.</p>}
         {params.reviewed && <p className="form-success" role="status">Demande traitée.</p>}
         {params.error && <p className="form-error" role="alert">{params.error === "review" ? "Impossible de traiter cette demande. Vérifiez son état et le tarif de la formule." : "Les informations saisies sont invalides ou n'ont pas pu être enregistrées."}</p>}
+        {loadErrors.length > 0 && <p className="form-error" role="alert">Certaines données de la console n’ont pas pu être chargées : {loadErrors.join(", ")}. Les chiffres affichés peuvent être incomplets.</p>}
 
         <section id="overview" className="platform-overview">
           <div className="platform-section-title"><div><p className="eyebrow">INDICATEURS CLÉS</p><h2>Vue d’ensemble</h2></div><span>Données récentes chargées</span></div>
           <div className="platform-kpi-grid">
+            <article className="platform-kpi"><span>Entreprises inscrites</span><strong>{tenantsResult.count ?? tenants.length}</strong><small>{tenants.length === 200 ? "200 dernières affichées" : "Total des entreprises"}</small></article>
             <article className="platform-kpi"><span>Formules configurées</span><strong>{plans.length}</strong><small>Offres du catalogue</small></article>
             <article className="platform-kpi"><span>Demandes à traiter</span><strong>{pendingCount}</strong><small>Sur les 100 dernières demandes</small></article>
-            <article className="platform-kpi"><span>Abonnements actifs</span><strong>{activeCount}</strong><small>Sur les 100 derniers abonnements</small></article>
+            <article className="platform-kpi"><span>Abonnements actifs</span><strong>{activeCount}</strong><small>Sur les 500 derniers abonnements</small></article>
             <article className="platform-kpi"><span>Paiements confirmés</span><strong>{money(paidTotal)}</strong><small>{paidPayments.length} paiements sur les 200 derniers</small></article>
           </div>
         </section>
@@ -113,12 +131,19 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
         </section>
 
         <section id="tenants" className="platform-admin-section">
-          <div className="platform-section-title"><div><p className="eyebrow">ÉCOSYSTÈME IDIABA</p><h2>Entreprises et abonnements</h2></div><span>{subscriptions.length} espaces récents</span></div>
-          {subscriptions.length ? <div className="platform-tenant-table-wrap"><table className="platform-tenant-table"><thead><tr><th>Entreprise</th><th>Formule</th><th>État</th></tr></thead><tbody>{subscriptions.map((subscription) => {
-            const tenant = one(subscription.tenant);
-            const plan = one(subscription.plan);
-            return <tr key={subscription.tenant_id}><td><strong>{tenant?.name ?? "Entreprise"}</strong><small>ID : {subscription.tenant_id.slice(0, 8)}…</small></td><td>{plan?.name ?? "Sans formule"}</td><td><span className={"platform-state " + (subscription.status === "active" ? "is-active" : "")}>{statusLabel(subscription.status)}</span></td></tr>;
-          })}</tbody></table></div> : <div className="platform-empty"><strong>Aucun abonnement enregistré</strong><span>Les espaces abonnés apparaîtront dans ce tableau.</span></div>}
+          <div className="platform-section-title"><div><p className="eyebrow">ÉCOSYSTÈME IDIABA</p><h2>Toutes les entreprises</h2></div><span>{tenantsResult.count ?? tenants.length} entreprise(s) enregistrée(s)</span></div>
+          {tenants.length ? <div className="platform-tenant-table-wrap"><table className="platform-tenant-table"><thead><tr><th>Entreprise</th><th>Contact</th><th>Formule</th><th>Abonnement</th><th>Inscription</th></tr></thead><tbody>{tenants.map((tenant) => {
+            const subscription = latestSubscriptionByTenant.get(tenant.id);
+            const plan = subscription ? one(subscription.plan) : null;
+            return <tr key={tenant.id}>
+              <td><strong>{tenant.name}</strong><small>{tenant.slug} · ID : {tenant.id.slice(0, 8)}…</small></td>
+              <td>{tenant.phone || "Non renseigné"}<small>{tenant.currency_code}</small></td>
+              <td>{plan?.name ?? "Aucune formule"}</td>
+              <td><span className={"platform-state " + (subscription?.status === "active" ? "is-active" : "")}>{subscription ? statusLabel(subscription.status) : "Sans abonnement"}</span></td>
+              <td>{date(tenant.created_at)}</td>
+            </tr>;
+          })}</tbody></table></div> : <div className="platform-empty"><strong>{tenantsResult.error ? "Liste des entreprises indisponible" : "Aucune entreprise enregistrée"}</strong><span>{tenantsResult.error ? "Vérifiez les autorisations et réessayez." : "Les entreprises créées apparaîtront ici, même sans abonnement."}</span></div>}
+          {tenants.length === 200 && <p className="catalog-help">Affichage limité aux 200 entreprises les plus récentes. Le compteur indique le total réel.</p>}
         </section>
 
         <section id="plans" className="platform-admin-section">
