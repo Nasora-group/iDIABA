@@ -182,3 +182,51 @@ export async function setCategoryActive(formData: FormData) {
   revalidatePath("/app/pos");
   redirect(active ? "/app/products?categoryRestored=1" : "/app/products?categoryArchived=1");
 }
+
+
+export async function createProductVariant(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const tenantId = validTenantId(formData.get("tenant_id"));
+  const parentId = String(formData.get("parent_product_id") ?? "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parentId)) redirect("/app/products?error=variant");
+  const label = requiredText(formData.get("variant_label"), "Le libellé de variante", 80);
+  const sku = requiredText(formData.get("variant_sku"), "La référence SKU", 64).toUpperCase();
+  const barcode = String(formData.get("variant_barcode") ?? "").trim() || null;
+  if (barcode && barcode.length > 80) redirect("/app/products?error=variant");
+  const color = String(formData.get("variant_color") ?? "").trim().slice(0, 40);
+  const size = String(formData.get("variant_size") ?? "").trim().slice(0, 40);
+  const option = String(formData.get("variant_option") ?? "").trim().slice(0, 60);
+  const priceRaw = String(formData.get("variant_sale_price") ?? "").trim();
+  const variantPrice = priceRaw === "" ? null : nonNegativeAmount(formData.get("variant_sale_price"), "Le prix de vente", 999999999999);
+
+  const { data: parent, error: parentError } = await supabase.from("products")
+    .select("id,name,category_id,unit,product_kind,track_stock,purchase_price,sale_price,tax_rate")
+    .eq("id", parentId).eq("tenant_id", tenantId).is("parent_product_id", null).single();
+  if (parentError || !parent) redirect("/app/products?error=variant");
+
+  const attributes = Object.fromEntries(Object.entries({ color, size, option }).filter(([, value]) => value));
+  const { error } = await supabase.from("products").insert({
+    tenant_id: tenantId,
+    parent_product_id: parent.id,
+    variant_attributes: attributes,
+    category_id: parent.category_id,
+    name: parent.name + " · " + label,
+    sku,
+    barcode,
+    unit: parent.unit,
+    product_kind: parent.product_kind,
+    track_stock: parent.track_stock,
+    purchase_price: parent.purchase_price,
+    sale_price: variantPrice ?? parent.sale_price,
+    tax_rate: parent.tax_rate,
+    created_by: user.id,
+  });
+  if (error) redirect("/app/products?error=variant");
+  revalidatePath("/app/products");
+  revalidatePath("/app/pos");
+  revalidatePath("/app/stock");
+  redirect("/app/products?variantCreated=1");
+}

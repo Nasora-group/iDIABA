@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { archiveProduct, createCategory, createProduct, restoreProduct, updateProduct, setCategoryActive, updateCategory } from "./actions";
+import { archiveProduct, createCategory, createProduct, createProductVariant, restoreProduct, updateProduct, setCategoryActive, updateCategory } from "./actions";
 
 type Workspace = {
   tenant_id: string;
@@ -17,6 +17,8 @@ type Product = {
   unit: string;
   product_kind: "product" | "service";
   track_stock: boolean;
+  parent_product_id: string | null;
+  variant_attributes: Record<string, string>;
   purchase_price: number;
   sale_price: number;
   tax_rate: number;
@@ -29,7 +31,7 @@ export const dynamic = "force-dynamic";
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ created?: string; updated?: string; archived?: string; restored?: string; categoryUpdated?: string; categoryArchived?: string; categoryRestored?: string; error?: string }>;
+  searchParams: Promise<{ created?: string; updated?: string; archived?: string; restored?: string; categoryUpdated?: string; categoryArchived?: string; categoryRestored?: string; variantCreated?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -45,7 +47,7 @@ export default async function ProductsPage({
   const catalogs = await Promise.all(workspaces.map(async (workspace) => {
     const [categoryResult, productResult] = await Promise.all([
       supabase.from("product_categories").select("id,name,description,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
-      supabase.from("products").select("id,name,sku,barcode,category_id,unit,product_kind,track_stock,purchase_price,sale_price,tax_rate,is_active,category:product_categories(name)").eq("tenant_id", workspace.tenant_id).order("name"),
+      supabase.from("products").select("id,name,sku,barcode,category_id,unit,product_kind,track_stock,parent_product_id,variant_attributes,purchase_price,sale_price,tax_rate,is_active,category:product_categories(name)").eq("tenant_id", workspace.tenant_id).order("name"),
     ]);
     return {
       workspace,
@@ -67,6 +69,7 @@ export default async function ProductsPage({
         <p className="lead">Gérez les marchandises, les prestations, les unités, les tarifs et le suivi de stock selon votre activité.</p>
         {params.created && <p className="form-success">Enregistrement effectué.</p>}
         {params.updated && <p className="form-success">Produit mis à jour.</p>}
+        {params.variantCreated && <p className="form-success">Variante ajoutée au catalogue.</p>}
         {params.archived && <p className="form-success">Produit archivé. Son historique est conservé.</p>}
         {params.restored && <p className="form-success">Produit réactivé.</p>}
         {params.categoryUpdated && <p className="form-success">Catégorie mise à jour.</p>}
@@ -124,14 +127,14 @@ export default async function ProductsPage({
                   <thead><tr><th>Article / service</th><th>SKU / code-barres</th><th>Catégorie</th><th>Achat</th><th>Vente</th><th>Taxe</th><th>État</th><th /></tr></thead>
                   <tbody>{products.map((product) => (
                     <tr key={product.id}>
-                      <td><strong>{product.name}</strong><small>{product.product_kind === "service" ? "Service / prestation" : "Produit"} · {product.unit}{product.track_stock ? " · Stock suivi" : " · Sans suivi de stock"}</small></td>
+                      <td><strong>{product.name}</strong><small>{product.parent_product_id ? "Variante" : product.product_kind === "service" ? "Service / prestation" : "Produit"} · {product.unit}{product.track_stock ? " · Stock suivi" : " · Sans suivi de stock"}{Object.keys(product.variant_attributes ?? {}).length ? " · " + Object.entries(product.variant_attributes).map(([key,value]) => key + ": " + value).join(" / ") : ""}</small></td>
                       <td>{product.sku}<small>{product.barcode ?? "Sans code-barres"}</small></td>
                       <td>{product.category?.name ?? "—"}</td>
                       <td>{Number(product.purchase_price).toLocaleString("fr-FR")} F</td>
                       <td>{Number(product.sale_price).toLocaleString("fr-FR")} F</td>
                       <td>{Number(product.tax_rate)} %</td>
                       <td><span className={product.is_active ? "catalog-state" : "catalog-state inactive"}>{product.is_active ? "Actif" : "Archivé"}</span></td>
-                      <td><details className="product-edit-details"><summary>Modifier</summary><form action={updateProduct} className="catalog-form catalog-edit-form"><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><label>Nom<input name="name" defaultValue={product.name} required maxLength={160} /></label><div className="catalog-fields"><label>SKU<input name="sku" defaultValue={product.sku} required maxLength={64} /></label><label>Code-barres<input name="barcode" defaultValue={product.barcode ?? ""} maxLength={80} /></label></div><div className="catalog-fields"><label>Catégorie<select name="category_id" defaultValue={product.category_id ?? ""}><option value="">Sans catégorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label>Unité<input name="unit" defaultValue={product.unit} required maxLength={24} /></label></div><label>Type<select name="product_kind" defaultValue={product.product_kind}><option value="product">Produit / marchandise</option><option value="service">Service / prestation</option></select></label><label className="catalog-checkbox"><input type="checkbox" name="track_stock" defaultChecked={product.track_stock} /> Suivre les quantités en stock (désactivé automatiquement pour un service)</label><div className="catalog-fields"><label>Achat<input name="purchase_price" type="number" min="0" step="0.01" defaultValue={product.purchase_price} required /></label><label>Vente<input name="sale_price" type="number" min="0" step="0.01" defaultValue={product.sale_price} required /></label></div><label>Taxe (%)<input name="tax_rate" type="number" min="0" max="100" step="0.01" defaultValue={product.tax_rate} required /></label><button className="secondary" type="submit">Enregistrer</button></form></details>{product.is_active && <form action={archiveProduct}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><button className="archive-button" type="submit">Archiver</button></form>}{!product.is_active && <form action={restoreProduct}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><button className="secondary" type="submit">Réactiver</button></form>}</td>
+                      <td><details className="product-edit-details"><summary>Modifier</summary><form action={updateProduct} className="catalog-form catalog-edit-form"><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><label>Nom<input name="name" defaultValue={product.name} required maxLength={160} /></label><div className="catalog-fields"><label>SKU<input name="sku" defaultValue={product.sku} required maxLength={64} /></label><label>Code-barres<input name="barcode" defaultValue={product.barcode ?? ""} maxLength={80} /></label></div><div className="catalog-fields"><label>Catégorie<select name="category_id" defaultValue={product.category_id ?? ""}><option value="">Sans catégorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label>Unité<input name="unit" defaultValue={product.unit} required maxLength={24} /></label></div><label>Type<select name="product_kind" defaultValue={product.product_kind}><option value="product">Produit / marchandise</option><option value="service">Service / prestation</option></select></label><label className="catalog-checkbox"><input type="checkbox" name="track_stock" defaultChecked={product.track_stock} /> Suivre les quantités en stock (désactivé automatiquement pour un service)</label><div className="catalog-fields"><label>Achat<input name="purchase_price" type="number" min="0" step="0.01" defaultValue={product.purchase_price} required /></label><label>Vente<input name="sale_price" type="number" min="0" step="0.01" defaultValue={product.sale_price} required /></label></div><label>Taxe (%)<input name="tax_rate" type="number" min="0" max="100" step="0.01" defaultValue={product.tax_rate} required /></label><button className="secondary" type="submit">Enregistrer</button></form></details>{!product.parent_product_id && product.product_kind === "product" && <details className="product-edit-details"><summary>Ajouter une variante</summary><form action={createProductVariant} className="catalog-form catalog-edit-form"><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="parent_product_id" value={product.id} /><label>Libellé (ex. Rouge / 42 / 500 ml)<input name="variant_label" required maxLength={80} /></label><div className="catalog-fields"><label>SKU variante<input name="variant_sku" required maxLength={64} /></label><label>Code-barres<input name="variant_barcode" maxLength={80} /></label></div><div className="catalog-fields"><label>Couleur<input name="variant_color" maxLength={40} /></label><label>Taille / format<input name="variant_size" maxLength={40} /></label></div><label>Autre option<input name="variant_option" maxLength={60} placeholder="Modèle, finition, contenance…" /></label><label>Prix de vente spécifique (laisser vide pour reprendre le prix parent)<input name="variant_sale_price" type="number" min="0" step="0.01" /></label><button className="secondary" type="submit">Créer la variante</button></form></details>}{product.is_active && <form action={archiveProduct}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><button className="archive-button" type="submit">Archiver</button></form>}{!product.is_active && <form action={restoreProduct}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><button className="secondary" type="submit">Réactiver</button></form>}</td>
                     </tr>
                   ))}</tbody>
                 </table>
