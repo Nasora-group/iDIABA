@@ -33,3 +33,6 @@
 - PR dédiée par fonctionnalité, lint, typecheck, build et tests SQL.
 - Fusion uniquement après contrôles verts.
 - Vérifier le déploiement Render et les migrations Supabase séparément.
+
+
+Le profil commercial constitue la première brique de configuration; les règles sectorielles seront livrées par adaptateurs métier testés indépendamment.
