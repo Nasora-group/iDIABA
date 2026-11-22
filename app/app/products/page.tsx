@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { archiveProduct, createCategory, createProduct, updateProduct } from "./actions";
+import { archiveProduct, createCategory, createProduct, restoreProduct, updateProduct } from "./actions";
 
 type Workspace = {
   tenant_id: string;
@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ created?: string; updated?: string; archived?: string; error?: string }>;
+  searchParams: Promise<{ created?: string; updated?: string; archived?: string; restored?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -66,6 +66,7 @@ export default async function ProductsPage({
         {params.created && <p className="form-success">Enregistrement effectué.</p>}
         {params.updated && <p className="form-success">Produit mis à jour.</p>}
         {params.archived && <p className="form-success">Produit archivé. Son historique est conservé.</p>}
+        {params.restored && <p className="form-success">Produit réactivé.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les doublons SKU/code-barres et vos droits d&apos;accès.</p>}
         {membershipError && <p className="form-error">Impossible de charger les espaces entreprise.</p>}
         {!catalogs.length && <p>Aucun espace entreprise n&apos;est associé à ce compte.</p>}
@@ -119,7 +120,7 @@ export default async function ProductsPage({
                       <td>{Number(product.sale_price).toLocaleString("fr-FR")} F</td>
                       <td>{Number(product.tax_rate)} %</td>
                       <td><span className={product.is_active ? "catalog-state" : "catalog-state inactive"}>{product.is_active ? "Actif" : "Archivé"}</span></td>
-                      <td><details className="product-edit-details"><summary>Modifier</summary><form action={updateProduct} className="catalog-form catalog-edit-form"><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><label>Nom<input name="name" defaultValue={product.name} required maxLength={160} /></label><div className="catalog-fields"><label>SKU<input name="sku" defaultValue={product.sku} required maxLength={64} /></label><label>Code-barres<input name="barcode" defaultValue={product.barcode ?? ""} maxLength={80} /></label></div><div className="catalog-fields"><label>Catégorie<select name="category_id" defaultValue={product.category_id ?? ""}><option value="">Sans catégorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label>Unité<input name="unit" defaultValue={product.unit} required maxLength={24} /></label></div><div className="catalog-fields"><label>Achat<input name="purchase_price" type="number" min="0" step="0.01" defaultValue={product.purchase_price} required /></label><label>Vente<input name="sale_price" type="number" min="0" step="0.01" defaultValue={product.sale_price} required /></label></div><label>Taxe (%)<input name="tax_rate" type="number" min="0" max="100" step="0.01" defaultValue={product.tax_rate} required /></label><button className="secondary" type="submit">Enregistrer</button></form></details>{product.is_active && <form action={archiveProduct}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><button className="archive-button" type="submit">Archiver</button></form>}</td>
+                      <td><details className="product-edit-details"><summary>Modifier</summary><form action={updateProduct} className="catalog-form catalog-edit-form"><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><label>Nom<input name="name" defaultValue={product.name} required maxLength={160} /></label><div className="catalog-fields"><label>SKU<input name="sku" defaultValue={product.sku} required maxLength={64} /></label><label>Code-barres<input name="barcode" defaultValue={product.barcode ?? ""} maxLength={80} /></label></div><div className="catalog-fields"><label>Catégorie<select name="category_id" defaultValue={product.category_id ?? ""}><option value="">Sans catégorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label>Unité<input name="unit" defaultValue={product.unit} required maxLength={24} /></label></div><div className="catalog-fields"><label>Achat<input name="purchase_price" type="number" min="0" step="0.01" defaultValue={product.purchase_price} required /></label><label>Vente<input name="sale_price" type="number" min="0" step="0.01" defaultValue={product.sale_price} required /></label></div><label>Taxe (%)<input name="tax_rate" type="number" min="0" max="100" step="0.01" defaultValue={product.tax_rate} required /></label><button className="secondary" type="submit">Enregistrer</button></form></details>{product.is_active && <form action={archiveProduct}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><button className="archive-button" type="submit">Archiver</button></form>}{!product.is_active && <form action={restoreProduct}><input type="hidden" name="tenant_id" value={workspace.tenant_id} /><input type="hidden" name="product_id" value={product.id} /><button className="secondary" type="submit">Réactiver</button></form>}</td>
                     </tr>
                   ))}</tbody>
                 </table>
