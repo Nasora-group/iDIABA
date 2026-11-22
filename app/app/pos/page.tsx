@@ -111,6 +111,11 @@ export default async function POSPage({ searchParams }: {
                     <p>Calcul espèces : fond initial + ventes espèces + entrées − sorties. Wave et Orange Money ne sont pas inclus dans le montant d&apos;espèces à compter.</p>
                   </div>
                 )}
+                {!reconciliations[session.id] && (
+                  <p className="form-error" role="status">
+                    Le rapprochement automatique n&apos;est pas disponible. Actualisez la page avant de clôturer la caisse et vérifiez vos droits d&apos;accès.
+                  </p>
+                )}
                 <div className="pos-cash-tools">
                   <form action={recordCashMovement} className="pos-cash-movement">
                     <h4>Entrée / sortie d&apos;espèces</h4>
