@@ -66,3 +66,33 @@ export async function recordStockMovement(formData: FormData) {
   revalidatePath("/app/stock");
   redirect("/app/stock?created=movement");
 }
+
+export async function setStockAlertThreshold(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const tenant_id = tenantIdFrom(formData);
+  const product_id = required(formData.get("product_id"), "Le produit", 36);
+  const location_id = required(formData.get("location_id"), "Le dépôt", 36);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(product_id)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(location_id)) {
+    redirect("/app/stock?error=threshold");
+  }
+  const raw = String(formData.get("minimum_quantity") ?? "").trim().replace(",", ".");
+  if (!/^(?:0|[1-9]\d{0,10})(?:\.\d{1,3})?$/.test(raw) || Number(raw) > 1000000000) {
+    redirect("/app/stock?error=threshold");
+  }
+  if (Number(raw) === 0) {
+    const { error } = await supabase.from("stock_reorder_thresholds").delete()
+      .eq("tenant_id", tenant_id).eq("product_id", product_id).eq("location_id", location_id);
+    if (error) redirect("/app/stock?error=threshold");
+  } else {
+    const { error } = await supabase.from("stock_reorder_thresholds").upsert({
+      tenant_id, product_id, location_id, minimum_quantity: raw, created_by: user.id,
+    }, { onConflict: "tenant_id,location_id,product_id" });
+    if (error) redirect("/app/stock?error=threshold");
+  }
+  revalidatePath("/app/stock");
+  redirect("/app/stock?threshold=1");
+}
