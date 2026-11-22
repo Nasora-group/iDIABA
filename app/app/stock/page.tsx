@@ -49,7 +49,12 @@ export default async function StockPage({ searchParams }: {
       .sort((a, b) => a.product.name.localeCompare(b.product.name));
     const thresholds = (thresholdResult.data ?? []) as Threshold[];
     const quantityByKey = new Map(balances.map((balance) => [balance.location.id + ":" + balance.product.id, balance.quantity]));
-    const configuredThresholds = thresholds.flatMap((threshold) => {\n      const product = productsById.get(threshold.product_id);\n      const location = locationsById.get(threshold.location_id);\n      return product && location ? [{ product, location, minimum: Number(threshold.minimum_quantity) }] : [];\n    }).sort((a, b) => a.product.name.localeCompare(b.product.name));\n    const reorderAlerts = thresholds.flatMap((threshold) => {
+    const configuredThresholds = thresholds.flatMap((threshold) => {
+      const product = productsById.get(threshold.product_id);
+      const location = locationsById.get(threshold.location_id);
+      return product && location ? [{ product, location, minimum: Number(threshold.minimum_quantity) }] : [];
+    }).sort((a, b) => a.product.name.localeCompare(b.product.name));
+    const reorderAlerts = thresholds.flatMap((threshold) => {
       const product = productsById.get(threshold.product_id);
       const location = locationsById.get(threshold.location_id);
       const quantity = quantityByKey.get(threshold.location_id + ":" + threshold.product_id) ?? 0;
