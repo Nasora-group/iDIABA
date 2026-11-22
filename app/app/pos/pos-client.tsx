@@ -135,7 +135,10 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
       setBarcodeMessage("Code non reconnu. Vérifiez le produit ou ajoutez-le au catalogue.");
       return;
     }
-    addLineForProduct(match.id, quantity);
+    if (!addLineForProduct(match.id, quantity)) {
+      setBarcodeMessage("Quantité invalide. Saisissez une quantité supérieure à 0.");
+      return;
+    }
     setProductId(match.id);
     setBarcodeQuery("");
     setBarcodeMessage(`Ajouté : ${match.name}`);
