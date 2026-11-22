@@ -66,9 +66,9 @@ export default async function ProductsPage({
         {params.created && <p className="form-success">Enregistrement effectué.</p>}
         {params.updated && <p className="form-success">Produit mis à jour.</p>}
         {params.archived && <p className="form-success">Produit archivé. Son historique est conservé.</p>}
-        {params.restored && <p className="form-success">Produit réactivé.</p>
-        {params.categoryUpdated && <p className="form-success">Catégorie mise à jour.</p>
-        {params.categoryArchived && <p className="form-success">Catégorie archivée; les produits associés sont conservés.</p>
+        {params.restored && <p className="form-success">Produit réactivé.</p>}
+        {params.categoryUpdated && <p className="form-success">Catégorie mise à jour.</p>}
+        {params.categoryArchived && <p className="form-success">Catégorie archivée; les produits associés sont conservés.</p>}
         {params.categoryRestored && <p className="form-success">Catégorie réactivée.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les doublons SKU/code-barres et vos droits d&apos;accès.</p>}
         {membershipError && <p className="form-error">Impossible de charger les espaces entreprise.</p>}
