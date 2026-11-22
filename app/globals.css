@@ -293,3 +293,5 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .product-edit-details{min-width:180px}.product-edit-details summary{cursor:pointer;font-weight:700;color:#27613f;padding:7px 0}.catalog-edit-form{margin:8px 0;padding:12px;min-width:260px}.catalog-edit-form label{font-size:11px}.catalog-edit-form input,.catalog-edit-form select{padding:8px;font-size:12px}
 
 .supplier-edit-details{min-width:180px}.supplier-edit-details summary{cursor:pointer;font-weight:700;color:#27613f;padding:7px 0}.supplier-edit-form{margin:8px 0;padding:12px;min-width:260px}.supplier-edit-form label{font-size:11px}.supplier-edit-form input{padding:8px;font-size:12px}
+
+.category-management{margin-bottom:18px}.category-edit-details{min-width:160px}.category-edit-details summary{cursor:pointer;font-weight:700;color:#27613f;padding:7px 0}.category-edit-form{margin:8px 0;padding:12px;min-width:240px}.category-edit-form label{font-size:11px}.category-edit-form input{padding:8px;font-size:12px}
