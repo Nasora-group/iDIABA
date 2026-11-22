@@ -12,6 +12,7 @@ type TopProduct = {
 };
 type RecentSale = { id: string; total: number; completed_at: string };
 type DailySale = { day: string; revenue: number; sales_count: number };
+type PaymentMethodReport = { payment_method: string; amount: number; payments_count: number; sales_count: number };
 type Report = {
   revenue: number; sales_count: number; average_ticket: number;
   costed_revenue: number; cost_of_goods_sold: number; gross_margin: number;
@@ -51,6 +52,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   let report: Report | null = null;
   let dailySales: DailySale[] = [];
+  let paymentBreakdown: PaymentMethodReport[] = [];
   let reportError = false;
   if (validRange) {
     const { data, error } = await supabase.rpc("get_tenant_management_report", {
@@ -67,6 +69,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         p_to: endExclusive.toISOString(),
       });
       if (!trend.error && Array.isArray(trend.data)) dailySales = trend.data as DailySale[];
+      const payments = await supabase.rpc("get_tenant_payment_method_report", {
+        p_tenant_id: tenant.tenant_id,
+        p_from: start.toISOString(),
+        p_to: endExclusive.toISOString(),
+      });
+      if (!payments.error && Array.isArray(payments.data)) paymentBreakdown = payments.data as PaymentMethodReport[];
     }
   }
 
@@ -110,6 +118,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           </div>
 
           {report.uncosted_lines > 0 && <p className="catalog-help">Attention : {report.uncosted_lines} ligne(s) de vente n&apos;ont pas de coût d&apos;achat historique connu. La marge affichée porte uniquement sur les lignes valorisées ({costCoverage}% du chiffre d&apos;affaires). Les anciennes ventes ne sont pas recalculées avec un coût estimé.</p>}
+
+          <section className="report-section">
+            <h2>Encaissements par moyen de paiement</h2>
+            {paymentBreakdown.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Moyen</th><th>Montant encaissé</th><th>Transactions</th><th>Ventes</th><th>Part du total</th></tr></thead><tbody>{paymentBreakdown.map((item) => { const share = report.revenue > 0 ? item.amount / report.revenue * 100 : 0; const labels: Record<string,string> = { cash: "Espèces", wave: "Wave", orange_money: "Orange Money", mobile_money: "Autre Mobile Money", card: "Carte bancaire", bank_transfer: "Virement" }; return <tr key={item.payment_method}><td>{labels[item.payment_method] ?? item.payment_method}</td><td>{money(item.amount)}</td><td>{Number(item.payments_count).toLocaleString("fr-FR")}</td><td>{Number(item.sales_count).toLocaleString("fr-FR")}</td><td>{share.toLocaleString("fr-FR",{maximumFractionDigits:1})}%</td></tr>; })}</tbody></table></div> : <p className="catalog-empty">Aucun encaissement détaillé disponible pour cette période.</p>}
+            <p className="catalog-help">Les encaissements sont ventilés selon les paiements enregistrés à la caisse. Une vente réglée en plusieurs moyens peut apparaître dans plusieurs lignes.</p>
+          </section>
 
           <section className="report-section">
             <h2>Évolution quotidienne du chiffre d&apos;affaires</h2>
