@@ -303,3 +303,16 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .catalog-edit-form{min-width:260px;max-width:380px}
 .catalog-edit-form .catalog-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
 @media(max-width:650px){.catalog-edit-form .catalog-fields{grid-template-columns:1fr}}
+
+.pos-reconciliation{margin:16px 0;padding:16px;border:1px solid #dce8dd;border-radius:12px;background:#f6faf6;display:grid;gap:12px}
+.pos-reconciliation-total{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.pos-reconciliation-total span,.pos-reconciliation-grid span,.pos-reconciliation-payments>span{font-size:13px;color:#617064}
+.pos-reconciliation-total strong{font-size:22px;color:#176b3a}
+.pos-reconciliation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.pos-reconciliation-grid>div{display:grid;gap:5px;padding:10px;border:1px solid #e4ece4;border-radius:8px;background:white}
+.pos-reconciliation-grid strong{font-size:15px}
+.pos-reconciliation-payments{display:grid;gap:8px}
+.pos-reconciliation-payments>div{display:flex;gap:8px;flex-wrap:wrap}
+.pos-reconciliation-payments>div>span{padding:7px 10px;border-radius:7px;background:white;border:1px solid #e4ece4;font-size:12px}
+.pos-reconciliation>p{margin:0;color:#718075;font-size:12px}
+@media(max-width:600px){.pos-reconciliation-grid{grid-template-columns:1fr}.pos-reconciliation-total strong{font-size:20px}}
