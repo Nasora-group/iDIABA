@@ -34,7 +34,7 @@ export default async function SaleReceiptPage({ params }: { params: Promise<{ id
   const sale = saleData as Sale;
 
   const [tenantResult, locationResult, cashierResult, itemsResult, paymentsResult] = await Promise.all([
-    supabase.from("tenants").select("name").eq("id", sale.tenant_id).maybeSingle(),
+    supabase.from("tenants").select("name,rccm,ninea,address,phone").eq("id", sale.tenant_id).maybeSingle(),
     supabase.from("stock_locations").select("name,code").eq("id", sale.location_id).eq("tenant_id", sale.tenant_id).maybeSingle(),
     sale.cashier_id ? supabase.from("profiles").select("full_name").eq("id", sale.cashier_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
     supabase.from("sale_items").select("id,product_name,sku,quantity,unit_price,line_subtotal,line_tax,line_total").eq("tenant_id", sale.tenant_id).eq("sale_id", sale.id).order("created_at"),
@@ -50,6 +50,7 @@ export default async function SaleReceiptPage({ params }: { params: Promise<{ id
       <section className="receipt-card">
         <div className="receipt-header">
           <h1>{tenantResult.data?.name ?? "Entreprise"}</h1>
+          {(tenantResult.data?.address || tenantResult.data?.phone || tenantResult.data?.rccm || tenantResult.data?.ninea) && <div className="receipt-company-details">{tenantResult.data?.address && <p>{tenantResult.data.address}</p>}{tenantResult.data?.phone && <p>{tenantResult.data.phone}</p>}{tenantResult.data?.rccm && <p>RCCM : {tenantResult.data.rccm}</p>}{tenantResult.data?.ninea && <p>NINEA : {tenantResult.data.ninea}</p>}</div>}
           <p>{locationResult.data?.name ?? "Point de vente"}{locationResult.data?.code ? ` · ${locationResult.data.code}` : ""}</p>
           <h2>Ticket de caisse</h2>
         </div>
