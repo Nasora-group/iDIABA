@@ -120,3 +120,39 @@ export async function receivePurchaseOrder(formData: FormData) {
   revalidatePath("/app");
   redirect("/app/purchasing?received=1");
 }
+
+export async function updateSupplier(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  const supplierId = String(formData.get("supplier_id") ?? "");
+  if (![tenantId, supplierId].every(validUuid)) fail("validation");
+  const name = required(formData.get("name"), 160);
+  const contact_name = String(formData.get("contact_name") ?? "").trim().slice(0, 120);
+  const phone = String(formData.get("phone") ?? "").trim().slice(0, 40);
+  const email = String(formData.get("email") ?? "").trim().slice(0, 160);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("validation");
+  const address = String(formData.get("address") ?? "").trim().slice(0, 500);
+  const notes = String(formData.get("notes") ?? "").trim().slice(0, 1000);
+  const { error } = await supabase.from("suppliers").update({ name, contact_name, phone, email, address, notes })
+    .eq("id", supplierId).eq("tenant_id", tenantId);
+  if (error) fail("supplier_update");
+  revalidatePath("/app/purchasing");
+  redirect("/app/purchasing?updated=supplier");
+}
+
+export async function setSupplierActive(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  const supplierId = String(formData.get("supplier_id") ?? "");
+  const active = String(formData.get("active") ?? "") === "true";
+  if (![tenantId, supplierId].every(validUuid)) fail("validation");
+  const { error } = await supabase.from("suppliers").update({ is_active: active })
+    .eq("id", supplierId).eq("tenant_id", tenantId);
+  if (error) fail("supplier_update");
+  revalidatePath("/app/purchasing");
+  redirect(active ? "/app/purchasing?restored=supplier" : "/app/purchasing?archived=supplier");
+}
