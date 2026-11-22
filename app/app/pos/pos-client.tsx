@@ -17,6 +17,11 @@ function toCents(value: string | number) {
 function formatCents(cents: number) {
   return (cents / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function quantityMilli(value: number) {
+  const milli = Math.round(value * 1000);
+  return Number.isFinite(value) && value > 0 && value <= 1000000 && Math.abs(value * 1000 - milli) < 1e-7
+    ? milli : null;
+}
 
 export default function POSCheckout({ userId, tenantId, locationId, sessionId, clientSaleId, products }: Props) {
   const [activeSaleId, setActiveSaleId] = useState(clientSaleId);
@@ -107,12 +112,13 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
 
   function addLineForProduct(selectedProductId: string, qtyValue = quantity) {
     const qty = Number(qtyValue);
-    if (!selectedProductId || !Number.isFinite(qty) || qty <= 0 || qty > 1000000) return false;
+    const qtyMilli = quantityMilli(qty);
+    if (!selectedProductId || qtyMilli === null) return false;
     setCart((current) => {
       const existing = current.find((line) => line.product_id === selectedProductId);
       if (existing) return current.map((line) => line.product_id === selectedProductId
-        ? { ...line, quantity: String(Number(line.quantity) + qty) } : line);
-      return [...current, { product_id: selectedProductId, quantity: String(qty) }];
+        ? { ...line, quantity: String((Math.round(Number(line.quantity) * 1000) + qtyMilli) / 1000) } : line);
+      return [...current, { product_id: selectedProductId, quantity: String(qtyMilli / 1000) }];
     });
     setQuantity("1");
     return true;
