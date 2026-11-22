@@ -45,7 +45,7 @@ export default async function InventoryPage({ searchParams }: {
     const [locationsResult, productsResult, countsResult] = await Promise.all([
       supabase.from("stock_locations").select("id,name,code")
         .eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
-      supabase.from("products").select("id,name,sku,unit")
+      supabase.from("products").select("id,name,sku,unit").eq("track_stock", true)
         .eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       supabase.from("inventory_counts")
         .select("id,reference,notes,status,created_at,posted_at,location:stock_locations!inventory_count_location_tenant_fk(name,code),items:inventory_count_items!inventory_count_item_count_fk(id,expected_quantity,counted_quantity,variance,product:products!inventory_count_item_product_fk(name,sku,unit))")

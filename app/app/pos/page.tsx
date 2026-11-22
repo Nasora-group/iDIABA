@@ -7,7 +7,7 @@ import OfflinePOSSeed from "./offline-seed";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
 type Location = { id: string; name: string; code: string };
-type Product = { id: string; name: string; sku: string; barcode: string | null; unit: string; sale_price: string | number; tax_rate: string | number; is_active: boolean };
+type Product = { id: string; name: string; sku: string; barcode: string | null; unit: string; product_kind: "product" | "service"; sale_price: string | number; tax_rate: string | number; is_active: boolean };
 type CashSession = { id: string; tenant_id: string; location_id: string; opening_cash: string | number; opened_at: string; location: { name: string; code: string } | null };
 type ClosedSession = { id: string; opening_cash: string | number; expected_cash: string | number; closing_cash: string | number; cash_variance: string | number; opened_at: string; closed_at: string; location: { name: string } | null };
 type CashMovement = { id: string; cash_session_id: string; movement_type: string; amount: string | number; reason: string; created_at: string };
@@ -29,7 +29,7 @@ export default async function POSPage({ searchParams }: {
   const data = await Promise.all(workspaces.map(async (workspace) => {
     const [locationsResult, productsResult, sessionsResult, closedResult, salesResult, movementResult] = await Promise.all([
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("location_type", "store").eq("is_active", true).order("name"),
-      supabase.from("products").select("id,name,sku,barcode,unit,sale_price,tax_rate,is_active").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
+      supabase.from("products").select("id,name,sku,barcode,unit,product_kind,track_stock,sale_price,tax_rate,is_active").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       supabase.from("cash_sessions").select("id,tenant_id,location_id,opening_cash,opened_at,location:stock_locations(name,code)").eq("tenant_id", workspace.tenant_id).eq("opened_by", user.id).eq("status", "open").order("opened_at", { ascending: false }),
       supabase.from("cash_sessions").select("id,opening_cash,expected_cash,closing_cash,cash_variance,opened_at,closed_at,location:stock_locations(name)").eq("tenant_id", workspace.tenant_id).eq("status", "closed").order("closed_at", { ascending: false }).limit(10),
       supabase.from("sales").select("id,total,subtotal,tax_total,created_at,cashier:profiles(full_name)").eq("tenant_id", workspace.tenant_id).eq("status", "completed").order("created_at", { ascending: false }).limit(20),

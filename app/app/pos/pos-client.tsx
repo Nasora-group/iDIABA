@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { enqueueOfflineSale, loadOfflineSales, removeOfflineSale } from "./offline-store";
 import { checkoutSale } from "./actions";
 
-type Product = { id: string; name: string; sku: string; barcode?: string | null; unit: string; sale_price: string | number; tax_rate: string | number };
+type Product = { id: string; name: string; sku: string; barcode?: string | null; unit: string; product_kind: "product" | "service"; sale_price: string | number; tax_rate: string | number };
 type CartLine = { product_id: string; quantity: string };
 type PaymentLine = { method: string; amount: string; reference?: string };
 type Props = { userId: string; tenantId: string; locationId: string; sessionId: string; clientSaleId: string; products: Product[] };
@@ -161,7 +161,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
       <div className="pos-add-row">
         <label>Produit
           <select value={productId} onChange={(event) => setProductId(event.target.value)} required>
-            {products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}{product.barcode ? ` · ${product.barcode}` : ""} · {Number(product.sale_price).toLocaleString("fr-FR")} F</option>)}
+            {products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.product_kind === "service" ? "Prestation" : "Produit"} · {product.sku}{product.barcode ? ` · ${product.barcode}` : ""} · {Number(product.sale_price).toLocaleString("fr-FR")} F</option>)}
           </select>
         </label>
         <label>Quantité
@@ -174,7 +174,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
           const product = products.find((item) => item.id === line.product_id);
           if (!product) return null;
           return <div className="pos-cart-line" key={line.product_id}>
-            <div><strong>{product.name}</strong><small>{line.quantity} {product.unit} × {Number(product.sale_price).toLocaleString("fr-FR")} F</small></div>
+            <div><strong>{product.name}</strong><small>{product.product_kind === "service" ? "Prestation" : "Produit"} · {line.quantity} {product.unit} × {Number(product.sale_price).toLocaleString("fr-FR")} F</small></div>
             <strong>{(Math.round(Number(line.quantity) * 1000) * toCents(product.sale_price) / 100000).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} F</strong>
             <button type="button" className="archive-button" onClick={() => setCart((current) => current.filter((item) => item.product_id !== line.product_id))}>Retirer</button>
           </div>;

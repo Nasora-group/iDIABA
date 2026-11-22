@@ -30,7 +30,7 @@ export default async function PurchasingPage({ searchParams }: {
   const data = await Promise.all(workspaces.map(async (workspace) => {
     const [supplierResult, productResult, locationResult, orderResult, thresholdResult, balanceResult] = await Promise.all([
       supabase.from("suppliers").select("id,name,phone,contact_name,email,address,notes,is_active").eq("tenant_id", workspace.tenant_id).order("name"),
-      supabase.from("products").select("id,name,sku,purchase_price").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
+      supabase.from("products").select("id,name,sku,purchase_price").eq("tenant_id", workspace.tenant_id).eq("is_active", true).eq("track_stock", true).order("name"),
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       supabase.from("purchase_orders").select("id,order_number,status,ordered_at,total_amount,supplier:suppliers(name),location:stock_locations(name),items:purchase_order_items(id,quantity,received_quantity,unit_cost,product:products(name,sku))").eq("tenant_id", workspace.tenant_id).order("ordered_at", { ascending: false }).limit(100),
       supabase.from("stock_reorder_thresholds").select("product_id,location_id,minimum_quantity").eq("tenant_id", workspace.tenant_id),
