@@ -13,6 +13,7 @@ type Product = {
   name: string;
   sku: string;
   barcode: string | null;
+  category_id: string | null;
   unit: string;
   purchase_price: number;
   sale_price: number;
@@ -62,7 +63,8 @@ export default async function ProductsPage({
         <p className="eyebrow">SPRINT 2 · CATALOGUE</p>
         <h1>Produits & catégories</h1>
         <p className="lead">Centralisez vos références, codes-barres, unités, prix et taux de taxe par entreprise.</p>
-        {params.created && <p className="form-success">Enregistrement effectué.</p>}\n        {params.updated && <p className="form-success">Produit mis à jour.</p>}
+        {params.created && <p className="form-success">Enregistrement effectué.</p>}
+        {params.updated && <p className="form-success">Produit mis à jour.</p>}
         {params.archived && <p className="form-success">Produit archivé. Son historique est conservé.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les doublons SKU/code-barres et vos droits d&apos;accès.</p>}
         {membershipError && <p className="form-error">Impossible de charger les espaces entreprise.</p>}
