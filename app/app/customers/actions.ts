@@ -90,3 +90,38 @@ export async function registerSaleReturn(formData: FormData) {
   revalidatePath("/app/pos");
   redirect("/app/customers?created=return");
 }
+
+export async function updateCustomer(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  const customerId = String(formData.get("customer_id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  const address = String(formData.get("address") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+  if (![tenantId, customerId].every(uuid) || name.length < 2 || name.length > 160 || phone.length > 40 || email.length > 254 || address.length > 500 || notes.length > 1000) fail("customer");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("customer");
+  const { error } = await supabase.rpc("update_customer", { p_tenant_id: tenantId, p_customer_id: customerId, p_name: name, p_phone: phone, p_email: email, p_address: address, p_notes: notes });
+  if (error) fail("customer_update");
+  revalidatePath("/app/customers");
+  revalidatePath("/app/pos");
+  redirect("/app/customers?updated=customer");
+}
+
+export async function setCustomerActive(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const tenantId = String(formData.get("tenant_id") ?? "");
+  const customerId = String(formData.get("customer_id") ?? "");
+  const active = String(formData.get("active") ?? "") === "true";
+  if (![tenantId, customerId].every(uuid)) fail("customer_status");
+  const { error } = await supabase.rpc("set_customer_active", { p_tenant_id: tenantId, p_customer_id: customerId, p_active: active });
+  if (error) fail("customer_status");
+  revalidatePath("/app/customers");
+  revalidatePath("/app/pos");
+  redirect(active ? "/app/customers?restored=customer" : "/app/customers?archived=customer");
+}
