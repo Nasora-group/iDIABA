@@ -24,7 +24,10 @@ export default function OfflinePOSClient() {
   const [selectedKey, setSelectedKey] = useState("");
   const [queue, setQueue] = useState<OfflineSale[]>([]);
   const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("1");\n  const [barcodeQuery, setBarcodeQuery] = useState("");\n  const [barcodeMessage, setBarcodeMessage] = useState("");\n  const barcodeInput = useRef<HTMLInputElement>(null);
+  const [quantity, setQuantity] = useState("1");
+  const [barcodeQuery, setBarcodeQuery] = useState("");
+  const [barcodeMessage, setBarcodeMessage] = useState("");
+  const barcodeInput = useRef<HTMLInputElement>(null);
   const [cart, setCart] = useState<{ product_id: string; quantity: string }[]>([]);
   const [payments, setPayments] = useState<{ method: string; amount: string; reference?: string }[]>([{ method: "cash", amount: "" }]);
   const [userId, setUserId] = useState("");
