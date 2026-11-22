@@ -65,7 +65,8 @@ export default async function ProductsPage({
         <p className="lead">Centralisez vos références, codes-barres, unités, prix et taux de taxe par entreprise.</p>
         {params.created && <p className="form-success">Enregistrement effectué.</p>}
         {params.updated && <p className="form-success">Produit mis à jour.</p>}
-        {params.archived && <p className="form-success">Produit archivé. Son historique est conservé.</p>}\n        {params.restored && <p className="form-success">Produit réactivé.</p>}
+        {params.archived && <p className="form-success">Produit archivé. Son historique est conservé.</p>}
+        {params.restored && <p className="form-success">Produit réactivé.</p>}
         {params.error && <p className="form-error">Opération impossible. Vérifiez les champs, les doublons SKU/code-barres et vos droits d&apos;accès.</p>}
         {membershipError && <p className="form-error">Impossible de charger les espaces entreprise.</p>}
         {!catalogs.length && <p>Aucun espace entreprise n&apos;est associé à ce compte.</p>}
