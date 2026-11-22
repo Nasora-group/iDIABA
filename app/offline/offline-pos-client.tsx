@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   enqueueOfflineSale,
@@ -24,7 +24,7 @@ export default function OfflinePOSClient() {
   const [selectedKey, setSelectedKey] = useState("");
   const [queue, setQueue] = useState<OfflineSale[]>([]);
   const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("1");
+  const [quantity, setQuantity] = useState("1");\n  const [barcodeQuery, setBarcodeQuery] = useState("");\n  const [barcodeMessage, setBarcodeMessage] = useState("");\n  const barcodeInput = useRef<HTMLInputElement>(null);
   const [cart, setCart] = useState<{ product_id: string; quantity: string }[]>([]);
   const [payments, setPayments] = useState<{ method: string; amount: string; reference?: string }[]>([{ method: "cash", amount: "" }]);
   const [userId, setUserId] = useState("");
@@ -141,16 +141,41 @@ export default function OfflinePOSClient() {
     if (snapshot && !snapshot.products.some((item) => item.id === productId)) setProductId(snapshot.products[0]?.id ?? "");
   }, [snapshot, productId]);
 
-  function addLine() {
-    const qty = Number(quantity);
-    if (!productId || !Number.isFinite(qty) || qty <= 0 || qty > 1000000) return;
+  function addLineForProduct(selectedProductId: string, qtyValue = quantity) {
+    const qty = Number(qtyValue);
+    if (!selectedProductId || !Number.isFinite(qty) || qty <= 0 || qty > 1000000) return false;
     setCart((current) => {
-      const found = current.find((line) => line.product_id === productId);
+      const found = current.find((line) => line.product_id === selectedProductId);
       return found
-        ? current.map((line) => line.product_id === productId ? { ...line, quantity: String(Number(line.quantity) + qty) } : line)
-        : [...current, { product_id: productId, quantity }];
+        ? current.map((line) => line.product_id === selectedProductId ? { ...line, quantity: String(Number(line.quantity) + qty) } : line)
+        : [...current, { product_id: selectedProductId, quantity: String(qty) }];
     });
     setQuantity("1");
+    return true;
+  }
+
+  function addLine() {
+    addLineForProduct(productId);
+  }
+
+  function handleBarcodeKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const query = barcodeQuery.trim().toLocaleLowerCase();
+    if (!query || !snapshot) return;
+    const match = snapshot.products.find((product) =>
+      (product.barcode ?? "").trim().toLocaleLowerCase() === query
+      || product.sku.trim().toLocaleLowerCase() === query
+    );
+    if (!match) {
+      setBarcodeMessage("Code non reconnu dans le catalogue local.");
+      return;
+    }
+    addLineForProduct(match.id, quantity);
+    setProductId(match.id);
+    setBarcodeQuery("");
+    setBarcodeMessage(`Ajouté : ${match.name}`);
+    barcodeInput.current?.focus();
   }
 
   async function queueSale() {
@@ -193,8 +218,12 @@ export default function OfflinePOSClient() {
         {snapshots.length > 1 && <label className="offline-session-select">Session de caisse<select value={snapshot.key} onChange={(event) => setSelectedKey(event.target.value)}>{snapshots.map((item) => <option key={item.key} value={item.key}>{item.tenantName} · {item.locationName}</option>)}</select></label>}
         <div className="offline-panel">
           <div className="catalog-heading"><div><h2>{snapshot.tenantName}</h2><p>{snapshot.locationName} · Catalogue enregistré le {new Date(snapshot.savedAt).toLocaleString("fr-FR")}</p></div><span className="pill">{queue.length} en attente</span></div>
+          <label className="pos-barcode-row">Scanner un code-barres ou saisir le SKU
+            <input ref={barcodeInput} value={barcodeQuery} onChange={(event) => { setBarcodeQuery(event.target.value); setBarcodeMessage(""); }} onKeyDown={handleBarcodeKeyDown} type="text" inputMode="search" placeholder="Scannez puis appuyez sur Entrée" />
+          </label>
+          {barcodeMessage && <p className={barcodeMessage.startsWith("Ajouté") ? "form-success" : "form-error"} role="status">{barcodeMessage}</p>}
           <div className="pos-add-row">
-            <label>Produit<select value={productId} onChange={(event) => setProductId(event.target.value)}>{snapshot.products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku} · {Number(product.sale_price).toLocaleString("fr-FR")} F</option>)}</select></label>
+            <label>Produit<select value={productId} onChange={(event) => setProductId(event.target.value)}>{snapshot.products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}{product.barcode ? ` · ${product.barcode}` : ""} · {Number(product.sale_price).toLocaleString("fr-FR")} F</option>)}</select></label>
             <label>Quantité<input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
             <button type="button" className="secondary" onClick={addLine}>Ajouter</button>
           </div>
