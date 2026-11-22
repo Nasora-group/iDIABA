@@ -90,7 +90,7 @@ export default async function CustomersPage({ searchParams }: {
                 <p className="eyebrow">FICHIER CLIENTS</p>
                 <strong>{customers.length.toLocaleString("fr-FR")}</strong>
                 <span>clients enregistrés</span>
-                <p>Retrouvez les coordonnées de vos clients et associez-les aux tickets pour suivre leur historique d’achat.</p>
+                <p>Gérez les coordonnées, archivez les fiches et associez les clients aux tickets pour retrouver leur historique d’achat.</p>
               </div>
             </div>
             <div className="catalog-table-wrap">
