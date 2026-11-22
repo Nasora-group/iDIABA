@@ -11,6 +11,7 @@ type Product = { id: string; name: string; sku: string; barcode: string | null; 
 type CashSession = { id: string; tenant_id: string; location_id: string; opening_cash: string | number; opened_at: string; location: { name: string; code: string } | null };
 type ClosedSession = { id: string; opening_cash: string | number; expected_cash: string | number; closing_cash: string | number; cash_variance: string | number; opened_at: string; closed_at: string; location: { name: string } | null };
 type CashMovement = { id: string; cash_session_id: string; movement_type: string; amount: string | number; reason: string; created_at: string };
+type CashReconciliation = { cash_sales: number | string; cash_in: number | string; cash_out: number | string; expected_cash: number | string; payments: { payment_method: string; amount: number | string; payments_count: number }[] };
 type Sale = { id: string; total: string | number; subtotal: string | number; tax_total: string | number; created_at: string; cashier: { full_name: string } | null };
 
 export const dynamic = "force-dynamic";
@@ -35,11 +36,22 @@ export default async function POSPage({ searchParams }: {
       supabase.from("sales").select("id,total,subtotal,tax_total,created_at,cashier:profiles(full_name)").eq("tenant_id", workspace.tenant_id).eq("status", "completed").order("created_at", { ascending: false }).limit(20),
       supabase.from("cash_movements").select("id,cash_session_id,movement_type,amount,reason,created_at").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(50),
     ]);
+    const reconciliationEntries = await Promise.all(((sessionsResult.data ?? []) as unknown as CashSession[]).map(async (session) => {
+      const { data: reconciliation, error: reconciliationError } = await supabase.rpc("get_cash_session_reconciliation", {
+        p_session_id: session.id,
+      });
+      return [session.id, !reconciliationError && reconciliation && typeof reconciliation === "object"
+        ? reconciliation as unknown as CashReconciliation : null] as const;
+    }));
+    const reconciliations = Object.fromEntries(
+      reconciliationEntries.filter((entry) => entry[1] !== null),
+    ) as Record<string, CashReconciliation>;
     return {
       workspace,
       locations: (locationsResult.data ?? []) as unknown as Location[],
       products: (productsResult.data ?? []) as Product[],
       sessions: (sessionsResult.data ?? []) as unknown as CashSession[],
+      reconciliations,
       closedSessions: (closedResult.data ?? []) as unknown as ClosedSession[],
       sales: (salesResult.data ?? []) as unknown as Sale[],
       cashMovements: (movementResult.data ?? []) as CashMovement[],
@@ -63,7 +75,7 @@ export default async function POSPage({ searchParams }: {
         {params.sold && <p className="form-success">Vente enregistrée et stock mis à jour.</p>}
         {params.movement && <p className="form-success">Mouvement de caisse enregistré.</p>}
         {params.error && <p className="form-error">Opération impossible : vérifiez les droits, la caisse ouverte, le montant et les informations saisies.</p>}
-        {data.map(({ workspace, locations, products, sessions, closedSessions, sales, cashMovements, error }) => (
+        {data.map(({ workspace, locations, products, sessions, reconciliations, closedSessions, sales, cashMovements, error }) => (
           <section className="catalog-tenant" key={workspace.tenant_id}>
             <div className="catalog-heading"><div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>Rôle : {workspace.role}</p></div><span className="pill">{sales.length} dernières ventes</span></div>
             {error && <p className="form-error">Erreur de chargement : {error}</p>}
@@ -81,6 +93,24 @@ export default async function POSPage({ searchParams }: {
                 <div className="pos-session-heading"><div><span className="catalog-state">Caisse ouverte</span><h3>{session.location?.name ?? "Point de vente"} · {session.location?.code ?? ""}</h3><p>Ouverte le {new Date(session.opened_at).toLocaleString("fr-FR")} · Fond initial : {Number(session.opening_cash).toLocaleString("fr-FR")} F</p></div>
                   <form action={closeCashSession} className="pos-close-form"><input type="hidden" name="session_id" value={session.id} /><label>Espèces comptées (FCFA)<input name="closing_cash" type="number" min="0" step="0.01" required placeholder="Montant réel" /></label><button className="secondary" type="submit">Clôturer la caisse</button></form>
                 </div>
+                {reconciliations[session.id] && (
+                  <div className="pos-reconciliation">
+                    <div className="pos-reconciliation-total"><span>Solde espèces théorique à clôturer</span><strong>{Number(reconciliations[session.id].expected_cash).toLocaleString("fr-FR")} F</strong></div>
+                    <div className="pos-reconciliation-grid">
+                      <div><span>Ventes réglées en espèces</span><strong>{Number(reconciliations[session.id].cash_sales).toLocaleString("fr-FR")} F</strong></div>
+                      <div><span>Entrées d&apos;espèces</span><strong>+{Number(reconciliations[session.id].cash_in).toLocaleString("fr-FR")} F</strong></div>
+                      <div><span>Sorties d&apos;espèces</span><strong>−{Number(reconciliations[session.id].cash_out).toLocaleString("fr-FR")} F</strong></div>
+                    </div>
+                    <div className="pos-reconciliation-payments">
+                      <span>Ventilation des ventes par paiement</span>
+                      <div>{(reconciliations[session.id].payments ?? []).map((payment) => {
+                        const labels: Record<string, string> = { cash: "Espèces", wave: "Wave", orange_money: "Orange Money", mobile_money: "Autre Mobile Money", card: "Carte", bank_transfer: "Virement" };
+                        return <span key={payment.payment_method}>{labels[payment.payment_method] ?? payment.payment_method} : <strong>{Number(payment.amount).toLocaleString("fr-FR")} F</strong></span>;
+                      })}</div>
+                    </div>
+                    <p>Calcul espèces : fond initial + ventes espèces + entrées − sorties. Wave et Orange Money ne sont pas inclus dans le montant d&apos;espèces à compter.</p>
+                  </div>
+                )}
                 <div className="pos-cash-tools">
                   <form action={recordCashMovement} className="pos-cash-movement">
                     <h4>Entrée / sortie d&apos;espèces</h4>
