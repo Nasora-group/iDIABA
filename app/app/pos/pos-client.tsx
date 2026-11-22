@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { enqueueOfflineSale, loadOfflineSales, removeOfflineSale } from "./offline-store";
 import { checkoutSale } from "./actions";
@@ -122,7 +122,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
     addLineForProduct(productId);
   }
 
-  function handleBarcodeKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+  function handleBarcodeKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== "Enter") return;
     event.preventDefault();
     const query = barcodeQuery.trim().toLocaleLowerCase();
