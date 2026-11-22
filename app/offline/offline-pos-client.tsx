@@ -18,6 +18,14 @@ function cents(value: string | number) {
 function money(value: number) {
   return (value / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function quantityMilli(value: number) {
+  const milli = Math.round(value * 1000);
+  return Number.isFinite(value) && value > 0 && value <= 1000000 && Math.abs(value * 1000 - milli) < 1e-7
+    ? milli : null;
+}
+function lineSubtotalForOffline(quantity: string, price: string | number) {
+  return Math.round((quantityMilli(Number(quantity)) ?? 0) * cents(price) / 1000);
+}
 
 export default function OfflinePOSClient() {
   const [snapshots, setSnapshots] = useState<OfflineSnapshot[]>([]);
@@ -43,9 +51,9 @@ export default function OfflinePOSClient() {
     for (const line of cart) {
       const product = snapshot?.products.find((item) => item.id === line.product_id);
       if (!product) continue;
-      const lineSubtotal = Math.round(Number(line.quantity) * cents(product.sale_price));
-      subtotal += lineSubtotal;
-      tax += Math.round(lineSubtotal * Number(product.tax_rate) / 100);
+      const lineAmount = lineSubtotalForOffline(line.quantity, product.sale_price);
+      subtotal += lineAmount;
+      tax += Math.round(lineAmount * Number(product.tax_rate) / 100);
     }
     return { subtotal, tax, total: subtotal + tax };
   }, [cart, snapshot]);
@@ -146,12 +154,13 @@ export default function OfflinePOSClient() {
 
   function addLineForProduct(selectedProductId: string, qtyValue = quantity) {
     const qty = Number(qtyValue);
-    if (!selectedProductId || !Number.isFinite(qty) || qty <= 0 || qty > 1000000) return false;
+    const qtyMilli = quantityMilli(qty);
+    if (!selectedProductId || qtyMilli === null) return false;
     setCart((current) => {
       const found = current.find((line) => line.product_id === selectedProductId);
       return found
-        ? current.map((line) => line.product_id === selectedProductId ? { ...line, quantity: String(Number(line.quantity) + qty) } : line)
-        : [...current, { product_id: selectedProductId, quantity: String(qty) }];
+        ? current.map((line) => line.product_id === selectedProductId ? { ...line, quantity: String((Math.round(Number(line.quantity) * 1000) + qtyMilli) / 1000) } : line)
+        : [...current, { product_id: selectedProductId, quantity: String(qtyMilli / 1000) }];
     });
     setQuantity("1");
     return true;
@@ -237,7 +246,8 @@ export default function OfflinePOSClient() {
             {cart.length ? cart.map((line) => {
               const product = snapshot.products.find((item) => item.id === line.product_id);
               if (!product) return null;
-              const lineTotal = Math.round(Number(line.quantity) * cents(product.sale_price) * (1 + Number(product.tax_rate) / 100));
+              const lineAmount = lineSubtotalForOffline(line.quantity, product.sale_price);
+              const lineTotal = lineAmount + Math.round(lineAmount * Number(product.tax_rate) / 100);
               return <div className="pos-cart-line" key={line.product_id}><div><strong>{product.name}</strong><small>{line.quantity} {product.unit} × {Number(product.sale_price).toLocaleString("fr-FR")} F</small></div><strong>{money(lineTotal)} F</strong><button type="button" className="archive-button" onClick={() => setCart((current) => current.filter((item) => item.product_id !== line.product_id))}>Retirer</button></div>;
             }) : <p className="catalog-empty">Ajoutez les produits à vendre.</p>}
           </div>
