@@ -32,7 +32,6 @@ const optionalModules = [
   ["supplier_invoices", "Factures fournisseurs"],
   ["accounting", "Comptabilité détaillée"],
   ["audit", "Journal d’audit"],
-  ["online_store", "Boutique en ligne (préparation)"],
 ] as const;
 
 const coreModules = ["catalog", "sales", "stock", "purchases", "customers", "cash", "reports"];
