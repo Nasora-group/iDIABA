@@ -90,7 +90,7 @@ export default async function ProductsPage({
                   <label>Code-barres<input name="barcode" maxLength={80} placeholder="Optionnel" /></label>
                 </div>
                 <div className="catalog-fields">
-                  <label>Catégorie<select name="category_id" defaultValue=""><option value="">Sans catégorie</option>{categories.filter((category) => category.is_active).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+                  <label>Catégorie<select name="category_id" defaultValue=""><option value="">Sans catégorie</option>{categories.filter((category) => category.is_active).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}{product.category_id && categories.some((category) => category.id === product.category_id && !category.is_active) && <option value={product.category_id}>{categories.find((category) => category.id === product.category_id)?.name} (archivée)</option>}</select></label>
                   <label>Unité<input name="unit" required maxLength={24} defaultValue="unité" /></label>
                 </div>
                 <div className="catalog-fields">
