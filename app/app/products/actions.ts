@@ -127,3 +127,19 @@ export async function updateProduct(formData: FormData) {
   revalidatePath("/app/stock");
   redirect("/app/products?updated=product");
 }
+
+export async function restoreProduct(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const tenantId = validTenantId(formData.get("tenant_id"));
+  const productId = String(formData.get("product_id") ?? "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(productId)) redirect("/app/products?error=validation");
+  const { error } = await supabase.from("products").update({ is_active: true }).eq("id", productId).eq("tenant_id", tenantId);
+  if (error) redirect("/app/products?error=restore");
+  revalidatePath("/app/products");
+  revalidatePath("/app/pos");
+  revalidatePath("/app/stock");
+  redirect("/app/products?restored=1");
+}
