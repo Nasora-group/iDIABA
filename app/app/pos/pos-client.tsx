@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { enqueueOfflineSale, loadOfflineSales, removeOfflineSale } from "./offline-store";
 import { checkoutSale } from "./actions";
 
-type Product = { id: string; name: string; sku: string; unit: string; sale_price: string | number; tax_rate: string | number };
+type Product = { id: string; name: string; sku: string; barcode?: string | null; unit: string; sale_price: string | number; tax_rate: string | number };
 type CartLine = { product_id: string; quantity: string };
 type PaymentLine = { method: string; amount: string; reference?: string };
 type Props = { userId: string; tenantId: string; locationId: string; sessionId: string; clientSaleId: string; products: Product[] };
@@ -24,6 +24,9 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
   const syncLock = useRef(false);
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [quantity, setQuantity] = useState("1");
+  const [barcodeQuery, setBarcodeQuery] = useState("");
+  const [barcodeMessage, setBarcodeMessage] = useState("");
+  const barcodeInput = useRef<HTMLInputElement>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [payments, setPayments] = useState<PaymentLine[]>([{ method: "cash", amount: "" }]);
 
@@ -102,16 +105,41 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
     }
   }
 
-  function addLine() {
-    const qty = Number(quantity);
-    if (!productId || !Number.isFinite(qty) || qty <= 0 || qty > 1000000) return;
+  function addLineForProduct(selectedProductId: string, qtyValue = quantity) {
+    const qty = Number(qtyValue);
+    if (!selectedProductId || !Number.isFinite(qty) || qty <= 0 || qty > 1000000) return false;
     setCart((current) => {
-      const existing = current.find((line) => line.product_id === productId);
-      if (existing) return current.map((line) => line.product_id === productId
+      const existing = current.find((line) => line.product_id === selectedProductId);
+      if (existing) return current.map((line) => line.product_id === selectedProductId
         ? { ...line, quantity: String(Number(line.quantity) + qty) } : line);
-      return [...current, { product_id: productId, quantity }];
+      return [...current, { product_id: selectedProductId, quantity: String(qty) }];
     });
     setQuantity("1");
+    return true;
+  }
+
+  function addLine() {
+    addLineForProduct(productId);
+  }
+
+  function handleBarcodeKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const query = barcodeQuery.trim().toLocaleLowerCase();
+    if (!query) return;
+    const match = products.find((product) =>
+      (product.barcode ?? "").trim().toLocaleLowerCase() === query
+      || product.sku.trim().toLocaleLowerCase() === query
+    );
+    if (!match) {
+      setBarcodeMessage("Code non reconnu. Vérifiez le produit ou ajoutez-le au catalogue.");
+      return;
+    }
+    addLineForProduct(match.id, quantity);
+    setProductId(match.id);
+    setBarcodeQuery("");
+    setBarcodeMessage(`Ajouté : ${match.name}`);
+    barcodeInput.current?.focus();
   }
 
   return (
@@ -123,10 +151,14 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
       <input type="hidden" name="items_json" value={JSON.stringify(cart)} />
       <input type="hidden" name="payments_json" value={JSON.stringify(effectivePayments)} />
       <h3>Nouvelle vente</h3>
+      <label className="pos-barcode-row">Scanner un code-barres ou saisir le SKU
+        <input ref={barcodeInput} value={barcodeQuery} onChange={(event) => { setBarcodeQuery(event.target.value); setBarcodeMessage(""); }} onKeyDown={handleBarcodeKeyDown} type="text" inputMode="search" placeholder="Scannez puis appuyez sur Entrée" />
+      </label>
+      {barcodeMessage && <p className={barcodeMessage.startsWith("Ajouté") ? "form-success" : "form-error"} role="status">{barcodeMessage}</p>}
       <div className="pos-add-row">
         <label>Produit
           <select value={productId} onChange={(event) => setProductId(event.target.value)} required>
-            {products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku} · {Number(product.sale_price).toLocaleString("fr-FR")} F</option>)}
+            {products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}{product.barcode ? ` · ${product.barcode}` : ""} · {Number(product.sale_price).toLocaleString("fr-FR")} F</option>)}
           </select>
         </label>
         <label>Quantité
