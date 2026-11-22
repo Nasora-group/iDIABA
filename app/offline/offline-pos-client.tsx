@@ -174,7 +174,10 @@ export default function OfflinePOSClient() {
       setBarcodeMessage("Code non reconnu dans le catalogue local.");
       return;
     }
-    addLineForProduct(match.id, quantity);
+    if (!addLineForProduct(match.id, quantity)) {
+      setBarcodeMessage("Quantité invalide. Saisissez une quantité supérieure à 0.");
+      return;
+    }
     setProductId(match.id);
     setBarcodeQuery("");
     setBarcodeMessage(`Ajouté : ${match.name}`);
