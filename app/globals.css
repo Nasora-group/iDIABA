@@ -370,3 +370,9 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .role-profile-permissions input[type=checkbox]{width:18px;height:18px;margin:0;accent-color:var(--primary,#16834a)}
 .role-profile-permissions span{font-weight:500}
 .workspace-list-details,.catalog-form details{margin:.65rem 0}
+
+/* Dashboard: cartes regroupées par espace métier */
+.app-module-main{width:100%;display:flex;flex:1;flex-direction:column;align-items:flex-start;gap:12px;color:inherit;text-decoration:none}
+.app-module-main>div{width:100%}
+.app-module-secondary{display:inline-flex;align-items:center;gap:5px;margin-top:2px;color:var(--brand-dark);font-size:12px;font-weight:700;text-decoration:none}
+.app-module-secondary:hover,.app-module-main:hover .app-module-link{text-decoration:underline}
