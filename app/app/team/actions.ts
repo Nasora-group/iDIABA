@@ -18,6 +18,17 @@ export async function manageMember(formData:FormData){
  if(!/^[0-9a-f-]{36}$/i.test(tenantId)||!["add","update","remove"].includes(action)||!validAccount||(action!=="remove"&&!allowed.includes(role))) go("validation");
  const {error}=await supabase.rpc("manage_tenant_member",{p_tenant_id:tenantId,p_email:email,p_full_name:fullName,p_role:action==="remove"?"cashier":role,p_action:action});
  if(error) go(error.message.includes("quota")?"quota":error.message.includes("No account")?"noaccount":"error");
+ if(action!=="remove"){
+  const profileId=String(formData.get("custom_role_profile_id")??"").trim()||null;
+  const {data:target}=await supabase.from("profiles").select("id").eq("id",email).maybeSingle();
+  if(profileId&&target?.id){
+   const {error:profileError}=await supabase.rpc("set_tenant_member_custom_role_profile",{p_tenant_id:tenantId,p_user_id:target.id,p_profile_id:profileId});
+   if(profileError) go("profileerror");
+  }else if(!profileId&&target?.id){
+   const {error:profileError}=await supabase.rpc("set_tenant_member_custom_role_profile",{p_tenant_id:tenantId,p_user_id:target.id,p_profile_id:null});
+   if(profileError) go("profileerror");
+  }
+ }
  revalidatePath("/app/team");revalidatePath("/app");
  go(action==="add"?"added":action==="update"?"updated":"removed");
 }
