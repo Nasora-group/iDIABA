@@ -28,7 +28,16 @@ export async function openCashSession(formData: FormData) {
   const { error } = await supabase.rpc("open_cash_session", {
     p_tenant_id: tenantId, p_location_id: locationId, p_opening_cash: openingCash,
   });
-  if (error) fail("session");
+  if (error) {
+    // Translate expected database failures into actionable messages without exposing SQL details.
+    const message = error.message.toLowerCase();
+    if (error.code === "23505" || message.includes("one_open_cash_session_per_cashier_location")) {
+      fail("session_already_open");
+    }
+    if (message.includes("permission denied")) fail("session_permission");
+    if (message.includes("invalid or inactive stock location")) fail("session_location");
+    fail("session_failed");
+  }
   revalidatePath("/app/pos");
   redirect("/app/pos?opened=1");
 }
