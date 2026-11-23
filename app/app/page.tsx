@@ -24,7 +24,7 @@ const sectorNames: Record<string, string> = {
   services: "Prestations de services", other: "Autre activité",
 };
 
-const companyModules = [
+const companyModules: { title: string; description: string; href: string; action: string; icon: typeof CreditCard; access?: string[]; adminOnly?: boolean; secondaryHref?: string; secondaryLabel?: string }[] = [
   { title: "Caisse", description: "Scanner, rechercher, vendre et encaisser.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard, access: ["manager", "cashier"] },
   { title: "Ventes", description: "Retrouver les ventes et les tickets depuis la caisse.", href: "/app/pos", action: "Voir les ventes", icon: BarChart3, access: ["manager", "cashier", "accountant", "viewer"] },
   { title: "Produits & Stocks", description: "Catalogue, quantités, mouvements et inventaires.", href: "/app/products", secondaryHref: "/app/stock", secondaryLabel: "Ouvrir les stocks", action: "Gérer les produits", icon: Package, access: ["manager", "stock"] },
@@ -71,7 +71,7 @@ export default async function AppHome() {
       grantedAccess.add(membership.role);
     }
   }
-  const visibleModules = companyModules.filter((module) => module.adminOnly ? canManageCompany : module.access.some((role) => grantedAccess.has(role)));
+  const visibleModules = companyModules.filter((module) => module.adminOnly ? canManageCompany : (module.access ?? []).some((role) => grantedAccess.has(role)));
   const canViewAudit = canManageCompany;
 
   return (
