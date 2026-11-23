@@ -114,13 +114,10 @@ export default async function POSPage({ searchParams }: {
               <form action={openCashSession} className="catalog-form pos-session-form">
                 <h3>Ouvrir votre session de caisse</h3>
                 <input type="hidden" name="tenant_id" value={workspace.tenant_id} />
-                <label>Dépôt / point de vente<select name="location_id" required defaultValue=""><option value="" disabled>Choisir un dépôt</option>{locations.map((location) => {
-                  const alreadyOpenByMe = sessions.some((session) => session.opened_by === user.id && session.location_id === location.id);
-                  return <option key={location.id} value={location.id} disabled={alreadyOpenByMe}>{location.name} · {location.code}{alreadyOpenByMe ? " · caisse déjà ouverte par vous" : ""}</option>;
-                })}</select></label>
+                <input type="hidden" name="location_id" value={locations[0]?.id ?? ""} /><p className="catalog-help">Point de vente attribué automatiquement : {locations[0]?.name ?? "aucun point de vente configuré"}. Le caissier n’a pas à choisir de dépôt.</p>
                 <label>Fond de caisse initial (FCFA)<input name="opening_cash" type="number" min="0" step="0.01" defaultValue="0" required /></label>
                 <button className="primary" type="submit" disabled={!locations.length}>Ouvrir la caisse</button>
-                {!locations.length && <p className="catalog-help">Créez d&apos;abord un dépôt dans le module Stocks.</p>}
+                {!locations.length && <p className="catalog-help">Configurez un point de vente pour l’entreprise une seule fois. Le caissier n’aura plus à le sélectionner.</p>}
               </form>
             ) : sessions.map((session) => (
               <div className="pos-session" key={session.id}>
