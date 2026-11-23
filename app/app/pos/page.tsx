@@ -147,7 +147,7 @@ export default async function POSPage({ searchParams }: {
                     Le rapprochement automatique n&apos;est pas disponible. Actualisez la page avant de clôturer la caisse et vérifiez vos droits d&apos;accès.
                   </p>
                 )}
-                <details className="pos-cash-tools"><summary>Gestion des espèces · mouvements et historique</summary><div className="pos-cash-tools-inner">
+                {isManager && <details className="pos-cash-tools"><summary>Gestion des espèces · mouvements et historique</summary><div className="pos-cash-tools-inner">
                   <form action={recordCashMovement} className="pos-cash-movement">
                     <h4>Entrée / sortie d&apos;espèces</h4>
                     <input type="hidden" name="session_id" value={session.id} />
@@ -164,7 +164,7 @@ export default async function POSPage({ searchParams }: {
                       ))}</ul>
                     ) : <p className="catalog-empty">Aucun mouvement hors ventes.</p>}
                   </div>
-                </div></details>
+                </div></details>}
                 {session.opened_by === user.id ? (products.length ? <><OfflinePOSSeed userId={user.id} tenantId={workspace.tenant_id} tenantName={workspace.tenant?.name ?? "Entreprise"} locationId={session.location_id} locationName={session.location?.name ?? "Point de vente"} sessionId={session.id} products={products} /><POSCheckout userId={user.id} tenantId={workspace.tenant_id} locationId={session.location_id} sessionId={session.id} clientSaleId={randomUUID()} products={products} /></> : <p className="catalog-empty">Ajoutez des produits actifs au catalogue avant de vendre.</p>) : <p className="pos-manager-session-note">Session de {session.opened_by.slice(0, 8)}… · supervision uniquement. Les ventes sont réservées au caissier titulaire.</p>}
               </div>
             ))}
