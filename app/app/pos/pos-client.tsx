@@ -28,12 +28,19 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
   const [offlineMessage, setOfflineMessage] = useState("");
   const syncLock = useRef(false);
   const [productId, setProductId] = useState(products[0]?.id ?? "");
+  const [productSearch, setProductSearch] = useState("");
+  const [cashReceived, setCashReceived] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [barcodeQuery, setBarcodeQuery] = useState("");
   const [barcodeMessage, setBarcodeMessage] = useState("");
   const barcodeInput = useRef<HTMLInputElement>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [payments, setPayments] = useState<PaymentLine[]>([{ method: "cash", amount: "" }]);
+  const filteredProducts = products.filter((item) => `${item.name} ${item.sku} ${item.barcode ?? ""}`.toLocaleLowerCase().includes(productSearch.trim().toLocaleLowerCase())).slice(0, 12);
+  const cashLine = effectivePayments.find((line) => line.method === "cash");
+  const cashAppliedCents = cashLine && Number(cashLine.amount) > 0 ? toCents(cashLine.amount) : 0;
+  const cashReceivedValue = cashReceived || cashLine?.amount || "";
+  const cashChangeCents = cashLine && cashReceivedValue.trim() ? toCents(cashReceivedValue.replace(",", ".")) - cashAppliedCents : 0;
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -164,6 +171,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
         <input ref={barcodeInput} value={barcodeQuery} onChange={(event) => { setBarcodeQuery(event.target.value); setBarcodeMessage(""); }} onKeyDown={handleBarcodeKeyDown} type="text" inputMode="search" placeholder="Scannez puis appuyez sur Entrée" />
       </label>
       {barcodeMessage && <p className={barcodeMessage.startsWith("Ajouté") ? "form-success" : "form-error"} role="status">{barcodeMessage}</p>}
+      <div className="pos-product-quick-search"><label>Rechercher un produit<input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Nom, SKU ou code-barres" /></label><div className="pos-quick-products">{filteredProducts.map((item) => <button type="button" key={item.id} onClick={() => addLineForProduct(item.id)}><strong>{item.name}</strong><span>{item.sku} · {Number(item.sale_price).toLocaleString("fr-FR")} F</span></button>)}{!filteredProducts.length && <p className="catalog-empty">Aucun produit correspondant.</p>}</div></div>
       <div className="pos-add-row">
         <label>Produit
           <select value={productId} onChange={(event) => setProductId(event.target.value)} required>
@@ -182,7 +190,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
           return <div className="pos-cart-line" key={line.product_id}>
             <div><strong>{product.name}</strong><small>{product.product_kind === "service" ? "Prestation" : "Produit"} · {line.quantity} {product.unit} × {Number(product.sale_price).toLocaleString("fr-FR")} F</small></div>
             <strong>{(Math.round(Number(line.quantity) * 1000) * toCents(product.sale_price) / 100000).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} F</strong>
-            <button type="button" className="archive-button" onClick={() => setCart((current) => current.filter((item) => item.product_id !== line.product_id))}>Retirer</button>
+            <div className="pos-cart-qty"><button type="button" aria-label="Diminuer la quantité" onClick={() => { const next = Number(line.quantity) - 1; if (next <= 0) setCart((current) => current.filter((item) => item.product_id !== line.product_id)); else updateCartQuantity(line.product_id, String(next)); }}>−</button><input aria-label={`Quantité ${product.name}`} type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateCartQuantity(line.product_id, event.target.value)} /><button type="button" aria-label="Augmenter la quantité" onClick={() => updateCartQuantity(line.product_id, String(Number(line.quantity) + 1))}>+</button><button type="button" className="archive-button" onClick={() => setCart((current) => current.filter((item) => item.product_id !== line.product_id))}>Retirer</button></div>
           </div>;
         }) : <p className="catalog-empty">Ajoutez les produits à vendre.</p>}
       </div>
@@ -201,8 +209,9 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
               </select>
             </label>
             <label>Montant (FCFA)
-              <input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, amount: event.target.value } : item))} required />
+              <input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => { const value = event.target.value; setPayments((current) => current.map((item, i) => i === index ? { ...item, amount: value } : item)); if (payment.method === "cash") setCashReceived(value); }} required />
             </label>
+            {payment.method === "cash" && <label>Espèces reçues (FCFA)<input type="number" min={payment.amount || "0"} step="0.01" value={cashReceivedValue} onChange={(event) => setCashReceived(event.target.value)} placeholder="Montant remis par le client" /></label>}
             {["wave", "orange_money"].includes(payment.method) && <label>Référence de transaction
               <input value={payment.reference ?? ""} minLength={4} maxLength={160} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Référence affichée dans l'application" required />
             </label>}
@@ -210,6 +219,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
           </div>
         ))}
         <div className="pos-payment-total"><span>Montant réglé</span><strong>{formatCents(paidTotal)} F / {formatCents(totals.total)} F</strong></div>
+        {cashLine && <div className="pos-cash-change"><span>Rendu monnaie</span><strong>{formatCents(Math.max(0, cashChangeCents))} F</strong>{cashReceived && cashChangeCents < 0 && <small>Il manque {formatCents(Math.abs(cashChangeCents))} F en espèces.</small>}</div>}
         {!paymentsValid && cart.length > 0 && <p className="catalog-help">Répartissez le montant exact entre les moyens de paiement.</p>}
       </div>
       <button className="primary" type="submit" disabled={!cart.length || totals.total <= 0 || !paymentsValid}>Valider et encaisser</button>
