@@ -40,6 +40,9 @@ function statusLabel(status: string) {
 
 export default async function PlatformAdminPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; reviewed?: string; q?: string; page?: string }> }) {
   const params = await searchParams;
+  const tenantSearch = (params.q ?? "").trim().slice(0, 80);
+  const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const pageSize = 50;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -48,7 +51,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
   const [plansResult, requestsResult, tenantsResult, subscriptionsResult, paymentsResult] = await Promise.all([
     supabase.from("subscription_plans").select("id,code,name,description,price_monthly_fcfa,price_yearly_fcfa,max_users,max_locations,max_products,max_monthly_sales").order("code"),
     supabase.from("subscription_requests").select("id,tenant_id,billing_interval,payment_method,payment_reference,created_at,status,tenant:tenants(name),plan:subscription_plans(name,code)").order("created_at", { ascending: false }).limit(100),
-    supabase.from("tenants").select("id,name,slug,created_at,phone,currency_code", { count: "exact" }).order("created_at", { ascending: false }).limit(200),
+    (() => { let query = supabase.from("tenants").select("id,name,slug,created_at,phone,currency_code", { count: "exact" }); if (tenantSearch) query = query.ilike("name", `%${tenantSearch}%`); return query.order("created_at", { ascending: false }).range((requestedPage - 1) * pageSize, requestedPage * pageSize - 1); })(),
     supabase.from("tenant_subscriptions").select("tenant_id,status,plan:subscription_plans(name)").order("created_at", { ascending: false }).limit(500),
     supabase.from("subscription_payments").select("id,subscription_request_id,provider,status,amount_fcfa,provider_transaction_id,paid_at").order("created_at", { ascending: false }).limit(200),
   ]);
@@ -56,9 +59,11 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
   const requests = (requestsResult.data ?? []) as unknown as RequestRow[];
   const tenants = (tenantsResult.data ?? []) as unknown as TenantRow[];
   const subscriptions = (subscriptionsResult.data ?? []) as unknown as SubscriptionRow[];
+  const tenantSubscriptionResult = tenants.length ? await supabase.from("tenant_subscriptions").select("tenant_id,status,plan:subscription_plans(name)").in("tenant_id", tenants.map((tenant) => tenant.id)).order("created_at", { ascending: false }) : { data: [], error: null };
+  const tenantSubscriptions = (tenantSubscriptionResult.data ?? []) as unknown as SubscriptionRow[];
   const payments = (paymentsResult.data ?? []) as unknown as PaymentRow[];
   const latestSubscriptionByTenant = new Map<string, SubscriptionRow>();
-  for (const subscription of subscriptions) {
+  for (const subscription of tenantSubscriptions) {
     if (!latestSubscriptionByTenant.has(subscription.tenant_id)) latestSubscriptionByTenant.set(subscription.tenant_id, subscription);
   }
   const pendingCount = requests.filter((request) => request.status === "pending").length;
@@ -68,6 +73,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
     requestsResult.error && "demandes",
     tenantsResult.error && "entreprises",
     subscriptionsResult.error && "abonnements",
+    tenantSubscriptionResult.error && "abonnements des entreprises affichées",
     paymentsResult.error && "paiements",
   ].filter(Boolean) as string[];
   const paidPayments = payments.filter((payment) => payment.status === "paid");
@@ -132,7 +138,8 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
 
         <section id="tenants" className="platform-admin-section">
           <div className="platform-section-title"><div><p className="eyebrow">ÉCOSYSTÈME IDIABA</p><h2>Toutes les entreprises</h2></div><span>{tenantsResult.count ?? tenants.length} entreprise(s) · page {requestedPage}</span></div>
-          <form method="get" action="/app/platform-admin#tenants" className="platform-tenant-search"><label htmlFor="tenant-search">Rechercher une entreprise</label><div><input id="tenant-search" name="q" value={tenantSearch} placeholder="Nom de l’entreprise" maxLength={80} /><button className="secondary" type="submit">Rechercher</button>{tenantSearch && <Link href="/app/platform-admin#tenants">Réinitialiser</Link>}</div></form>\n          {tenants.length ? <div className="platform-tenant-table-wrap"><table className="platform-tenant-table"><thead><tr><th>Entreprise</th><th>Contact</th><th>Formule</th><th>Abonnement</th><th>Inscription</th></tr></thead><tbody>{tenants.map((tenant) => {
+          <form method="get" action="/app/platform-admin#tenants" className="platform-tenant-search"><label htmlFor="tenant-search">Rechercher une entreprise</label><div><input id="tenant-search" name="q" value={tenantSearch} placeholder="Nom de l’entreprise" maxLength={80} /><button className="secondary" type="submit">Rechercher</button>{tenantSearch && <Link href="/app/platform-admin#tenants">Réinitialiser</Link>}</div></form>\n          <form method="get" action="/app/platform-admin#tenants" className="platform-tenant-search"><label htmlFor="tenant-search">Rechercher une entreprise</label><div><input id="tenant-search" name="q" value={tenantSearch} placeholder="Nom de l’entreprise" maxLength={80} /><button className="secondary" type="submit">Rechercher</button>{tenantSearch && <Link href="/app/platform-admin#tenants">Réinitialiser</Link>}</div></form>
+          {tenants.length ? <div className="platform-tenant-table-wrap"><table className="platform-tenant-table"><thead><tr><th>Entreprise</th><th>Contact</th><th>Formule</th><th>Abonnement</th><th>Inscription</th></tr></thead><tbody>{tenants.map((tenant) => {
             const subscription = latestSubscriptionByTenant.get(tenant.id);
             const plan = subscription ? one(subscription.plan) : null;
             return <tr key={tenant.id}>
