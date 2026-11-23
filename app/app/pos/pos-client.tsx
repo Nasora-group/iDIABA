@@ -41,6 +41,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
   const cashAppliedCents = cashLine && Number(cashLine.amount) > 0 ? toCents(cashLine.amount) : 0;
   const cashReceivedValue = cashReceived || cashLine?.amount || "";
   const cashChangeCents = cashLine && cashReceivedValue.trim() ? toCents(cashReceivedValue.replace(",", ".")) - cashAppliedCents : 0;
+  const cashTenderValid = !cashLine || !cashReceivedValue.trim() || cashChangeCents >= 0;
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -201,11 +202,11 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
         <div className="pos-grand-total"><span>Total à payer</span><strong>{formatCents(totals.total)} F</strong></div>
       </div>
       <div className="pos-payment-section">
-        <div className="pos-payment-heading"><strong>Règlement</strong><button type="button" className="secondary" onClick={() => setPayments((current) => current.length < 4 ? [...(current.length === 1 ? [{ ...current[0], amount: (totals.total / 100).toFixed(2) }] : current), { method: "mobile_money", amount: "" }] : current)} disabled={payments.length >= 4}>Ajouter un moyen de paiement</button></div>
+        <div className="pos-payment-heading"><strong>Règlement</strong><button type="button" className="secondary" onClick={() => { setPayments((current) => current.length < 4 ? [...(current.length === 1 ? [{ ...current[0], amount: (totals.total / 100).toFixed(2) }] : current), { method: "mobile_money", amount: "" }] : current); setCashReceived(""); }} disabled={payments.length >= 4}>Ajouter un moyen de paiement</button></div>
         {effectivePayments.map((payment, index) => (
           <div className="pos-payment-row" key={index}>
             <label>Moyen de paiement
-              <select value={payment.method} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, method: event.target.value } : item))}>
+              <select value={payment.method} onChange={(event) => { const method = event.target.value; setPayments((current) => current.map((item, i) => i === index ? { ...item, method } : item)); if (method === "cash") setCashReceived(payment.amount); else if (payment.method === "cash") setCashReceived(""); }}>
                 <option value="cash">Espèces</option><option value="wave">Wave</option><option value="orange_money">Orange Money</option><option value="mobile_money">Autre Mobile Money</option><option value="card">Carte bancaire</option><option value="bank_transfer">Virement</option>
               </select>
             </label>
@@ -216,14 +217,15 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
             {["wave", "orange_money"].includes(payment.method) && <label>Référence de transaction
               <input value={payment.reference ?? ""} minLength={4} maxLength={160} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Référence affichée dans l'application" required />
             </label>}
-            {payments.length > 1 && <button type="button" className="archive-button" onClick={() => setPayments((current) => current.filter((_, i) => i !== index))}>Retirer</button>}
+            {payments.length > 1 && <button type="button" className="archive-button" onClick={() => { setPayments((current) => current.filter((_, i) => i !== index)); setCashReceived(""); }}>Retirer</button>}
           </div>
         ))}
         <div className="pos-payment-total"><span>Montant réglé</span><strong>{formatCents(paidTotal)} F / {formatCents(totals.total)} F</strong></div>
         {cashLine && <div className="pos-cash-change"><span>Rendu monnaie</span><strong>{formatCents(Math.max(0, cashChangeCents))} F</strong>{cashReceived && cashChangeCents < 0 && <small>Il manque {formatCents(Math.abs(cashChangeCents))} F en espèces.</small>}</div>}
-        {!paymentsValid && cart.length > 0 && <p className="catalog-help">Répartissez le montant exact entre les moyens de paiement.</p>}
+        {!paymentsValid && cart.length > 0 && <p className="catalog-help">Répartissez le montant exact entre les moyens de paiement.</p>
+        {cashLine && !cashTenderValid && <p className="form-error">Les espèces remises sont inférieures au montant payé en espèces.</p>}}
       </div>
-      <button className="primary" type="submit" disabled={!cart.length || totals.total <= 0 || !paymentsValid}>Valider et encaisser</button>
+      <button className="primary" type="submit" disabled={!cart.length || totals.total <= 0 || !paymentsValid || !cashTenderValid}>Valider et encaisser</button>
       {offlineMessage && <p className="form-success" role="status">{offlineMessage}</p>}
       <p className="catalog-help">La validation vérifie le stock et enregistre la vente, les différents paiements et les sorties de stock dans une seule transaction.</p>
     </form>
