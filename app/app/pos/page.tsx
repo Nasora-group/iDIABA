@@ -108,7 +108,7 @@ export default async function POSPage({ searchParams }: {
         {data.map(({ workspace, locations, products, sessions, reconciliations, closedSessions, sales, cashMovements, isManager, ownedSessionCount, error }) => (
           <section className="catalog-tenant" key={workspace.tenant_id}>
             <div className="catalog-heading"><div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>{isManager ? "Mode gestionnaire · supervision des caisses" : "Mode caissier · votre caisse et vos ventes"}</p></div><span className="pill">{sales.length} ventes récentes</span></div>
-            {isManager && <details className="pos-admin-kpis-details"><summary>Vue administrateur</summary><div className="pos-admin-kpis"><article><span>Caisses ouvertes</span><strong>{sessions.length}</strong><small>Sessions en cours</small></article><article><span>Ventes récentes</span><strong>{sales.reduce((sum, sale) => sum + Number(sale.total), 0).toLocaleString("fr-FR")} F</strong><small>Sur les 20 dernières ventes</small></article><article><span>Espèces théoriques</span><strong>{sessions.reduce((sum, session) => sum + Number(reconciliations[session.id]?.expected_cash ?? 0), 0).toLocaleString("fr-FR")} F</strong><small>À compter actuellement</small></article><article><span>Vos caisses</span><strong>{ownedSessionCount}</strong><small>Sessions ouvertes par vous</small></article></div></details>}}
+            {isManager && <details className="pos-admin-kpis-details"><summary>Vue administrateur</summary><div className="pos-admin-kpis"><article><span>Caisses ouvertes</span><strong>{sessions.length}</strong><small>Sessions en cours</small></article><article><span>Ventes récentes</span><strong>{sales.reduce((sum, sale) => sum + Number(sale.total), 0).toLocaleString("fr-FR")} F</strong><small>Sur les 20 dernières ventes</small></article><article><span>Espèces théoriques</span><strong>{sessions.reduce((sum, session) => sum + Number(reconciliations[session.id]?.expected_cash ?? 0), 0).toLocaleString("fr-FR")} F</strong><small>À compter actuellement</small></article><article><span>Vos caisses</span><strong>{ownedSessionCount}</strong><small>Sessions ouvertes par vous</small></article></div></details>}
             {error && <p className="form-error">Erreur de chargement : {error}</p>}
             {(!sessions.length || isManager) ? (
               <form action={openCashSession} className="catalog-form pos-session-form">
@@ -168,16 +168,14 @@ export default async function POSPage({ searchParams }: {
                 {session.opened_by === user.id ? (products.length ? <><OfflinePOSSeed userId={user.id} tenantId={workspace.tenant_id} tenantName={workspace.tenant?.name ?? "Entreprise"} locationId={session.location_id} locationName={session.location?.name ?? "Point de vente"} sessionId={session.id} products={products} /><POSCheckout userId={user.id} tenantId={workspace.tenant_id} locationId={session.location_id} sessionId={session.id} clientSaleId={randomUUID()} products={products} /></> : <p className="catalog-empty">Ajoutez des produits actifs au catalogue avant de vendre.</p>) : <p className="pos-manager-session-note">Session de {session.opened_by.slice(0, 8)}… · supervision uniquement. Les ventes sont réservées au caissier titulaire.</p>}
               </div>
             ))}
-            <div className="catalog-table-wrap">
-              <h3>{isManager ? "Historique des clôtures et rapprochements" : "Vos clôtures"}</h3>
+            <details className="pos-history-details"><summary>{isManager ? "Historique des clôtures et rapprochements" : "Vos clôtures"}</summary><div className="catalog-table-wrap">
               {closedSessions.length ? <table className="catalog-table"><thead><tr><th>Point de vente / clôture</th><th>Fond initial</th><th>Solde théorique</th><th>Espèces comptées</th><th>Écart</th></tr></thead><tbody>{closedSessions.map((session) => (
                 <tr key={session.id}><td><strong>{session.location?.name ?? "Point de vente"}</strong><small>{new Date(session.closed_at).toLocaleString("fr-FR")}</small></td><td>{Number(session.opening_cash).toLocaleString("fr-FR")} F</td><td>{Number(session.expected_cash).toLocaleString("fr-FR")} F</td><td>{Number(session.closing_cash).toLocaleString("fr-FR")} F</td><td><strong>{Number(session.cash_variance) > 0 ? "+" : ""}{Number(session.cash_variance).toLocaleString("fr-FR")} F</strong></td></tr>
               ))}</tbody></table> : <p className="catalog-empty">Aucune clôture enregistrée.</p>}
-            </div>
-            <div className="catalog-table-wrap">
-              <h3>{isManager ? "Dernières ventes de l’entreprise" : "Vos dernières ventes"}</h3>
+            </div></details>
+            <details className="pos-history-details"><summary>{isManager ? "Dernières ventes de l’entreprise" : "Vos dernières ventes"}</summary><div className="catalog-table-wrap">
               {sales.length ? <table className="catalog-table"><thead><tr><th>Date</th><th>Ticket</th><th>Caissier</th><th>HT</th><th>Taxes</th><th>Total TTC</th></tr></thead><tbody>{sales.map((sale) => <tr key={sale.id}><td>{new Date(sale.created_at).toLocaleString("fr-FR")}</td><td><Link href={`/app/pos/receipt/${sale.id}`} className="pos-reprint-link"><strong>{sale.id.slice(0, 8).toUpperCase()}</strong><small>Voir / réimprimer</small></Link></td><td>{sale.cashier?.full_name ?? "Utilisateur"}</td><td>{Number(sale.subtotal).toLocaleString("fr-FR")} F</td><td>{Number(sale.tax_total).toLocaleString("fr-FR")} F</td><td><strong>{Number(sale.total).toLocaleString("fr-FR")} F</strong></td></tr>)}</tbody></table> : <p className="catalog-empty">Aucune vente enregistrée.</p>}
-            </div>
+            </div></details>
           </section>
         ))}
       </section>
