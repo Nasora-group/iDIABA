@@ -3,12 +3,13 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { closeCashSession, openCashSession, recordCashMovement } from "./actions";
 import POSCheckout from "./pos-client";
+import CashClosePreview from "./cash-close-preview";
 import OfflinePOSSeed from "./offline-seed";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
 type Location = { id: string; name: string; code: string };
 type Product = { id: string; name: string; sku: string; barcode: string | null; unit: string; product_kind: "product" | "service"; sale_price: string | number; tax_rate: string | number; is_active: boolean };
-type CashSession = { id: string; tenant_id: string; location_id: string; opening_cash: string | number; opened_at: string; location: { name: string; code: string } | null };
+type CashSession = { id: string; tenant_id: string; location_id: string; opened_by: string; opening_cash: string | number; opened_at: string; location: { name: string; code: string } | null };
 type ClosedSession = { id: string; opening_cash: string | number; expected_cash: string | number; closing_cash: string | number; cash_variance: string | number; opened_at: string; closed_at: string; location: { name: string } | null };
 type CashMovement = { id: string; cash_session_id: string; movement_type: string; amount: string | number; reason: string; created_at: string };
 type CashReconciliation = { cash_sales: number | string; cash_in: number | string; cash_out: number | string; expected_cash: number | string; payments: { payment_method: string; amount: number | string; payments_count: number }[] };
@@ -29,22 +30,25 @@ export default async function POSPage({ searchParams }: {
 
   const data = await Promise.all(workspaces.map(async (workspace) => {
     let openSessionsQuery = supabase.from("cash_sessions")
-      .select("id,tenant_id,location_id,opening_cash,opened_at,location:stock_locations(name,code)")
+      .select("id,tenant_id,location_id,opened_by,opening_cash,opened_at,location:stock_locations(name,code)")
       .eq("tenant_id", workspace.tenant_id)
       .eq("status", "open");
     // Managers can reconcile all sessions in their assigned locations; cashiers see only their own.
     if (!["owner", "admin", "manager"].includes(workspace.role)) {
       openSessionsQuery = openSessionsQuery.eq("opened_by", user.id);
     }
-    const [locationsResult, productsResult, sessionsResult, closedResult, salesResult, movementResult] = await Promise.all([
+    const isManager = ["owner", "admin", "manager"].includes(workspace.role);
+    const [locationsResult, productsResult, sessionsResult, closedResult, salesResult] = await Promise.all([
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("location_type", "store").eq("is_active", true).order("name"),
       supabase.from("products").select("id,name,sku,barcode,unit,product_kind,track_stock,sale_price,tax_rate,is_active").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       openSessionsQuery.order("opened_at", { ascending: false }),
-      supabase.from("cash_sessions").select("id,opening_cash,expected_cash,closing_cash,cash_variance,opened_at,closed_at,location:stock_locations(name)").eq("tenant_id", workspace.tenant_id).eq("status", "closed").order("closed_at", { ascending: false }).limit(10),
-      supabase.from("sales").select("id,total,subtotal,tax_total,created_at,cashier:profiles(full_name)").eq("tenant_id", workspace.tenant_id).eq("status", "completed").order("created_at", { ascending: false }).limit(20),
-      supabase.from("cash_movements").select("id,cash_session_id,movement_type,amount,reason,created_at").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(50),
+      (() => { let query = supabase.from("cash_sessions").select("id,opening_cash,expected_cash,closing_cash,cash_variance,opened_at,closed_at,opened_by,closed_by,location:stock_locations(name)").eq("tenant_id", workspace.tenant_id).eq("status", "closed"); if (!isManager) query = query.eq("opened_by", user.id); return query.order("closed_at", { ascending: false }).limit(10); })(),
+      (() => { let query = supabase.from("sales").select("id,total,subtotal,tax_total,created_at,cashier:profiles(full_name)").eq("tenant_id", workspace.tenant_id).eq("status", "completed"); if (!isManager) query = query.eq("cashier_id", user.id); return query.order("created_at", { ascending: false }).limit(20); })(),
     ]);
-    const reconciliationEntries = await Promise.all(((sessionsResult.data ?? []) as unknown as CashSession[]).map(async (session) => {
+    const sessionRows = (sessionsResult.data ?? []) as unknown as CashSession[];
+    const visibleSessionIds = sessionRows.map((session) => session.id);
+    const filteredMovements = visibleSessionIds.length ? await supabase.from("cash_movements").select("id,cash_session_id,movement_type,amount,reason,created_at").in("cash_session_id", visibleSessionIds).order("created_at", { ascending: false }).limit(50) : { data: [], error: null };
+    const reconciliationEntries = await Promise.all(sessionRows.map(async (session) => {
       const { data: reconciliation, error: reconciliationError } = await supabase.rpc("get_cash_session_reconciliation", {
         p_session_id: session.id,
       });
@@ -58,12 +62,14 @@ export default async function POSPage({ searchParams }: {
       workspace,
       locations: (locationsResult.data ?? []) as unknown as Location[],
       products: (productsResult.data ?? []) as Product[],
-      sessions: (sessionsResult.data ?? []) as unknown as CashSession[],
+      sessions: sessionRows,
+      isManager,
+      ownedSessionCount: sessionRows.filter((session) => session.opened_by === user.id).length,
       reconciliations,
       closedSessions: (closedResult.data ?? []) as unknown as ClosedSession[],
       sales: (salesResult.data ?? []) as unknown as Sale[],
-      cashMovements: (movementResult.data ?? []) as CashMovement[],
-      error: locationsResult.error?.message ?? productsResult.error?.message ?? sessionsResult.error?.message ?? closedResult.error?.message ?? salesResult.error?.message ?? movementResult.error?.message ?? null,
+      cashMovements: (filteredMovements.data ?? []) as CashMovement[],
+      error: locationsResult.error?.message ?? productsResult.error?.message ?? sessionsResult.error?.message ?? closedResult.error?.message ?? salesResult.error?.message ?? filteredMovements.error?.message ?? null,
     };
   }));
 
@@ -83,13 +89,14 @@ export default async function POSPage({ searchParams }: {
         {params.sold && <p className="form-success">Vente enregistrée et stock mis à jour.</p>}
         {params.movement && <p className="form-success">Mouvement de caisse enregistré.</p>}
         {params.error && <p className="form-error">Opération impossible : vérifiez les droits, la caisse ouverte, le montant et les informations saisies.</p>}
-        {data.map(({ workspace, locations, products, sessions, reconciliations, closedSessions, sales, cashMovements, error }) => (
+        {data.map(({ workspace, locations, products, sessions, reconciliations, closedSessions, sales, cashMovements, isManager, ownedSessionCount, error }) => (
           <section className="catalog-tenant" key={workspace.tenant_id}>
-            <div className="catalog-heading"><div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>Rôle : {workspace.role}</p></div><span className="pill">{sales.length} dernières ventes</span></div>
+            <div className="catalog-heading"><div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>{isManager ? "Mode gestionnaire · supervision des caisses" : "Mode caissier · votre caisse et vos ventes"}</p></div><span className="pill">{sales.length} ventes récentes</span></div>
+            {isManager && <div className="pos-admin-kpis"><article><span>Caisses ouvertes</span><strong>{sessions.length}</strong><small>Sessions en cours</small></article><article><span>Ventes récentes</span><strong>{sales.reduce((sum, sale) => sum + Number(sale.total), 0).toLocaleString("fr-FR")} F</strong><small>Sur les 20 dernières ventes</small></article><article><span>Espèces théoriques</span><strong>{sessions.reduce((sum, session) => sum + Number(reconciliations[session.id]?.expected_cash ?? 0), 0).toLocaleString("fr-FR")} F</strong><small>À compter actuellement</small></article><article><span>Vos caisses</span><strong>{ownedSessionCount}</strong><small>Sessions ouvertes par vous</small></article></div>}
             {error && <p className="form-error">Erreur de chargement : {error}</p>}
-            {!sessions.length ? (
+            {(!sessions.length || isManager) ? (
               <form action={openCashSession} className="catalog-form pos-session-form">
-                <h3>Ouvrir une session de caisse</h3>
+                <h3>Ouvrir votre session de caisse</h3>
                 <input type="hidden" name="tenant_id" value={workspace.tenant_id} />
                 <label>Dépôt / point de vente<select name="location_id" required defaultValue=""><option value="" disabled>Choisir un dépôt</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name} · {location.code}</option>)}</select></label>
                 <label>Fond de caisse initial (FCFA)<input name="opening_cash" type="number" min="0" step="0.01" defaultValue="0" required /></label>
@@ -99,7 +106,7 @@ export default async function POSPage({ searchParams }: {
             ) : sessions.map((session) => (
               <div className="pos-session" key={session.id}>
                 <div className="pos-session-heading"><div><span className="catalog-state">Caisse ouverte</span><h3>{session.location?.name ?? "Point de vente"} · {session.location?.code ?? ""}</h3><p>Ouverte le {new Date(session.opened_at).toLocaleString("fr-FR")} · Fond initial : {Number(session.opening_cash).toLocaleString("fr-FR")} F</p></div>
-                  <form action={closeCashSession} className="pos-close-form"><input type="hidden" name="session_id" value={session.id} /><label>Espèces comptées (FCFA)<input name="closing_cash" type="number" min="0" step="0.01" required placeholder="Montant réel" /></label><button className="secondary" type="submit">Clôturer la caisse</button></form>
+                  {reconciliations[session.id] ? <CashClosePreview sessionId={session.id} expectedCash={Number(reconciliations[session.id].expected_cash)} closeAction={closeCashSession} /> : <p className="form-error">Clôture bloquée : rapprochement indisponible.</p>}
                 </div>
                 {reconciliations[session.id] && (
                   <div className="pos-reconciliation">
@@ -124,7 +131,7 @@ export default async function POSPage({ searchParams }: {
                     Le rapprochement automatique n&apos;est pas disponible. Actualisez la page avant de clôturer la caisse et vérifiez vos droits d&apos;accès.
                   </p>
                 )}
-                <div className="pos-cash-tools">
+                <details className="pos-cash-tools" open={isManager}><summary>Gestion des espèces · mouvements et historique</summary><div className="pos-cash-tools-inner">
                   <form action={recordCashMovement} className="pos-cash-movement">
                     <h4>Entrée / sortie d&apos;espèces</h4>
                     <input type="hidden" name="session_id" value={session.id} />
@@ -141,19 +148,19 @@ export default async function POSPage({ searchParams }: {
                       ))}</ul>
                     ) : <p className="catalog-empty">Aucun mouvement hors ventes.</p>}
                   </div>
-                </div>
-                {products.length ? <><OfflinePOSSeed userId={user.id} tenantId={workspace.tenant_id} tenantName={workspace.tenant?.name ?? "Entreprise"} locationId={session.location_id} locationName={session.location?.name ?? "Point de vente"} sessionId={session.id} products={products} /><POSCheckout userId={user.id} tenantId={workspace.tenant_id} locationId={session.location_id} sessionId={session.id} clientSaleId={randomUUID()} products={products} /></> : <p className="catalog-empty">Ajoutez des produits actifs au catalogue avant de vendre.</p>}
+                </div></details>
+                {session.opened_by === user.id ? (products.length ? <><OfflinePOSSeed userId={user.id} tenantId={workspace.tenant_id} tenantName={workspace.tenant?.name ?? "Entreprise"} locationId={session.location_id} locationName={session.location?.name ?? "Point de vente"} sessionId={session.id} products={products} /><POSCheckout userId={user.id} tenantId={workspace.tenant_id} locationId={session.location_id} sessionId={session.id} clientSaleId={randomUUID()} products={products} /></> : <p className="catalog-empty">Ajoutez des produits actifs au catalogue avant de vendre.</p>) : <p className="pos-manager-session-note">Session de {session.opened_by.slice(0, 8)}… · supervision uniquement. Les ventes sont réservées au caissier titulaire.</p>}
               </div>
             ))}
             <div className="catalog-table-wrap">
-              <h3>Historique des clôtures et rapprochements</h3>
+              <h3>{isManager ? "Historique des clôtures et rapprochements" : "Vos clôtures"}</h3>
               {closedSessions.length ? <table className="catalog-table"><thead><tr><th>Point de vente / clôture</th><th>Fond initial</th><th>Solde théorique</th><th>Espèces comptées</th><th>Écart</th></tr></thead><tbody>{closedSessions.map((session) => (
                 <tr key={session.id}><td><strong>{session.location?.name ?? "Point de vente"}</strong><small>{new Date(session.closed_at).toLocaleString("fr-FR")}</small></td><td>{Number(session.opening_cash).toLocaleString("fr-FR")} F</td><td>{Number(session.expected_cash).toLocaleString("fr-FR")} F</td><td>{Number(session.closing_cash).toLocaleString("fr-FR")} F</td><td><strong>{Number(session.cash_variance) > 0 ? "+" : ""}{Number(session.cash_variance).toLocaleString("fr-FR")} F</strong></td></tr>
               ))}</tbody></table> : <p className="catalog-empty">Aucune clôture enregistrée.</p>}
             </div>
             <div className="catalog-table-wrap">
-              <h3>Dernières ventes</h3>
-              {sales.length ? <table className="catalog-table"><thead><tr><th>Date</th><th>Ticket</th><th>Caissier</th><th>HT</th><th>Taxes</th><th>Total TTC</th></tr></thead><tbody>{sales.map((sale) => <tr key={sale.id}><td>{new Date(sale.created_at).toLocaleString("fr-FR")}</td><td><strong>{sale.id.slice(0, 8).toUpperCase()}</strong></td><td>{sale.cashier?.full_name ?? "Utilisateur"}</td><td>{Number(sale.subtotal).toLocaleString("fr-FR")} F</td><td>{Number(sale.tax_total).toLocaleString("fr-FR")} F</td><td><strong>{Number(sale.total).toLocaleString("fr-FR")} F</strong></td></tr>)}</tbody></table> : <p className="catalog-empty">Aucune vente enregistrée.</p>}
+              <h3>{isManager ? "Dernières ventes de l’entreprise" : "Vos dernières ventes"}</h3>
+              {sales.length ? <table className="catalog-table"><thead><tr><th>Date</th><th>Ticket</th><th>Caissier</th><th>HT</th><th>Taxes</th><th>Total TTC</th></tr></thead><tbody>{sales.map((sale) => <tr key={sale.id}><td>{new Date(sale.created_at).toLocaleString("fr-FR")}</td><td><Link href={`/app/pos/receipt/${sale.id}`} className="pos-reprint-link"><strong>{sale.id.slice(0, 8).toUpperCase()}</strong><small>Voir / réimprimer</small></Link></td><td>{sale.cashier?.full_name ?? "Utilisateur"}</td><td>{Number(sale.subtotal).toLocaleString("fr-FR")} F</td><td>{Number(sale.tax_total).toLocaleString("fr-FR")} F</td><td><strong>{Number(sale.total).toLocaleString("fr-FR")} F</strong></td></tr>)}</tbody></table> : <p className="catalog-empty">Aucune vente enregistrée.</p>}
             </div>
           </section>
         ))}
