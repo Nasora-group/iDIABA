@@ -119,20 +119,19 @@ export default async function AppHome() {
           {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin" className="app-module-card"><span className="app-module-icon"><CreditCard size={20} /></span><div><strong>Administration SaaS</strong><p>Abonnements, formules, quotas et entreprises.</p></div><span className="app-module-link">Ouvrir<ArrowUpRight size={15} /></span></Link>}
         </div>
 
-        <div className="app-section-heading">
-          <div><p className="eyebrow">ORGANISATION</p><h2>Vos entreprises</h2></div>
-          <p>{memberships.length} espace(s) associé(s) à votre compte</p>
-        </div>
-        {memberships.length ? (
-          <div className="workspace-list">
-            {memberships.filter((membership) => membership.tenant).map((membership) => (
-              <article key={membership.tenant!.id} className="workspace-item">
-                <div><strong>{membership.tenant!.name}</strong><small>{membership.tenant!.slug}</small></div>
-                <span className="role">{sectorNames[profiles.get(membership.tenant_id)?.business_type ?? "general"] ?? "Commerce général"} · {membership.role}</span>
-              </article>
-            ))}
-          </div>
-        ) : <p className="catalog-empty">Aucun espace entreprise n&apos;est encore associé à ce compte.</p>}
+        <details className="workspace-list-details">
+          <summary>Vos entreprises ({memberships.length})</summary>
+          {memberships.length ? (
+            <div className="workspace-list">
+              {memberships.filter((membership) => membership.tenant).map((membership) => (
+                <article key={membership.tenant!.id} className="workspace-item">
+                  <div><strong>{membership.tenant!.name}</strong><small>{membership.tenant!.slug}</small></div>
+                  <span className="role">{sectorNames[profiles.get(membership.tenant_id)?.business_type ?? "general"] ?? "Commerce général"} · {membership.role}</span>
+                </article>
+              ))}
+            </div>
+          ) : <p className="catalog-empty">Aucun espace entreprise n&apos;est encore associé à ce compte.</p>}
+        </details>
       </section>
     </main>
   );
