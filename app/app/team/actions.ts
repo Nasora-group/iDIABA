@@ -16,6 +16,8 @@ export async function manageMember(formData:FormData){
  const role=String(formData.get("role")??"cashier");
  const validAccount=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||/^[0-9a-f-]{36}$/i.test(email);
  if(!/^[0-9a-f-]{36}$/i.test(tenantId)||!["add","update","remove"].includes(action)||!validAccount||(action!=="remove"&&!allowed.includes(role))) go("validation");
+ const selectedProfile=String(formData.get("custom_role_profile_id")??"").trim();
+ if(action!=="remove"&&role==="admin"&&selectedProfile) go("validation");
  const {data:targetId,error}=await supabase.rpc("manage_tenant_member",{p_tenant_id:tenantId,p_email:email,p_full_name:fullName,p_role:action==="remove"?"cashier":role,p_action:action});
  if(error) go(error.message.includes("quota")?"quota":error.message.includes("No account")?"noaccount":"error");
  if(action!=="remove"){
