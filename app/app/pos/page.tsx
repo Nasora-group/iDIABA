@@ -89,13 +89,13 @@ export default async function POSPage({ searchParams }: {
     <main className="shell">
       <header className="topbar">
         <div className="brand"><span className="mark">i</span><span>iDIABA</span></div>
-        <nav className="product-nav"><Link href="/app">Mon espace</Link><Link href="/app/products">Catalogue</Link><Link href="/app/stock">Stocks</Link><Link href="/app/inventory">Inventaires</Link><span>Caisse</span><Link href="/app/purchasing">Achats</Link><Link href="/app/accounting">Comptabilité</Link></nav>
+        <nav className="product-nav"><Link href="/app">Accueil</Link><span>Caisse</span><Link href="/app/stock">Stock</Link></nav>
       </header>
       <section className="workspace catalog-workspace">
-        <p className="eyebrow">SPRINT 6 · CAISSE & RAPPROCHEMENT</p>
-        <h1>Point de vente</h1>
-        <p className="lead">Encaissez avec plusieurs moyens de paiement, suivez les entrées et sorties d&apos;espèces et contrôlez les écarts à la clôture.</p>
-        <p className="catalog-help"><Link href="/offline">Préparer / ouvrir la caisse hors connexion</Link> · Consultez cette page une première fois en ligne sur chaque appareil.</p>
+        <p className="eyebrow">ENCAISSEMENT</p>
+        <h1>Caisse</h1>
+        <p className="lead">Vendez, encaissez et continuez. Les outils de gestion sont rangés en dessous.</p>
+        <p className="catalog-help"><Link href="/offline">Préparer la caisse hors connexion</Link></p>
         {params.opened && <p className="form-success">Session de caisse ouverte.</p>}
         {params.closed && <p className="form-success">Session clôturée. Le solde théorique et l&apos;écart ont été calculés.</p>}
         {params.sold && <p className="form-success">Vente enregistrée et stock mis à jour.</p>}
@@ -108,7 +108,7 @@ export default async function POSPage({ searchParams }: {
         {data.map(({ workspace, locations, products, sessions, reconciliations, closedSessions, sales, cashMovements, isManager, ownedSessionCount, error }) => (
           <section className="catalog-tenant" key={workspace.tenant_id}>
             <div className="catalog-heading"><div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>{isManager ? "Mode gestionnaire · supervision des caisses" : "Mode caissier · votre caisse et vos ventes"}</p></div><span className="pill">{sales.length} ventes récentes</span></div>
-            {isManager && <div className="pos-admin-kpis"><article><span>Caisses ouvertes</span><strong>{sessions.length}</strong><small>Sessions en cours</small></article><article><span>Ventes récentes</span><strong>{sales.reduce((sum, sale) => sum + Number(sale.total), 0).toLocaleString("fr-FR")} F</strong><small>Sur les 20 dernières ventes</small></article><article><span>Espèces théoriques</span><strong>{sessions.reduce((sum, session) => sum + Number(reconciliations[session.id]?.expected_cash ?? 0), 0).toLocaleString("fr-FR")} F</strong><small>À compter actuellement</small></article><article><span>Vos caisses</span><strong>{ownedSessionCount}</strong><small>Sessions ouvertes par vous</small></article></div>}
+            {isManager && <details className="pos-admin-kpis-details"><summary>Vue administrateur</summary><div className="pos-admin-kpis"><article><span>Caisses ouvertes</span><strong>{sessions.length}</strong><small>Sessions en cours</small></article><article><span>Ventes récentes</span><strong>{sales.reduce((sum, sale) => sum + Number(sale.total), 0).toLocaleString("fr-FR")} F</strong><small>Sur les 20 dernières ventes</small></article><article><span>Espèces théoriques</span><strong>{sessions.reduce((sum, session) => sum + Number(reconciliations[session.id]?.expected_cash ?? 0), 0).toLocaleString("fr-FR")} F</strong><small>À compter actuellement</small></article><article><span>Vos caisses</span><strong>{ownedSessionCount}</strong><small>Sessions ouvertes par vous</small></article></div>}
             {error && <p className="form-error">Erreur de chargement : {error}</p>}
             {(!sessions.length || isManager) ? (
               <form action={openCashSession} className="catalog-form pos-session-form">
@@ -147,7 +147,7 @@ export default async function POSPage({ searchParams }: {
                     Le rapprochement automatique n&apos;est pas disponible. Actualisez la page avant de clôturer la caisse et vérifiez vos droits d&apos;accès.
                   </p>
                 )}
-                <details className="pos-cash-tools" open={isManager}><summary>Gestion des espèces · mouvements et historique</summary><div className="pos-cash-tools-inner">
+                <details className="pos-cash-tools"><summary>Gestion des espèces · mouvements et historique</summary><div className="pos-cash-tools-inner">
                   <form action={recordCashMovement} className="pos-cash-movement">
                     <h4>Entrée / sortie d&apos;espèces</h4>
                     <input type="hidden" name="session_id" value={session.id} />
