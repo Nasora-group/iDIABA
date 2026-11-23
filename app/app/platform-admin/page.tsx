@@ -38,7 +38,7 @@ function statusLabel(status: string) {
   return status;
 }
 
-export default async function PlatformAdminPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; reviewed?: string }> }) {
+export default async function PlatformAdminPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; reviewed?: string; q?: string; page?: string }> }) {
   const params = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -131,8 +131,8 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
         </section>
 
         <section id="tenants" className="platform-admin-section">
-          <div className="platform-section-title"><div><p className="eyebrow">ÉCOSYSTÈME IDIABA</p><h2>Toutes les entreprises</h2></div><span>{tenantsResult.count ?? tenants.length} entreprise(s) enregistrée(s)</span></div>
-          {tenants.length ? <div className="platform-tenant-table-wrap"><table className="platform-tenant-table"><thead><tr><th>Entreprise</th><th>Contact</th><th>Formule</th><th>Abonnement</th><th>Inscription</th></tr></thead><tbody>{tenants.map((tenant) => {
+          <div className="platform-section-title"><div><p className="eyebrow">ÉCOSYSTÈME IDIABA</p><h2>Toutes les entreprises</h2></div><span>{tenantsResult.count ?? tenants.length} entreprise(s) · page {requestedPage}</span></div>
+          <form method="get" action="/app/platform-admin#tenants" className="platform-tenant-search"><label htmlFor="tenant-search">Rechercher une entreprise</label><div><input id="tenant-search" name="q" value={tenantSearch} placeholder="Nom de l’entreprise" maxLength={80} /><button className="secondary" type="submit">Rechercher</button>{tenantSearch && <Link href="/app/platform-admin#tenants">Réinitialiser</Link>}</div></form>\n          {tenants.length ? <div className="platform-tenant-table-wrap"><table className="platform-tenant-table"><thead><tr><th>Entreprise</th><th>Contact</th><th>Formule</th><th>Abonnement</th><th>Inscription</th></tr></thead><tbody>{tenants.map((tenant) => {
             const subscription = latestSubscriptionByTenant.get(tenant.id);
             const plan = subscription ? one(subscription.plan) : null;
             return <tr key={tenant.id}>
@@ -143,7 +143,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
               <td>{date(tenant.created_at)}</td>
             </tr>;
           })}</tbody></table></div> : <div className="platform-empty"><strong>{tenantsResult.error ? "Liste des entreprises indisponible" : "Aucune entreprise enregistrée"}</strong><span>{tenantsResult.error ? "Vérifiez les autorisations et réessayez." : "Les entreprises créées apparaîtront ici, même sans abonnement."}</span></div>}
-          {tenants.length === 200 && <p className="catalog-help">Affichage limité aux 200 entreprises les plus récentes. Le compteur indique le total réel.</p>}
+          {tenantsResult.count && tenantsResult.count > pageSize ? <nav className="platform-tenant-pagination" aria-label="Pagination entreprises"><span>Affichage {(requestedPage - 1) * pageSize + 1} à {Math.min(requestedPage * pageSize, tenantsResult.count)} sur {tenantsResult.count}</span><div>{requestedPage > 1 && <Link href={`/app/platform-admin?q=${encodeURIComponent(tenantSearch)}&page=${requestedPage - 1}#tenants`}>← Précédent</Link>}{requestedPage < Math.ceil(tenantsResult.count / pageSize) && <Link href={`/app/platform-admin?q=${encodeURIComponent(tenantSearch)}&page=${requestedPage + 1}#tenants`}>Suivant →</Link>}</div></nav> : null}
         </section>
 
         <section id="plans" className="platform-admin-section">
