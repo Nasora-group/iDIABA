@@ -130,7 +130,7 @@ export default async function POSPage({ searchParams }: {
                     Le rapprochement automatique n&apos;est pas disponible. Actualisez la page avant de clôturer la caisse et vérifiez vos droits d&apos;accès.
                   </p>
                 )}
-                <div className="pos-cash-tools">
+                <details className="pos-cash-tools" open={isManager}><summary>Gestion des espèces · mouvements et historique</summary><div className="pos-cash-tools-inner">
                   <form action={recordCashMovement} className="pos-cash-movement">
                     <h4>Entrée / sortie d&apos;espèces</h4>
                     <input type="hidden" name="session_id" value={session.id} />
