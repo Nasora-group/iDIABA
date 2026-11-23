@@ -13,7 +13,7 @@ type CashSession = { id: string; tenant_id: string; location_id: string; opened_
 type ClosedSession = { id: string; opening_cash: string | number; expected_cash: string | number; closing_cash: string | number; cash_variance: string | number; opened_at: string; closed_at: string; location: { name: string } | null };
 type CashMovement = { id: string; cash_session_id: string; movement_type: string; amount: string | number; reason: string; created_at: string };
 type CashReconciliation = { cash_sales: number | string; cash_in: number | string; cash_out: number | string; expected_cash: number | string; payments: { payment_method: string; amount: number | string; payments_count: number }[] };
-type Sale = { id: string; total: string | number; subtotal: string | number; tax_total: string | number; created_at: string; cashier: { full_name: string } | null };
+type Sale = { id: string; cashier_id: string; total: string | number; subtotal: string | number; tax_total: string | number; created_at: string; cashier: { full_name: string } | null };
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +43,20 @@ export default async function POSPage({ searchParams }: {
       supabase.from("products").select("id,name,sku,barcode,unit,product_kind,track_stock,sale_price,tax_rate,is_active").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       openSessionsQuery.order("opened_at", { ascending: false }),
       (() => { let query = supabase.from("cash_sessions").select("id,opening_cash,expected_cash,closing_cash,cash_variance,opened_at,closed_at,opened_by,closed_by,location:stock_locations(name)").eq("tenant_id", workspace.tenant_id).eq("status", "closed"); if (!isManager) query = query.eq("opened_by", user.id); return query.order("closed_at", { ascending: false }).limit(10); })(),
-      (() => { let query = supabase.from("sales").select("id,total,subtotal,tax_total,created_at,cashier:profiles(full_name)").eq("tenant_id", workspace.tenant_id).eq("status", "completed"); if (!isManager) query = query.eq("cashier_id", user.id); return query.order("created_at", { ascending: false }).limit(20); })(),
+      (() => { let query = supabase.from("sales").select("id,cashier_id,total,subtotal,tax_total,created_at").eq("tenant_id", workspace.tenant_id).eq("status", "completed"); if (!isManager) query = query.eq("cashier_id", user.id); return query.order("created_at", { ascending: false }).limit(20); })(),
     ]);
+    const salesRows = (salesResult.data ?? []) as unknown as Omit<Sale, "cashier">[];
+    const cashierIds = [...new Set(salesRows.map((sale) => sale.cashier_id).filter(Boolean))];
+    // sales.cashier_id stores the auth user UUID; there is no declared FK to profiles.
+    // Fetch profile names separately instead of asking PostgREST to embed a nonexistent relationship.
+    const profilesResult = cashierIds.length
+      ? await supabase.from("profiles").select("id,full_name").in("id", cashierIds)
+      : { data: [], error: null };
+    const cashierNames = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.full_name || "Utilisateur"]));
+    const sales = salesRows.map((sale) => ({
+      ...sale,
+      cashier: cashierNames.has(sale.cashier_id) ? { full_name: cashierNames.get(sale.cashier_id)! } : null,
+    })) as Sale[];
     const sessionRows = (sessionsResult.data ?? []) as unknown as CashSession[];
     const visibleSessionIds = sessionRows.map((session) => session.id);
     const filteredMovements = visibleSessionIds.length ? await supabase.from("cash_movements").select("id,cash_session_id,movement_type,amount,reason,created_at").in("cash_session_id", visibleSessionIds).order("created_at", { ascending: false }).limit(50) : { data: [], error: null };
@@ -67,7 +79,7 @@ export default async function POSPage({ searchParams }: {
       ownedSessionCount: sessionRows.filter((session) => session.opened_by === user.id).length,
       reconciliations,
       closedSessions: (closedResult.data ?? []) as unknown as ClosedSession[],
-      sales: (salesResult.data ?? []) as unknown as Sale[],
+      sales,
       cashMovements: (filteredMovements.data ?? []) as CashMovement[],
       error: locationsResult.error?.message ?? productsResult.error?.message ?? sessionsResult.error?.message ?? closedResult.error?.message ?? salesResult.error?.message ?? filteredMovements.error?.message ?? null,
     };
