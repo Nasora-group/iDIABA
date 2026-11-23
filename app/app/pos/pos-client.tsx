@@ -222,8 +222,8 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
         ))}
         <div className="pos-payment-total"><span>Montant réglé</span><strong>{formatCents(paidTotal)} F / {formatCents(totals.total)} F</strong></div>
         {cashLine && <div className="pos-cash-change"><span>Rendu monnaie</span><strong>{formatCents(Math.max(0, cashChangeCents))} F</strong>{cashReceived && cashChangeCents < 0 && <small>Il manque {formatCents(Math.abs(cashChangeCents))} F en espèces.</small>}</div>}
-        {!paymentsValid && cart.length > 0 && <p className="catalog-help">Répartissez le montant exact entre les moyens de paiement.</p>
-        {cashLine && !cashTenderValid && <p className="form-error">Les espèces remises sont inférieures au montant payé en espèces.</p>}}
+        {!paymentsValid && cart.length > 0 && <p className="catalog-help">Répartissez le montant exact entre les moyens de paiement.</p>}
+        {cashLine && !cashTenderValid && <p className="form-error">Les espèces remises sont inférieures au montant payé en espèces.</p>}
       </div>
       <button className="primary" type="submit" disabled={!cart.length || totals.total <= 0 || !paymentsValid || !cashTenderValid}>Valider et encaisser</button>
       {offlineMessage && <p className="form-success" role="status">{offlineMessage}</p>}
