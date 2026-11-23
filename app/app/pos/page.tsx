@@ -88,7 +88,11 @@ export default async function POSPage({ searchParams }: {
         {params.closed && <p className="form-success">Session clôturée. Le solde théorique et l&apos;écart ont été calculés.</p>}
         {params.sold && <p className="form-success">Vente enregistrée et stock mis à jour.</p>}
         {params.movement && <p className="form-success">Mouvement de caisse enregistré.</p>}
-        {params.error && <p className="form-error">Opération impossible : vérifiez les droits, la caisse ouverte, le montant et les informations saisies.</p>}
+        {params.error === "session_already_open" && <p className="form-error" role="alert">Une caisse est déjà ouverte par votre compte sur ce dépôt. Fermez cette session avant d’en ouvrir une nouvelle.</p>}
+        {params.error === "session_permission" && <p className="form-error" role="alert">Vous n’avez pas les droits nécessaires pour ouvrir une caisse dans cette entreprise. Vérifiez votre rôle.</p>}
+        {params.error === "session_location" && <p className="form-error" role="alert">Le dépôt sélectionné est introuvable, inactif ou ne dépend pas de cette entreprise. Actualisez la page et choisissez un dépôt actif.</p>}
+        {params.error === "session_failed" && <p className="form-error" role="alert">L’ouverture a été refusée par le serveur. Vérifiez le dépôt, vos droits et l’existence d’une session déjà ouverte.</p>}
+        {params.error && !params.error.startsWith("session_") && <p className="form-error" role="alert">Opération impossible : vérifiez les droits, la caisse ouverte, le montant et les informations saisies.</p>}
         {data.map(({ workspace, locations, products, sessions, reconciliations, closedSessions, sales, cashMovements, isManager, ownedSessionCount, error }) => (
           <section className="catalog-tenant" key={workspace.tenant_id}>
             <div className="catalog-heading"><div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>{isManager ? "Mode gestionnaire · supervision des caisses" : "Mode caissier · votre caisse et vos ventes"}</p></div><span className="pill">{sales.length} ventes récentes</span></div>
@@ -98,7 +102,10 @@ export default async function POSPage({ searchParams }: {
               <form action={openCashSession} className="catalog-form pos-session-form">
                 <h3>Ouvrir votre session de caisse</h3>
                 <input type="hidden" name="tenant_id" value={workspace.tenant_id} />
-                <label>Dépôt / point de vente<select name="location_id" required defaultValue=""><option value="" disabled>Choisir un dépôt</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name} · {location.code}</option>)}</select></label>
+                <label>Dépôt / point de vente<select name="location_id" required defaultValue=""><option value="" disabled>Choisir un dépôt</option>{locations.map((location) => {
+                  const alreadyOpenByMe = sessions.some((session) => session.opened_by === user.id && session.location_id === location.id);
+                  return <option key={location.id} value={location.id} disabled={alreadyOpenByMe}>{location.name} · {location.code}{alreadyOpenByMe ? " · caisse déjà ouverte par vous" : ""}</option>;
+                })}</select></label>
                 <label>Fond de caisse initial (FCFA)<input name="opening_cash" type="number" min="0" step="0.01" defaultValue="0" required /></label>
                 <button className="primary" type="submit" disabled={!locations.length}>Ouvrir la caisse</button>
                 {!locations.length && <p className="catalog-help">Créez d&apos;abord un dépôt dans le module Stocks.</p>}
