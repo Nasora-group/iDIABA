@@ -34,11 +34,16 @@ as $function$
     select 1 from public.tenant_memberships m
     where m.tenant_id=target_tenant and m.user_id=auth.uid()
       and (
-        m.role=any(allowed_roles)
-        or exists (
-          select 1 from public.tenant_role_profiles p
-          where p.id=m.custom_role_profile_id and p.tenant_id=m.tenant_id
-            and p.allowed_roles && allowed_roles
+        m.role in ('owner','admin')
+        or (m.custom_role_profile_id is null and m.role=any(allowed_roles))
+        or (
+          m.custom_role_profile_id is not null
+          and m.role not in ('owner','admin')
+          and exists (
+            select 1 from public.tenant_role_profiles p
+            where p.id=m.custom_role_profile_id and p.tenant_id=m.tenant_id
+              and p.allowed_roles && allowed_roles
+          )
         )
       )
   );
