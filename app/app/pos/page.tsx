@@ -37,13 +37,12 @@ export default async function POSPage({ searchParams }: {
       openSessionsQuery = openSessionsQuery.eq("opened_by", user.id);
     }
     const isManager = ["owner", "admin", "manager"].includes(workspace.role);
-    const [locationsResult, productsResult, sessionsResult, closedResult, salesResult, movementResult] = await Promise.all([
+    const [locationsResult, productsResult, sessionsResult, closedResult, salesResult] = await Promise.all([
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("location_type", "store").eq("is_active", true).order("name"),
       supabase.from("products").select("id,name,sku,barcode,unit,product_kind,track_stock,sale_price,tax_rate,is_active").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       openSessionsQuery.order("opened_at", { ascending: false }),
       (() => { let query = supabase.from("cash_sessions").select("id,opening_cash,expected_cash,closing_cash,cash_variance,opened_at,closed_at,opened_by,closed_by,location:stock_locations(name)").eq("tenant_id", workspace.tenant_id).eq("status", "closed"); if (!isManager) query = query.eq("opened_by", user.id); return query.order("closed_at", { ascending: false }).limit(10); })(),
       (() => { let query = supabase.from("sales").select("id,total,subtotal,tax_total,created_at,cashier:profiles(full_name)").eq("tenant_id", workspace.tenant_id).eq("status", "completed"); if (!isManager) query = query.eq("cashier_id", user.id); return query.order("created_at", { ascending: false }).limit(20); })(),
-      supabase.from("cash_movements").select("id,cash_session_id,movement_type,amount,reason,created_at").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(50),
     ]);
     const sessionRows = (sessionsResult.data ?? []) as unknown as CashSession[];
     const visibleSessionIds = sessionRows.map((session) => session.id);
