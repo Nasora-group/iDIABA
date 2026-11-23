@@ -66,10 +66,6 @@ export default async function AppHome() {
         <Link href="/app" className="brand"><span className="mark">i</span><span>iDIABA</span></Link>
         <nav className="app-actions" aria-label="Navigation principale">
           <Link href="/app/pos">Caisse</Link>
-          <Link href="/app/products">Catalogue</Link>
-          <Link href="/app/stock">Stocks</Link>
-          <Link href="/app/reports">Rapports</Link>
-          <Link href="/app/company-settings">Configuration</Link>
           {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin">Administration SaaS</Link>}
           <form action="/auth/signout" method="post"><button className="secondary">Déconnexion</button></form>
         </nav>
