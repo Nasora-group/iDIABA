@@ -147,7 +147,7 @@ export default async function POSPage({ searchParams }: {
                       ))}</ul>
                     ) : <p className="catalog-empty">Aucun mouvement hors ventes.</p>}
                   </div>
-                </div>
+                </div></details>
                 {session.opened_by === user.id ? (products.length ? <><OfflinePOSSeed userId={user.id} tenantId={workspace.tenant_id} tenantName={workspace.tenant?.name ?? "Entreprise"} locationId={session.location_id} locationName={session.location?.name ?? "Point de vente"} sessionId={session.id} products={products} /><POSCheckout userId={user.id} tenantId={workspace.tenant_id} locationId={session.location_id} sessionId={session.id} clientSaleId={randomUUID()} products={products} /></> : <p className="catalog-empty">Ajoutez des produits actifs au catalogue avant de vendre.</p>) : <p className="pos-manager-session-note">Session de {session.opened_by.slice(0, 8)}… · supervision uniquement. Les ventes sont réservées au caissier titulaire.</p>}
               </div>
             ))}
