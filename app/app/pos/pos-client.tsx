@@ -37,12 +37,6 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
   const [cart, setCart] = useState<CartLine[]>([]);
   const [payments, setPayments] = useState<PaymentLine[]>([{ method: "cash", amount: "" }]);
   const filteredProducts = products.filter((item) => `${item.name} ${item.sku} ${item.barcode ?? ""}`.toLocaleLowerCase().includes(productSearch.trim().toLocaleLowerCase())).slice(0, 12);
-  const cashLine = effectivePayments.find((line) => line.method === "cash");
-  const cashAppliedCents = cashLine && Number(cashLine.amount) > 0 ? toCents(cashLine.amount) : 0;
-  const cashReceivedValue = cashReceived || cashLine?.amount || "";
-  const cashChangeCents = cashLine && cashReceivedValue.trim() ? toCents(cashReceivedValue.replace(",", ".")) - cashAppliedCents : 0;
-  const cashTenderValid = !cashLine || !cashReceivedValue.trim() || cashChangeCents >= 0;
-
   const totals = useMemo(() => {
     let subtotal = 0;
     let tax = 0;
@@ -61,6 +55,12 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
   const effectivePayments = payments.length === 1
     ? [{ ...payments[0], amount: (totals.total / 100).toFixed(2) }]
     : payments;
+
+  const cashLine = effectivePayments.find((line) => line.method === "cash");
+  const cashAppliedCents = cashLine && Number(cashLine.amount) > 0 ? toCents(cashLine.amount) : 0;
+  const cashReceivedValue = cashReceived || cashLine?.amount || "";
+  const cashChangeCents = cashLine && cashReceivedValue.trim() ? toCents(cashReceivedValue.replace(",", ".")) - cashAppliedCents : 0;
+  const cashTenderValid = !cashLine || !cashReceivedValue.trim() || cashChangeCents >= 0;
 
   const paidTotal = effectivePayments.reduce((sum, payment) => {
     const amount = Number(payment.amount.replace(",", "."));
@@ -135,6 +135,12 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
 
   function addLine() {
     addLineForProduct(productId);
+  }
+
+  function updateCartQuantity(selectedProductId: string, value: string) {
+    const qty = Number(value);
+    if (quantityMilli(qty) === null) return;
+    setCart((current) => current.map((line) => line.product_id === selectedProductId ? { ...line, quantity: value } : line));
   }
 
   function handleBarcodeKeyDown(event: KeyboardEvent<HTMLInputElement>) {
