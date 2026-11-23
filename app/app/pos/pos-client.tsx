@@ -39,7 +39,8 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
   const filteredProducts = products.filter((item) => `${item.name} ${item.sku} ${item.barcode ?? ""}`.toLocaleLowerCase().includes(productSearch.trim().toLocaleLowerCase())).slice(0, 12);
   const cashLine = effectivePayments.find((line) => line.method === "cash");
   const cashAppliedCents = cashLine && Number(cashLine.amount) > 0 ? toCents(cashLine.amount) : 0;
-  const cashChangeCents = cashLine && cashReceived.trim() ? toCents(cashReceived.replace(",", ".")) - cashAppliedCents : 0;
+  const cashReceivedValue = cashReceived || cashLine?.amount || "";
+  const cashChangeCents = cashLine && cashReceivedValue.trim() ? toCents(cashReceivedValue.replace(",", ".")) - cashAppliedCents : 0;
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -188,7 +189,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
           return <div className="pos-cart-line" key={line.product_id}>
             <div><strong>{product.name}</strong><small>{product.product_kind === "service" ? "Prestation" : "Produit"} · {line.quantity} {product.unit} × {Number(product.sale_price).toLocaleString("fr-FR")} F</small></div>
             <strong>{(Math.round(Number(line.quantity) * 1000) * toCents(product.sale_price) / 100000).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} F</strong>
-            <button type="button" className="archive-button" onClick={() => setCart((current) => current.filter((item) => item.product_id !== line.product_id))}>Retirer</button>
+            <div className="pos-cart-qty"><button type="button" aria-label="Diminuer la quantité" onClick={() => { const next = Number(line.quantity) - 1; if (next <= 0) setCart((current) => current.filter((item) => item.product_id !== line.product_id)); else updateCartQuantity(line.product_id, String(next)); }}>−</button><input aria-label={`Quantité ${product.name}`} type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateCartQuantity(line.product_id, event.target.value)} /><button type="button" aria-label="Augmenter la quantité" onClick={() => updateCartQuantity(line.product_id, String(Number(line.quantity) + 1))}>+</button><button type="button" className="archive-button" onClick={() => setCart((current) => current.filter((item) => item.product_id !== line.product_id))}>Retirer</button></div>
           </div>;
         }) : <p className="catalog-empty">Ajoutez les produits à vendre.</p>}
       </div>
@@ -209,7 +210,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
             <label>Montant (FCFA)
               <input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => { const value = event.target.value; setPayments((current) => current.map((item, i) => i === index ? { ...item, amount: value } : item)); if (payment.method === "cash") setCashReceived(value); }} required />
             </label>
-            {payment.method === "cash" && <label>Espèces reçues (FCFA)<input type="number" min={payment.amount || "0"} step="0.01" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} placeholder="Montant remis par le client" /></label>}\n            {["wave", "orange_money"].includes(payment.method) && <label>Référence de transaction
+            {payment.method === "cash" && <label>Espèces reçues (FCFA)<input type="number" min={payment.amount || "0"} step="0.01" value={cashReceivedValue} onChange={(event) => setCashReceived(event.target.value)} placeholder="Montant remis par le client" /></label>}\n            {["wave", "orange_money"].includes(payment.method) && <label>Référence de transaction
               <input value={payment.reference ?? ""} minLength={4} maxLength={160} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Référence affichée dans l'application" required />
             </label>}
             {payments.length > 1 && <button type="button" className="archive-button" onClick={() => setPayments((current) => current.filter((_, i) => i !== index))}>Retirer</button>}
