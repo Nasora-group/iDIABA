@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { closeCashSession, openCashSession, recordCashMovement } from "./actions";
 import POSCheckout from "./pos-client";
+import CashClosePreview from "./cash-close-preview";
 import OfflinePOSSeed from "./offline-seed";
 
 type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
@@ -105,7 +106,7 @@ export default async function POSPage({ searchParams }: {
             ) : sessions.map((session) => (
               <div className="pos-session" key={session.id}>
                 <div className="pos-session-heading"><div><span className="catalog-state">Caisse ouverte</span><h3>{session.location?.name ?? "Point de vente"} · {session.location?.code ?? ""}</h3><p>Ouverte le {new Date(session.opened_at).toLocaleString("fr-FR")} · Fond initial : {Number(session.opening_cash).toLocaleString("fr-FR")} F</p></div>
-                  <form action={closeCashSession} className="pos-close-form"><input type="hidden" name="session_id" value={session.id} /><label>Espèces comptées (FCFA)<input name="closing_cash" type="number" min="0" step="0.01" required placeholder="Montant réel" /></label><button className="secondary" type="submit">Clôturer la caisse</button></form>
+                  {reconciliations[session.id] ? <CashClosePreview sessionId={session.id} expectedCash={Number(reconciliations[session.id].expected_cash)} closeAction={closeCashSession} /> : <p className="form-error">Clôture bloquée : rapprochement indisponible.</p>}
                 </div>
                 {reconciliations[session.id] && (
                   <div className="pos-reconciliation">
@@ -159,7 +160,7 @@ export default async function POSPage({ searchParams }: {
             </div>
             <div className="catalog-table-wrap">
               <h3>{isManager ? "Dernières ventes de l’entreprise" : "Vos dernières ventes"}</h3>
-              {sales.length ? <table className="catalog-table"><thead><tr><th>Date</th><th>Ticket</th><th>Caissier</th><th>HT</th><th>Taxes</th><th>Total TTC</th></tr></thead><tbody>{sales.map((sale) => <tr key={sale.id}><td>{new Date(sale.created_at).toLocaleString("fr-FR")}</td><td><strong>{sale.id.slice(0, 8).toUpperCase()}</strong></td><td>{sale.cashier?.full_name ?? "Utilisateur"}</td><td>{Number(sale.subtotal).toLocaleString("fr-FR")} F</td><td>{Number(sale.tax_total).toLocaleString("fr-FR")} F</td><td><strong>{Number(sale.total).toLocaleString("fr-FR")} F</strong></td></tr>)}</tbody></table> : <p className="catalog-empty">Aucune vente enregistrée.</p>}
+              {sales.length ? <table className="catalog-table"><thead><tr><th>Date</th><th>Ticket</th><th>Caissier</th><th>HT</th><th>Taxes</th><th>Total TTC</th></tr></thead><tbody>{sales.map((sale) => <tr key={sale.id}><td>{new Date(sale.created_at).toLocaleString("fr-FR")}</td><td><Link href={`/app/pos/receipt/${sale.id}`} className="pos-reprint-link"><strong>{sale.id.slice(0, 8).toUpperCase()}</strong><small>Voir / réimprimer</small></Link></td><td>{sale.cashier?.full_name ?? "Utilisateur"}</td><td>{Number(sale.subtotal).toLocaleString("fr-FR")} F</td><td>{Number(sale.tax_total).toLocaleString("fr-FR")} F</td><td><strong>{Number(sale.total).toLocaleString("fr-FR")} F</strong></td></tr>)}</tbody></table> : <p className="catalog-empty">Aucune vente enregistrée.</p>}
             </div>
           </section>
         ))}
