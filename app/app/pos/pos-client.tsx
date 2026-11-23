@@ -27,7 +27,6 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
   const [activeSaleId, setActiveSaleId] = useState(clientSaleId);
   const [offlineMessage, setOfflineMessage] = useState("");
   const syncLock = useRef(false);
-  const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [productSearch, setProductSearch] = useState("");
   const [cashReceived, setCashReceived] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -133,10 +132,6 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
     return true;
   }
 
-  function addLine() {
-    addLineForProduct(productId);
-  }
-
   function updateCartQuantity(selectedProductId: string, value: string) {
     const qty = Number(value);
     if (quantityMilli(qty) === null) return;
@@ -160,7 +155,6 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
       setBarcodeMessage("Quantité invalide. Saisissez une quantité supérieure à 0.");
       return;
     }
-    setProductId(match.id);
     setBarcodeQuery("");
     setBarcodeMessage(`Ajouté : ${match.name}`);
     barcodeInput.current?.focus();
@@ -179,18 +173,12 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
         <input ref={barcodeInput} value={barcodeQuery} onChange={(event) => { setBarcodeQuery(event.target.value); setBarcodeMessage(""); }} onKeyDown={handleBarcodeKeyDown} type="text" inputMode="search" placeholder="Scannez puis appuyez sur Entrée" />
       </label>
       {barcodeMessage && <p className={barcodeMessage.startsWith("Ajouté") ? "form-success" : "form-error"} role="status">{barcodeMessage}</p>}
-      <div className="pos-product-quick-search"><label>Rechercher un produit<input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Nom, SKU ou code-barres" /></label><div className="pos-quick-products">{filteredProducts.map((item) => <button type="button" key={item.id} onClick={() => addLineForProduct(item.id)}><strong>{item.name}</strong><span>{item.sku} · {Number(item.sale_price).toLocaleString("fr-FR")} F</span></button>)}{!filteredProducts.length && <p className="catalog-empty">Aucun produit correspondant.</p>}</div></div>
       <div className="pos-add-row">
-        <label>Produit
-          <select value={productId} onChange={(event) => setProductId(event.target.value)} required>
-            {products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.product_kind === "service" ? "Prestation" : "Produit"} · {product.sku}{product.barcode ? ` · ${product.barcode}` : ""} · {Number(product.sale_price).toLocaleString("fr-FR")} F</option>)}
-          </select>
-        </label>
-        <label>Quantité
+        <label>Quantité à ajouter
           <input type="number" min="0.001" max="1000000" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} required />
         </label>
-        <button type="button" className="secondary" onClick={addLine}>Ajouter</button>
       </div>
+      <div className="pos-product-quick-search"><label>Rechercher un produit<input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Nom, SKU ou code-barres" /></label><div className="pos-quick-products">{filteredProducts.map((item) => <button type="button" key={item.id} onClick={() => addLineForProduct(item.id)}><strong>{item.name}</strong><span>{item.sku} · {Number(item.sale_price).toLocaleString("fr-FR")} F</span></button>)}{!filteredProducts.length && <p className="catalog-empty">Aucun produit correspondant.</p>}</div></div>
       <div className="pos-cart">
         {cart.length ? cart.map((line) => {
           const product = products.find((item) => item.id === line.product_id);
