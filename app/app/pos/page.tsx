@@ -36,7 +36,8 @@ export default async function POSPage({ searchParams }: {
     if (!["owner", "admin", "manager"].includes(workspace.role)) {
       openSessionsQuery = openSessionsQuery.eq("opened_by", user.id);
     }
-    const isManager = ["owner", "admin", "manager"].includes(workspace.role);\n    const [locationsResult, productsResult, sessionsResult, closedResult, salesResult, movementResult] = await Promise.all([
+    const isManager = ["owner", "admin", "manager"].includes(workspace.role);
+    const [locationsResult, productsResult, sessionsResult, closedResult, salesResult, movementResult] = await Promise.all([
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("location_type", "store").eq("is_active", true).order("name"),
       supabase.from("products").select("id,name,sku,barcode,unit,product_kind,track_stock,sale_price,tax_rate,is_active").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
       openSessionsQuery.order("opened_at", { ascending: false }),
@@ -44,7 +45,10 @@ export default async function POSPage({ searchParams }: {
       (() => { let query = supabase.from("sales").select("id,total,subtotal,tax_total,created_at,cashier:profiles(full_name)").eq("tenant_id", workspace.tenant_id).eq("status", "completed"); if (!isManager) query = query.eq("cashier_id", user.id); return query.order("created_at", { ascending: false }).limit(20); })(),
       supabase.from("cash_movements").select("id,cash_session_id,movement_type,amount,reason,created_at").eq("tenant_id", workspace.tenant_id).order("created_at", { ascending: false }).limit(50),
     ]);
-    const sessionRows = (sessionsResult.data ?? []) as unknown as CashSession[];\n    const visibleSessionIds = sessionRows.map((session) => session.id);\n    const filteredMovements = visibleSessionIds.length ? await supabase.from("cash_movements").select("id,cash_session_id,movement_type,amount,reason,created_at").in("cash_session_id", visibleSessionIds).order("created_at", { ascending: false }).limit(50) : { data: [], error: null };\n    const reconciliationEntries = await Promise.all(sessionRows.map(async (session) => {
+    const sessionRows = (sessionsResult.data ?? []) as unknown as CashSession[];
+    const visibleSessionIds = sessionRows.map((session) => session.id);
+    const filteredMovements = visibleSessionIds.length ? await supabase.from("cash_movements").select("id,cash_session_id,movement_type,amount,reason,created_at").in("cash_session_id", visibleSessionIds).order("created_at", { ascending: false }).limit(50) : { data: [], error: null };
+    const reconciliationEntries = await Promise.all(sessionRows.map(async (session) => {
       const { data: reconciliation, error: reconciliationError } = await supabase.rpc("get_cash_session_reconciliation", {
         p_session_id: session.id,
       });
@@ -58,7 +62,9 @@ export default async function POSPage({ searchParams }: {
       workspace,
       locations: (locationsResult.data ?? []) as unknown as Location[],
       products: (productsResult.data ?? []) as Product[],
-      sessions: sessionRows,\n      isManager,\n      ownedSessionCount: sessionRows.filter((session) => session.opened_by === user.id).length,
+      sessions: sessionRows,
+      isManager,
+      ownedSessionCount: sessionRows.filter((session) => session.opened_by === user.id).length,
       reconciliations,
       closedSessions: (closedResult.data ?? []) as unknown as ClosedSession[],
       sales: (salesResult.data ?? []) as unknown as Sale[],
@@ -85,7 +91,8 @@ export default async function POSPage({ searchParams }: {
         {params.error && <p className="form-error">Opération impossible : vérifiez les droits, la caisse ouverte, le montant et les informations saisies.</p>}
         {data.map(({ workspace, locations, products, sessions, reconciliations, closedSessions, sales, cashMovements, isManager, ownedSessionCount, error }) => (
           <section className="catalog-tenant" key={workspace.tenant_id}>
-            <div className="catalog-heading"><div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>{isManager ? "Mode gestionnaire · supervision des caisses" : "Mode caissier · votre caisse et vos ventes"}</p></div><span className="pill">{sales.length} ventes récentes</span></div>\n            {isManager && <div className="pos-admin-kpis"><article><span>Caisses ouvertes</span><strong>{sessions.length}</strong><small>Sessions en cours</small></article><article><span>Fond initial cumulé</span><strong>{sessions.reduce((sum, session) => sum + Number(session.opening_cash), 0).toLocaleString("fr-FR")} F</strong><small>Sur les caisses ouvertes</small></article><article><span>Espèces théoriques</span><strong>{sessions.reduce((sum, session) => sum + Number(reconciliations[session.id]?.expected_cash ?? 0), 0).toLocaleString("fr-FR")} F</strong><small>À compter actuellement</small></article><article><span>Vos caisses</span><strong>{ownedSessionCount}</strong><small>Sessions ouvertes par vous</small></article></div>}
+            <div className="catalog-heading"><div><h2>{workspace.tenant?.name ?? "Entreprise"}</h2><p>{isManager ? "Mode gestionnaire · supervision des caisses" : "Mode caissier · votre caisse et vos ventes"}</p></div><span className="pill">{sales.length} ventes récentes</span></div>
+            {isManager && <div className="pos-admin-kpis"><article><span>Caisses ouvertes</span><strong>{sessions.length}</strong><small>Sessions en cours</small></article><article><span>Fond initial cumulé</span><strong>{sessions.reduce((sum, session) => sum + Number(session.opening_cash), 0).toLocaleString("fr-FR")} F</strong><small>Sur les caisses ouvertes</small></article><article><span>Espèces théoriques</span><strong>{sessions.reduce((sum, session) => sum + Number(reconciliations[session.id]?.expected_cash ?? 0), 0).toLocaleString("fr-FR")} F</strong><small>À compter actuellement</small></article><article><span>Vos caisses</span><strong>{ownedSessionCount}</strong><small>Sessions ouvertes par vous</small></article></div>}
             {error && <p className="form-error">Erreur de chargement : {error}</p>}
             {(!sessions.length || isManager) ? (
               <form action={openCashSession} className="catalog-form pos-session-form">
@@ -146,13 +153,13 @@ export default async function POSPage({ searchParams }: {
               </div>
             ))}
             <div className="catalog-table-wrap">
-              <h3>Historique des clôtures et rapprochements</h3>
+              <h3>{isManager ? "Historique des clôtures et rapprochements" : "Vos clôtures"}</h3>
               {closedSessions.length ? <table className="catalog-table"><thead><tr><th>Point de vente / clôture</th><th>Fond initial</th><th>Solde théorique</th><th>Espèces comptées</th><th>Écart</th></tr></thead><tbody>{closedSessions.map((session) => (
                 <tr key={session.id}><td><strong>{session.location?.name ?? "Point de vente"}</strong><small>{new Date(session.closed_at).toLocaleString("fr-FR")}</small></td><td>{Number(session.opening_cash).toLocaleString("fr-FR")} F</td><td>{Number(session.expected_cash).toLocaleString("fr-FR")} F</td><td>{Number(session.closing_cash).toLocaleString("fr-FR")} F</td><td><strong>{Number(session.cash_variance) > 0 ? "+" : ""}{Number(session.cash_variance).toLocaleString("fr-FR")} F</strong></td></tr>
               ))}</tbody></table> : <p className="catalog-empty">Aucune clôture enregistrée.</p>}
             </div>
             <div className="catalog-table-wrap">
-              <h3>Dernières ventes</h3>
+              <h3>{isManager ? "Dernières ventes de l’entreprise" : "Vos dernières ventes"}</h3>
               {sales.length ? <table className="catalog-table"><thead><tr><th>Date</th><th>Ticket</th><th>Caissier</th><th>HT</th><th>Taxes</th><th>Total TTC</th></tr></thead><tbody>{sales.map((sale) => <tr key={sale.id}><td>{new Date(sale.created_at).toLocaleString("fr-FR")}</td><td><strong>{sale.id.slice(0, 8).toUpperCase()}</strong></td><td>{sale.cashier?.full_name ?? "Utilisateur"}</td><td>{Number(sale.subtotal).toLocaleString("fr-FR")} F</td><td>{Number(sale.tax_total).toLocaleString("fr-FR")} F</td><td><strong>{Number(sale.total).toLocaleString("fr-FR")} F</strong></td></tr>)}</tbody></table> : <p className="catalog-empty">Aucune vente enregistrée.</p>}
             </div>
           </section>
