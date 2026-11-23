@@ -363,3 +363,10 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .pos-cash-tools>summary{grid-column:1/-1;cursor:pointer;font-weight:700;color:var(--brand-dark);padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:#fff}.pos-cash-tools-inner{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}.pos-cash-tools[open]>summary{background:var(--brand-soft)}@media(max-width:700px){.pos-cash-tools-inner{grid-template-columns:1fr}}
 
 .pos-close-preview{display:grid;gap:4px;font-size:12px;min-width:180px}.pos-close-preview span{display:flex;justify-content:space-between;gap:8px}.pos-close-preview .balanced{color:#18794e}.pos-close-preview .shortage{color:#b53b3b}.pos-close-preview .surplus{color:#a96812}.pos-close-preview strong{font-variant-numeric:tabular-nums}.pos-reprint-link{display:inline-grid;gap:1px}.pos-reprint-link small{font-size:10px;color:var(--brand)}.pos-close-form button:disabled{opacity:.45;cursor:not-allowed}
+
+/* Custom company role profiles */
+.role-profile-permissions{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.55rem;margin:.75rem 0 1rem}
+.role-profile-permissions label{display:flex!important;align-items:center;gap:.65rem;padding:.7rem .8rem;border:1px solid var(--border,#dfe5e2);border-radius:10px;background:var(--surface,#fff);cursor:pointer}
+.role-profile-permissions input[type=checkbox]{width:18px;height:18px;margin:0;accent-color:var(--primary,#16834a)}
+.role-profile-permissions span{font-weight:500}
+.workspace-list-details,.catalog-form details{margin:.65rem 0}
