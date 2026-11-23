@@ -20,12 +20,8 @@ export async function manageMember(formData:FormData){
  if(error) go(error.message.includes("quota")?"quota":error.message.includes("No account")?"noaccount":"error");
  if(action!=="remove"){
   const profileId=String(formData.get("custom_role_profile_id")??"").trim()||null;
-  const {data:target}=await supabase.from("profiles").select("id").eq("id",email).maybeSingle();
-  if(profileId&&target?.id){
-   const {error:profileError}=await supabase.rpc("set_tenant_member_custom_role_profile",{p_tenant_id:tenantId,p_user_id:target.id,p_profile_id:profileId});
-   if(profileError) go("profileerror");
-  }else if(!profileId&&target?.id){
-   const {error:profileError}=await supabase.rpc("set_tenant_member_custom_role_profile",{p_tenant_id:tenantId,p_user_id:target.id,p_profile_id:null});
+  if(targetId){
+   const {error:profileError}=await supabase.rpc("set_tenant_member_custom_role_profile",{p_tenant_id:tenantId,p_user_id:targetId,p_profile_id:profileId});
    if(profileError) go("profileerror");
   }
  }
