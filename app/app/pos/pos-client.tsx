@@ -110,6 +110,7 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
       });
       setCart([]);
       setPayments([{ method: "cash", amount: "" }]);
+      setCashReceived("");
       setActiveSaleId(crypto.randomUUID());
       setOfflineMessage("Vente enregistrée sur cet appareil. Elle sera synchronisée au retour du réseau.");
     } catch {
