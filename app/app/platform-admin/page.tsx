@@ -38,8 +38,11 @@ function statusLabel(status: string) {
   return status;
 }
 
-export default async function PlatformAdminPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; reviewed?: string }> }) {
+export default async function PlatformAdminPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; reviewed?: string; q?: string; page?: string }> }) {
   const params = await searchParams;
+  const tenantSearch = (params.q ?? "").trim().slice(0, 80);
+  const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const pageSize = 50;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -48,7 +51,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
   const [plansResult, requestsResult, tenantsResult, subscriptionsResult, paymentsResult] = await Promise.all([
     supabase.from("subscription_plans").select("id,code,name,description,price_monthly_fcfa,price_yearly_fcfa,max_users,max_locations,max_products,max_monthly_sales").order("code"),
     supabase.from("subscription_requests").select("id,tenant_id,billing_interval,payment_method,payment_reference,created_at,status,tenant:tenants(name),plan:subscription_plans(name,code)").order("created_at", { ascending: false }).limit(100),
-    supabase.from("tenants").select("id,name,slug,created_at,phone,currency_code", { count: "exact" }).order("created_at", { ascending: false }).limit(200),
+    (() => { let query = supabase.from("tenants").select("id,name,slug,created_at,phone,currency_code", { count: "exact" }); if (tenantSearch) query = query.ilike("name", `%${tenantSearch}%`); return query.order("created_at", { ascending: false }).range((requestedPage - 1) * pageSize, requestedPage * pageSize - 1); })(),
     supabase.from("tenant_subscriptions").select("tenant_id,status,plan:subscription_plans(name)").order("created_at", { ascending: false }).limit(500),
     supabase.from("subscription_payments").select("id,subscription_request_id,provider,status,amount_fcfa,provider_transaction_id,paid_at").order("created_at", { ascending: false }).limit(200),
   ]);
@@ -56,9 +59,11 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
   const requests = (requestsResult.data ?? []) as unknown as RequestRow[];
   const tenants = (tenantsResult.data ?? []) as unknown as TenantRow[];
   const subscriptions = (subscriptionsResult.data ?? []) as unknown as SubscriptionRow[];
+  const tenantSubscriptionResult = tenants.length ? await supabase.from("tenant_subscriptions").select("tenant_id,status,plan:subscription_plans(name)").in("tenant_id", tenants.map((tenant) => tenant.id)).order("created_at", { ascending: false }) : { data: [], error: null };
+  const tenantSubscriptions = (tenantSubscriptionResult.data ?? []) as unknown as SubscriptionRow[];
   const payments = (paymentsResult.data ?? []) as unknown as PaymentRow[];
   const latestSubscriptionByTenant = new Map<string, SubscriptionRow>();
-  for (const subscription of subscriptions) {
+  for (const subscription of tenantSubscriptions) {
     if (!latestSubscriptionByTenant.has(subscription.tenant_id)) latestSubscriptionByTenant.set(subscription.tenant_id, subscription);
   }
   const pendingCount = requests.filter((request) => request.status === "pending").length;
@@ -68,6 +73,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
     requestsResult.error && "demandes",
     tenantsResult.error && "entreprises",
     subscriptionsResult.error && "abonnements",
+    tenantSubscriptionResult.error && "abonnements des entreprises affichées",
     paymentsResult.error && "paiements",
   ].filter(Boolean) as string[];
   const paidPayments = payments.filter((payment) => payment.status === "paid");
@@ -131,7 +137,8 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
         </section>
 
         <section id="tenants" className="platform-admin-section">
-          <div className="platform-section-title"><div><p className="eyebrow">ÉCOSYSTÈME IDIABA</p><h2>Toutes les entreprises</h2></div><span>{tenantsResult.count ?? tenants.length} entreprise(s) enregistrée(s)</span></div>
+          <form method="get" action="/app/platform-admin#tenants" className="platform-tenant-search"><label htmlFor="tenant-search">Rechercher une entreprise</label><div><input id="tenant-search" name="q" value={tenantSearch} placeholder="Nom de l’entreprise" maxLength={80} /><button className="secondary" type="submit">Rechercher</button>{tenantSearch && <Link href="/app/platform-admin#tenants">Réinitialiser</Link>}</div></form>
+          <div className="platform-section-title"><div><p className="eyebrow">ÉCOSYSTÈME IDIABA</p><h2>Toutes les entreprises</h2></div><span>{tenantsResult.count ?? tenants.length} entreprise(s) · page {requestedPage}</span></div>
           {tenants.length ? <div className="platform-tenant-table-wrap"><table className="platform-tenant-table"><thead><tr><th>Entreprise</th><th>Contact</th><th>Formule</th><th>Abonnement</th><th>Inscription</th></tr></thead><tbody>{tenants.map((tenant) => {
             const subscription = latestSubscriptionByTenant.get(tenant.id);
             const plan = subscription ? one(subscription.plan) : null;
@@ -143,7 +150,7 @@ export default async function PlatformAdminPage({ searchParams }: { searchParams
               <td>{date(tenant.created_at)}</td>
             </tr>;
           })}</tbody></table></div> : <div className="platform-empty"><strong>{tenantsResult.error ? "Liste des entreprises indisponible" : "Aucune entreprise enregistrée"}</strong><span>{tenantsResult.error ? "Vérifiez les autorisations et réessayez." : "Les entreprises créées apparaîtront ici, même sans abonnement."}</span></div>}
-          {tenants.length === 200 && <p className="catalog-help">Affichage limité aux 200 entreprises les plus récentes. Le compteur indique le total réel.</p>}
+          {tenantsResult.count && tenantsResult.count > pageSize ? <nav className="platform-tenant-pagination" aria-label="Pagination entreprises"><span>Affichage {(requestedPage - 1) * pageSize + 1} à {Math.min(requestedPage * pageSize, tenantsResult.count)} sur {tenantsResult.count}</span><div>{requestedPage > 1 && <Link href={`/app/platform-admin?q=${encodeURIComponent(tenantSearch)}&page=${requestedPage - 1}#tenants`}>← Précédent</Link>}{requestedPage < Math.ceil(tenantsResult.count / pageSize) && <Link href={`/app/platform-admin?q=${encodeURIComponent(tenantSearch)}&page=${requestedPage + 1}#tenants`}>Suivant →</Link>}</div></nav> : null}
         </section>
 
         <section id="plans" className="platform-admin-section">
