@@ -25,24 +25,17 @@ const sectorNames: Record<string, string> = {
 };
 
 const coreModules = [
-  { title: "Caisse et ventes", description: "Encaisser, imprimer les tickets et suivre les ventes.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard },
-  { title: "Catalogue", description: "Produits, services, catégories, références et tarifs.", href: "/app/products", action: "Gérer le catalogue", icon: Package },
-  { title: "Stocks", description: "Disponibilités, mouvements et seuils de réapprovisionnement.", href: "/app/stock", action: "Voir les stocks", icon: Boxes },
-  { title: "Achats", description: "Fournisseurs, commandes et réceptions.", href: "/app/purchasing", action: "Gérer les achats", icon: ShoppingCart },
-  { title: "Clients", description: "Fiches clients, historique et retours.", href: "/app/customers", action: "Voir les clients", icon: Users },
-  { title: "Rapports", description: "Chiffre d’affaires, marges et activité commerciale.", href: "/app/reports", action: "Consulter les rapports", icon: BarChart3 },
+  { title: "Caisse", description: "Vendre et encaisser rapidement.", href: "/app/pos", action: "Encaisser", icon: CreditCard },
+  { title: "Produits", description: "Ajouter et modifier les articles.", href: "/app/products", action: "Catalogue", icon: Package },
+  { title: "Stocks", description: "Voir les quantités et alertes.", href: "/app/stock", action: "Stock", icon: Boxes },
+  { title: "Rapports", description: "Consulter les ventes et résultats.", href: "/app/reports", action: "Rapports", icon: BarChart3 },
 ];
 
 const managementModules = [
-  { title: "Inventaires", description: "Comptages et ajustements contrôlés.", href: "/app/inventory", action: "Gérer", icon: ClipboardList },
-  { title: "Boutiques et dépôts", description: "Organiser plusieurs établissements.", href: "/app/locations", action: "Gérer", icon: Warehouse },
-  { title: "Transferts", description: "Déplacer les marchandises entre sites.", href: "/app/transfers", action: "Gérer", icon: Boxes },
-  { title: "Factures fournisseurs", description: "Échéances et règlements.", href: "/app/supplier-invoices", action: "Suivre", icon: FileText },
-  { title: "Comptabilité", description: "Dépenses, écritures et balance.", href: "/app/accounting", action: "Consulter", icon: BarChart3 },
-  { title: "Équipe", description: "Utilisateurs, rôles et autorisations.", href: "/app/team", action: "Gérer", icon: Users },
-  { title: "Paramètres", description: "Secteur, modules, identité et fiscalité.", href: "/app/company-settings", action: "Configurer", icon: Settings2 },
+  { title: "Personnel", description: "Créer les profils et régler leurs accès.", href: "/app/team", action: "Gérer", icon: Users },
+  { title: "Paramètres", description: "Configurer votre commerce et ses options.", href: "/app/company-settings", action: "Configurer", icon: Settings2 },
 ];
-
+ 
 export default async function AppHome() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -87,7 +80,7 @@ export default async function AppHome() {
           <div>
             <p className="eyebrow">VOTRE GESTION COMMERCIALE</p>
             <h1>Bonjour{displayName ? `, ${displayName}` : ""} 👋</h1>
-            <p className="lead">Toutes les opérations de votre commerce dans un seul espace, sur ordinateur comme sur téléphone.</p>
+            <p className="lead">Les essentiels de votre commerce, sans menus compliqués.</p>
           </div>
           <span className="welcome-chip"><span aria-hidden="true">●</span> Espace sécurisé</span>
         </div>
@@ -102,7 +95,7 @@ export default async function AppHome() {
 
         <div className="app-section-heading">
           <div><p className="eyebrow">OPÉRATIONS QUOTIDIENNES</p><h2>Accès rapide</h2></div>
-          <p>Les outils essentiels pour gérer votre activité.</p>
+          
         </div>
         <div className="app-module-grid">
           {coreModules.map(({ title, description, href, action, icon: Icon }) => (
@@ -116,7 +109,7 @@ export default async function AppHome() {
 
         <div className="app-section-heading">
           <div><p className="eyebrow">GESTION ET ADMINISTRATION</p><h2>Autres outils</h2></div>
-          <p>Activez et configurez les fonctions adaptées à votre organisation.</p>
+          
         </div>
         <div className="app-module-grid">
           {managementModules.map(({ title, description, href, action, icon: Icon }) => (
