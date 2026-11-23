@@ -171,7 +171,8 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
         <input ref={barcodeInput} value={barcodeQuery} onChange={(event) => { setBarcodeQuery(event.target.value); setBarcodeMessage(""); }} onKeyDown={handleBarcodeKeyDown} type="text" inputMode="search" placeholder="Scannez puis appuyez sur Entrée" />
       </label>
       {barcodeMessage && <p className={barcodeMessage.startsWith("Ajouté") ? "form-success" : "form-error"} role="status">{barcodeMessage}</p>}
-      <div className="pos-product-quick-search"><label>Rechercher un produit<input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Nom, SKU ou code-barres" /></label><div className="pos-quick-products">{filteredProducts.map((item) => <button type="button" key={item.id} onClick={() => addLineForProduct(item.id)}><strong>{item.name}</strong><span>{item.sku} · {Number(item.sale_price).toLocaleString("fr-FR")} F</span></button>)}{!filteredProducts.length && <p className="catalog-empty">Aucun produit correspondant.</p>}</div></div>\n      <div className="pos-add-row">
+      <div className="pos-product-quick-search"><label>Rechercher un produit<input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Nom, SKU ou code-barres" /></label><div className="pos-quick-products">{filteredProducts.map((item) => <button type="button" key={item.id} onClick={() => addLineForProduct(item.id)}><strong>{item.name}</strong><span>{item.sku} · {Number(item.sale_price).toLocaleString("fr-FR")} F</span></button>)}{!filteredProducts.length && <p className="catalog-empty">Aucun produit correspondant.</p>}</div></div>
+      <div className="pos-add-row">
         <label>Produit
           <select value={productId} onChange={(event) => setProductId(event.target.value)} required>
             {products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.product_kind === "service" ? "Prestation" : "Produit"} · {product.sku}{product.barcode ? ` · ${product.barcode}` : ""} · {Number(product.sale_price).toLocaleString("fr-FR")} F</option>)}
@@ -210,13 +211,15 @@ export default function POSCheckout({ userId, tenantId, locationId, sessionId, c
             <label>Montant (FCFA)
               <input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => { const value = event.target.value; setPayments((current) => current.map((item, i) => i === index ? { ...item, amount: value } : item)); if (payment.method === "cash") setCashReceived(value); }} required />
             </label>
-            {payment.method === "cash" && <label>Espèces reçues (FCFA)<input type="number" min={payment.amount || "0"} step="0.01" value={cashReceivedValue} onChange={(event) => setCashReceived(event.target.value)} placeholder="Montant remis par le client" /></label>}\n            {["wave", "orange_money"].includes(payment.method) && <label>Référence de transaction
+            {payment.method === "cash" && <label>Espèces reçues (FCFA)<input type="number" min={payment.amount || "0"} step="0.01" value={cashReceivedValue} onChange={(event) => setCashReceived(event.target.value)} placeholder="Montant remis par le client" /></label>}
+            {["wave", "orange_money"].includes(payment.method) && <label>Référence de transaction
               <input value={payment.reference ?? ""} minLength={4} maxLength={160} onChange={(event) => setPayments((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Référence affichée dans l'application" required />
             </label>}
             {payments.length > 1 && <button type="button" className="archive-button" onClick={() => setPayments((current) => current.filter((_, i) => i !== index))}>Retirer</button>}
           </div>
         ))}
-        <div className="pos-payment-total"><span>Montant réglé</span><strong>{formatCents(paidTotal)} F / {formatCents(totals.total)} F</strong></div>\n        {cashLine && <div className="pos-cash-change"><span>Rendu monnaie</span><strong>{formatCents(Math.max(0, cashChangeCents))} F</strong>{cashReceived && cashChangeCents < 0 && <small>Il manque {formatCents(Math.abs(cashChangeCents))} F en espèces.</small>}</div>}
+        <div className="pos-payment-total"><span>Montant réglé</span><strong>{formatCents(paidTotal)} F / {formatCents(totals.total)} F</strong></div>
+        {cashLine && <div className="pos-cash-change"><span>Rendu monnaie</span><strong>{formatCents(Math.max(0, cashChangeCents))} F</strong>{cashReceived && cashChangeCents < 0 && <small>Il manque {formatCents(Math.abs(cashChangeCents))} F en espèces.</small>}</div>}
         {!paymentsValid && cart.length > 0 && <p className="catalog-help">Répartissez le montant exact entre les moyens de paiement.</p>}
       </div>
       <button className="primary" type="submit" disabled={!cart.length || totals.total <= 0 || !paymentsValid}>Valider et encaisser</button>
