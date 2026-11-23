@@ -52,7 +52,7 @@ export default async function POSPage({ searchParams }: {
     const profilesResult = cashierIds.length
       ? await supabase.from("profiles").select("id,full_name").in("id", cashierIds)
       : { data: [], error: null };
-    const cashierNames = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.full_name]));
+    const cashierNames = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.full_name || "Utilisateur"]));
     const sales = salesRows.map((sale) => ({
       ...sale,
       cashier: cashierNames.has(sale.cashier_id) ? { full_name: cashierNames.get(sale.cashier_id)! } : null,
