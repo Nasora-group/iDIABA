@@ -31,7 +31,7 @@ const companyModules: { title: string; description: string; href: string; action
   { title: "Approvisionnement", description: "Fournisseurs, commandes et réceptions.", href: "/app/purchasing", action: "Gérer les achats", icon: Boxes, access: ["purchasing_read", "purchasing_manage"] },
   { title: "Rapports & comptabilité", description: "Chiffre d’affaires, marges et suivi financier.", href: "/app/reports", action: "Consulter les rapports", icon: BarChart3, access: ["reports_read"], secondaryHref: "/app/accounting", secondaryLabel: "Ouvrir la comptabilité", secondaryAccess: ["accounting_read", "accounting_manage"] },
   { title: "Personnel", description: "Employés, profils personnalisés et accès.", href: "/app/team", action: "Gérer", icon: Users, adminOnly: true },
-  { title: "Paramètres", description: "Configuration de votre entreprise.", href: "/app/company-settings", action: "Configurer", icon: Settings2, adminOnly: true },
+  { title: "Paramètres & sécurité", description: "Configuration de votre entreprise et journal des opérations.", href: "/app/company-settings", action: "Configurer", icon: Settings2, adminOnly: true, secondaryHref: "/app/audit", secondaryLabel: "Journal d’audit", secondaryAccess: ["audit_read"] },
 ];
  
 export default async function AppHome() {
@@ -121,7 +121,7 @@ export default async function AppHome() {
           {memberships.filter((membership) => membership.tenant).map((membership) => {
             const grantedAccess = accessByTenant.get(membership.tenant_id) ?? new Set<string>();
             const canManageCompany = ["owner", "admin"].includes(membership.role);
-            const visibleModules = companyModules.filter((module) => module.adminOnly ? canManageCompany : (module.access ?? []).some((permission) => grantedAccess.has(permission)) || (module.secondaryAccess ?? []).some((permission) => grantedAccess.has(permission)));
+            const visibleModules = companyModules.filter((module) => (module.adminOnly ? canManageCompany : (module.access ?? []).some((permission) => grantedAccess.has(permission))) || (module.secondaryAccess ?? []).some((permission) => grantedAccess.has(permission)));
             return (
               <section className="catalog-tenant" key={membership.tenant_id}>
                 <div className="catalog-heading"><div><h2>{membership.tenant!.name}</h2><p>Espaces de cette entreprise</p></div><span className="pill">{membership.role}</span></div>
@@ -148,7 +148,7 @@ export default async function AppHome() {
                       </article>
                     );
                   })}
-                  {(canManageCompany || grantedAccess.has("audit_read")) && <Link href="/app/audit" className="app-module-card"><span className="app-module-icon"><ShieldCheck size={20} /></span><div><strong>Journal d’audit</strong><p>Historique des opérations sensibles et des modifications.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
+
                 </div>
                 {!visibleModules.length && <p className="catalog-empty">Aucun espace n’est associé à ce profil. Contactez l’administrateur de l’entreprise.</p>}
               </section>
