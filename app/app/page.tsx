@@ -150,6 +150,24 @@ export default async function AppHome() {
                   })}
 
                 </div>
+                {canManageCompany && (
+                  <section className="catalog-tenant backoffice-tools">
+                    <div className="catalog-heading">
+                      <div><h3>Administration complète du commerce</h3><p>Accès direct aux fonctions de gestion et de contrôle réservées à l’administrateur.</p></div>
+                    </div>
+                    <div className="app-module-grid">
+                      <Link className="app-module-secondary" href="/app/customers">Clients, fidélité et retours <ArrowUpRight size={13} /></Link>
+                      <Link className="app-module-secondary" href="/app/inventory">Inventaires et ajustements <ArrowUpRight size={13} /></Link>
+                      <Link className="app-module-secondary" href="/app/accounting">Comptabilité, dépenses et journaux <ArrowUpRight size={13} /></Link>
+                      <Link className="app-module-secondary" href="/app/audit">Journal d’audit et traçabilité <ArrowUpRight size={13} /></Link>
+                      <Link className="app-module-secondary" href="/app/reports">Analyse des ventes, marges et résultats <ArrowUpRight size={13} /></Link>
+                      <Link className="app-module-secondary" href="/app/purchasing">Fournisseurs, commandes et réceptions <ArrowUpRight size={13} /></Link>
+                      <Link className="app-module-secondary" href="/app/stock">Dépôts, niveaux et mouvements de stock <ArrowUpRight size={13} /></Link>
+                      <Link className="app-module-secondary" href="/app/team">Personnel et profils d’accès <ArrowUpRight size={13} /></Link>
+                      <Link className="app-module-secondary" href="/app/company-settings">Paramètres et configuration du commerce <ArrowUpRight size={13} /></Link>
+                    </div>
+                  </section>
+                )}
                 {!visibleModules.length && <p className="catalog-empty">Aucun espace n’est associé à ce profil. Contactez l’administrateur de l’entreprise.</p>}
               </section>
             );
