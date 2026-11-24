@@ -75,7 +75,7 @@ export default async function AppHome() {
       allPermissions.forEach((permission) => granted.add(permission));
     } else if (membership.custom_role_profile_id) {
       const profile = customProfiles?.find((item) => item.id === membership.custom_role_profile_id);
-      (profile?.permissions?.length ? profile.permissions : (profile?.allowed_roles ?? []).flatMap((role) => legacyPermissions[role] ?? []))
+      (profile?.permissions?.length ? profile.permissions : (profile?.allowed_roles ?? []).flatMap((role: string) => legacyPermissions[role] ?? []))
         .forEach((permission: string) => granted.add(permission));
     } else {
       (legacyPermissions[membership.role] ?? []).forEach((permission) => granted.add(permission));
