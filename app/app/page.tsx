@@ -25,11 +25,11 @@ const sectorNames: Record<string, string> = {
 };
 
 const companyModules: { title: string; description: string; href: string; action: string; icon: typeof CreditCard; access?: string[]; adminOnly?: boolean; secondaryHref?: string; secondaryLabel?: string }[] = [
-  { title: "Caisse", description: "Scanner, rechercher, vendre et encaisser.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard, access: ["manager", "cashier"] },
-  { title: "Ventes", description: "Retrouver les ventes et les tickets depuis la caisse.", href: "/app/sales", action: "Voir les ventes", icon: BarChart3, access: ["manager", "cashier", "accountant", "viewer"] },
-  { title: "Produits & Stocks", description: "Catalogue, quantités, mouvements et inventaires.", href: "/app/products", secondaryHref: "/app/stock", secondaryLabel: "Ouvrir les stocks", action: "Gérer les produits", icon: Package, access: ["manager", "stock"] },
-  { title: "Approvisionnement", description: "Fournisseurs, commandes et réceptions.", href: "/app/purchasing", action: "Gérer les achats", icon: Boxes, access: ["manager", "stock", "accountant"] },
-  { title: "Rapports", description: "Chiffre d’affaires, marges et activité.", href: "/app/reports", action: "Consulter", icon: BarChart3, access: ["manager", "accountant", "viewer"] },
+  { title: "Caisse", description: "Scanner, rechercher, vendre et encaisser.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard, access: ["cash_register"] },
+  { title: "Ventes", description: "Retrouver les ventes et les tickets depuis la caisse.", href: "/app/sales", action: "Voir les ventes", icon: BarChart3, access: ["sales_read", "sales_manage"] },
+  { title: "Produits & Stocks", description: "Catalogue, quantités, mouvements et inventaires.", href: "/app/products", secondaryHref: "/app/stock", secondaryLabel: "Ouvrir les stocks", action: "Gérer les produits", icon: Package, access: ["products_read", "products_manage", "stock_read", "stock_manage"] },
+  { title: "Approvisionnement", description: "Fournisseurs, commandes et réceptions.", href: "/app/purchasing", action: "Gérer les achats", icon: Boxes, access: ["purchasing_read", "purchasing_manage"] },
+  { title: "Rapports", description: "Chiffre d’affaires, marges et activité.", href: "/app/reports", action: "Consulter", icon: BarChart3, access: ["reports_read", "accounting_read"] },
   { title: "Personnel", description: "Employés, profils personnalisés et accès.", href: "/app/team", action: "Gérer", icon: Users, adminOnly: true },
   { title: "Paramètres", description: "Configuration de votre entreprise.", href: "/app/company-settings", action: "Configurer", icon: Settings2, adminOnly: true },
 ];
@@ -58,17 +58,27 @@ export default async function AppHome() {
   const displayName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
   const profileIds = memberships.map((membership) => membership.custom_role_profile_id).filter((id): id is string => Boolean(id));
   const { data: customProfiles } = profileIds.length
-    ? await supabase.from("tenant_role_profiles").select("id,allowed_roles").in("id", profileIds)
-    : { data: [] as { id: string; allowed_roles: string[] }[] };
+    ? await supabase.from("tenant_role_profiles").select("id,permissions,allowed_roles").in("id", profileIds)
+    : { data: [] as { id: string; permissions: string[]; allowed_roles: string[] }[] };
   const accessByTenant = new Map<string, Set<string>>();
+  const legacyPermissions: Record<string, string[]> = {
+    manager: ["cash_register","cash_manage","sales_read","sales_manage","products_read","products_manage","stock_read","stock_manage","purchasing_read","purchasing_manage","reports_read","accounting_read","accounting_manage","audit_read"],
+    cashier: ["cash_register","sales_read"],
+    stock: ["products_read","products_manage","stock_read","stock_manage","purchasing_read","purchasing_manage"],
+    accountant: ["purchasing_read","purchasing_manage","reports_read","accounting_read","accounting_manage"],
+    viewer: ["sales_read","products_read","stock_read","purchasing_read","reports_read","accounting_read"],
+  };
+  const allPermissions = ["cash_register","cash_manage","sales_read","sales_manage","products_read","products_manage","stock_read","stock_manage","purchasing_read","purchasing_manage","reports_read","accounting_read","accounting_manage","team_manage","settings_manage","audit_read"];
   for (const membership of memberships) {
     const granted = new Set<string>();
     if (["owner", "admin"].includes(membership.role)) {
-      ["manager", "cashier", "stock", "accountant", "viewer"].forEach((role: string) => granted.add(role));
+      allPermissions.forEach((permission) => granted.add(permission));
     } else if (membership.custom_role_profile_id) {
-      customProfiles?.find((profile) => profile.id === membership.custom_role_profile_id)?.allowed_roles.forEach((role: string) => granted.add(role));
+      const profile = customProfiles?.find((item) => item.id === membership.custom_role_profile_id);
+      (profile?.permissions?.length ? profile.permissions : (profile?.allowed_roles ?? []).flatMap((role) => legacyPermissions[role] ?? []))
+        .forEach((permission: string) => granted.add(permission));
     } else {
-      granted.add(membership.role);
+      (legacyPermissions[membership.role] ?? []).forEach((permission) => granted.add(permission));
     }
     accessByTenant.set(membership.tenant_id, granted);
   }
@@ -126,7 +136,7 @@ export default async function AppHome() {
                       {secondaryHref && <Link href={secondaryHref} className="app-module-secondary">{secondaryLabel} <ArrowUpRight size={13} /></Link>}
                     </article>
                   ))}
-                  {canManageCompany && <Link href="/app/audit" className="app-module-card"><span className="app-module-icon"><ShieldCheck size={20} /></span><div><strong>Journal d’audit</strong><p>Historique des opérations sensibles et des modifications.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
+                  {(canManageCompany || grantedAccess.has("audit_read")) && <Link href="/app/audit" className="app-module-card"><span className="app-module-icon"><ShieldCheck size={20} /></span><div><strong>Journal d’audit</strong><p>Historique des opérations sensibles et des modifications.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
                 </div>
                 {!visibleModules.length && <p className="catalog-empty">Aucun espace n’est associé à ce profil. Contactez l’administrateur de l’entreprise.</p>}
               </section>
