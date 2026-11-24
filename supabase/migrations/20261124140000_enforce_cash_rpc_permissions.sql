@@ -69,7 +69,7 @@ AS $function$
           )
         )
     );
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.open_cash_session(p_tenant_id uuid, p_location_id uuid, p_opening_cash numeric)
@@ -92,7 +92,7 @@ begin
     returning id into new_session_id;
   return new_session_id;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.close_cash_session(p_session_id uuid, p_closing_cash numeric)
@@ -133,7 +133,7 @@ begin
     cash_variance=round(p_closing_cash-expected,2)
     where id=s.id;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.create_cash_movement(p_session_id uuid, p_movement_type text, p_amount numeric, p_reason text)
@@ -187,7 +187,7 @@ begin
     returning id into new_movement_id;
   return new_movement_id;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.finalize_sale(p_tenant_id uuid, p_location_id uuid, p_cash_session_id uuid, p_client_sale_id uuid, p_items jsonb, p_payments jsonb)
@@ -281,7 +281,7 @@ begin
     status='completed',completed_at=now() where id=v_sale_id and tenant_id=p_tenant_id;
   return v_sale_id;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.get_cash_session_reconciliation(p_session_id uuid)
@@ -369,5 +369,5 @@ begin
     'payments', v_payments
   );
 end;
-$function$
+$function$;
 
