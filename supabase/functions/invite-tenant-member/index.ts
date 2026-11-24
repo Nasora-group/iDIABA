@@ -25,12 +25,15 @@ Deno.serve(async(req:Request)=>{
     const tenantId=String(body.tenant_id??"");
     const email=String(body.email??"").trim().toLowerCase();
     const name=String(body.full_name??"").trim().slice(0,120);
-    const role=String(body.role??"cashier");
+    const role="cashier";
+    const customRoleProfileId=String(body.custom_role_profile_id??"");
     if(!/^[0-9a-f-]{36}$/i.test(tenantId)||!/^\S+@\S+\.\S+$/.test(email)||!allowedRoles.includes(role)) return json(400,{error:"Informations invalides"});
     const {data:membership,error:memberError}=await admin.from("tenant_memberships").select("role").eq("tenant_id",tenantId).eq("user_id",user.id).maybeSingle();
     if(memberError||!membership||!["owner","admin"].includes(membership.role)) return json(403,{error:"Seul l’administrateur de l’entreprise peut inviter des utilisateurs"});
     const {count,error:countError}=await admin.from("tenant_memberships").select("user_id",{count:"exact",head:true}).eq("tenant_id",tenantId);
     if(countError) return json(500,{error:"Impossible de vérifier le quota"});
+    const {data:profile,error:profileError}=await admin.from("tenant_role_profiles").select("id").eq("id",customRoleProfileId).eq("tenant_id",tenantId).maybeSingle();
+    if(profileError||!profile) return json(400,{error:"Profil d’accès invalide pour cette entreprise"});
     const {data:tenant,error:tenantError}=await admin.from("tenants").select("name").eq("id",tenantId).maybeSingle();
     if(tenantError||!tenant) return json(404,{error:"Entreprise introuvable"});
     const {data:sub,error:subError}=await admin.from("tenant_subscriptions").select("status,trial_ends_at,current_period_ends_at,grace_ends_at,plan_id").eq("tenant_id",tenantId).in("status",["active","trialing","past_due"]).maybeSingle();
@@ -52,7 +55,7 @@ Deno.serve(async(req:Request)=>{
       return json(duplicate?409:400,{error:duplicate?"Cette adresse a déjà un compte iDIABA. Utilisez « Ajouter un compte existant » dans la page Équipe.":inviteError.message});
     }
     if(!invited.user) return json(500,{error:"Invitation envoyée sans retour de compte; contactez l’administrateur"});
-    const {error:insertError}=await admin.from("tenant_memberships").insert({tenant_id:tenantId,user_id:invited.user.id,role});
+    const {error:insertError}=await admin.from("tenant_memberships").insert({tenant_id:tenantId,user_id:invited.user.id,role,custom_role_profile_id:customRoleProfileId});
     if(insertError){
       await admin.auth.admin.deleteUser(invited.user.id);
       return json(409,{error:"L’invitation a été annulée car l’ajout à l’entreprise a échoué. Vérifiez l’abonnement et le quota."});

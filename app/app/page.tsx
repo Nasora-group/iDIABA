@@ -26,7 +26,7 @@ const sectorNames: Record<string, string> = {
 
 const companyModules: { title: string; description: string; href: string; action: string; icon: typeof CreditCard; access?: string[]; adminOnly?: boolean; secondaryHref?: string; secondaryLabel?: string }[] = [
   { title: "Caisse", description: "Scanner, rechercher, vendre et encaisser.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard, access: ["manager", "cashier"] },
-  { title: "Ventes", description: "Retrouver les ventes et les tickets depuis la caisse.", href: "/app/pos", action: "Voir les ventes", icon: BarChart3, access: ["manager", "cashier", "accountant", "viewer"] },
+  { title: "Ventes", description: "Retrouver les ventes et les tickets depuis la caisse.", href: "/app/sales", action: "Voir les ventes", icon: BarChart3, access: ["manager", "cashier", "accountant", "viewer"] },
   { title: "Produits & Stocks", description: "Catalogue, quantités, mouvements et inventaires.", href: "/app/products", secondaryHref: "/app/stock", secondaryLabel: "Ouvrir les stocks", action: "Gérer les produits", icon: Package, access: ["manager", "stock"] },
   { title: "Approvisionnement", description: "Fournisseurs, commandes et réceptions.", href: "/app/purchasing", action: "Gérer les achats", icon: Boxes, access: ["manager", "stock", "accountant"] },
   { title: "Rapports", description: "Chiffre d’affaires, marges et activité.", href: "/app/reports", action: "Consulter", icon: BarChart3, access: ["manager", "accountant", "viewer"] },
@@ -56,23 +56,23 @@ export default async function AppHome() {
   const firstTenant = memberships.find((membership) => membership.tenant);
   const firstProfile = firstTenant ? profiles.get(firstTenant.tenant_id) : undefined;
   const displayName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
-  const canManageCompany = memberships.some((membership) => ["owner", "admin"].includes(membership.role));
   const profileIds = memberships.map((membership) => membership.custom_role_profile_id).filter((id): id is string => Boolean(id));
   const { data: customProfiles } = profileIds.length
     ? await supabase.from("tenant_role_profiles").select("id,allowed_roles").in("id", profileIds)
     : { data: [] as { id: string; allowed_roles: string[] }[] };
-  const grantedAccess = new Set<string>();
+  const accessByTenant = new Map<string, Set<string>>();
   for (const membership of memberships) {
+    const granted = new Set<string>();
     if (["owner", "admin"].includes(membership.role)) {
-      ["manager", "cashier", "stock", "accountant", "viewer"].forEach((role) => grantedAccess.add(role));
+      ["manager", "cashier", "stock", "accountant", "viewer"].forEach((role: string) => granted.add(role));
     } else if (membership.custom_role_profile_id) {
-      customProfiles?.find((profile) => profile.id === membership.custom_role_profile_id)?.allowed_roles.forEach((role) => grantedAccess.add(role));
+      customProfiles?.find((profile) => profile.id === membership.custom_role_profile_id)?.allowed_roles.forEach((role: string) => granted.add(role));
     } else {
-      grantedAccess.add(membership.role);
+      granted.add(membership.role);
     }
+    accessByTenant.set(membership.tenant_id, granted);
   }
-  const visibleModules = companyModules.filter((module) => module.adminOnly ? canManageCompany : (module.access ?? []).some((role) => grantedAccess.has(role)));
-  const canViewAudit = canManageCompany;
+
 
   return (
     <main className="shell">
@@ -108,20 +108,31 @@ export default async function AppHome() {
           <p>Chaque profil voit uniquement les espaces correspondant à ses accès.</p>
         </div>
         <div className="app-module-grid">
-          {visibleModules.map(({ title, description, href, action, icon: Icon, secondaryHref, secondaryLabel }) => (
-            <article className="app-module-card" key={title}>
-              <Link href={href} className="app-module-main">
-                <span className="app-module-icon"><Icon size={20} strokeWidth={1.9} /></span>
-                <div><strong>{title}</strong><p>{description}</p></div>
-                <span className="app-module-link">{action}<ArrowUpRight size={15} /></span>
-              </Link>
-              {secondaryHref && <Link href={secondaryHref} className="app-module-secondary">{secondaryLabel} <ArrowUpRight size={13} /></Link>}
-            </article>
-          ))}
-          {canViewAudit && <Link href="/app/audit" className="app-module-card"><span className="app-module-icon"><ShieldCheck size={20} /></span><div><strong>Journal d’audit</strong><p>Historique des opérations sensibles et des modifications.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
-          {user.app_metadata?.role === "platform_admin" && <Link href="/app/platform-admin" className="app-module-card"><span className="app-module-icon"><CreditCard size={20} /></span><div><strong>Administration SaaS</strong><p>Entreprises, abonnements, utilisateurs, statistiques et support.</p></div><span className="app-module-link">Ouvrir<ArrowUpRight size={15} /></span></Link>}
+          {memberships.filter((membership) => membership.tenant).map((membership) => {
+            const grantedAccess = accessByTenant.get(membership.tenant_id) ?? new Set<string>();
+            const canManageCompany = ["owner", "admin"].includes(membership.role);
+            const visibleModules = companyModules.filter((module) => module.adminOnly ? canManageCompany : (module.access ?? []).some((role) => grantedAccess.has(role)));
+            return (
+              <section className="catalog-tenant" key={membership.tenant_id}>
+                <div className="catalog-heading"><div><h2>{membership.tenant!.name}</h2><p>Espaces de cette entreprise</p></div><span className="pill">{membership.role}</span></div>
+                <div className="app-module-grid">
+                  {visibleModules.map(({ title, description, href, action, icon: Icon, secondaryHref, secondaryLabel }) => (
+                    <article className="app-module-card" key={title}>
+                      <Link href={href} className="app-module-main">
+                        <span className="app-module-icon"><Icon size={20} strokeWidth={1.9} /></span>
+                        <div><strong>{title}</strong><p>{description}</p></div>
+                        <span className="app-module-link">{action}<ArrowUpRight size={15} /></span>
+                      </Link>
+                      {secondaryHref && <Link href={secondaryHref} className="app-module-secondary">{secondaryLabel} <ArrowUpRight size={13} /></Link>}
+                    </article>
+                  ))}
+                  {canManageCompany && <Link href="/app/audit" className="app-module-card"><span className="app-module-icon"><ShieldCheck size={20} /></span><div><strong>Journal d’audit</strong><p>Historique des opérations sensibles et des modifications.</p></div><span className="app-module-link">Consulter<ArrowUpRight size={15} /></span></Link>}
+                </div>
+                {!visibleModules.length && <p className="catalog-empty">Aucun espace n’est associé à ce profil. Contactez l’administrateur de l’entreprise.</p>}
+              </section>
+            );
+          })}
         </div>
-        {!visibleModules.length && <p className="catalog-empty">Aucun espace n’est associé à votre profil. Contactez l’administrateur de l’entreprise.</p>}
 
         <details className="workspace-list-details">
           <summary>Vos entreprises ({memberships.length})</summary>
