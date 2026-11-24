@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 type Membership = { tenant_id: string; role: string; custom_role_profile_id: string | null; tenant: { name: string } | null };
 type Sale = { id: string; total: number | string; created_at: string; cashier_id: string | null; customer_id: string | null };
 
-const salesRoles = new Set(["owner", "admin", "manager", "cashier", "accountant", "viewer"]);
+const legacySalesPermissions: Record<string, string[]> = { manager: ["sales_read","sales_manage"], cashier: ["sales_read"], accountant: ["sales_read"], viewer: ["sales_read"] };
 const money = (value: number | string) => Number(value).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 
 export default async function SalesPage() {
@@ -22,14 +22,17 @@ export default async function SalesPage() {
   const memberships = (membershipRows ?? []) as unknown as Membership[];
   const profileIds = memberships.map((m) => m.custom_role_profile_id).filter((id): id is string => Boolean(id));
   const { data: profileRows } = profileIds.length
-    ? await supabase.from("tenant_role_profiles").select("id,allowed_roles").in("id", profileIds)
-    : { data: [] as { id: string; allowed_roles: string[] }[] };
-  const profiles = new Map((profileRows ?? []).map((p) => [p.id, p.allowed_roles]));
+    ? await supabase.from("tenant_role_profiles").select("id,permissions,allowed_roles").in("id", profileIds)
+    : { data: [] as { id: string; permissions: string[]; allowed_roles: string[] }[] };
+  const profiles = new Map((profileRows ?? []).map((p) => [p.id, p]));
 
   const groups = await Promise.all(memberships.map(async (membership) => {
-    const customRoles = membership.custom_role_profile_id ? profiles.get(membership.custom_role_profile_id) ?? [] : null;
+    const customProfile = membership.custom_role_profile_id ? profiles.get(membership.custom_role_profile_id) : null;
+    const permissions = customProfile?.permissions?.length
+      ? customProfile.permissions
+      : (customProfile?.allowed_roles ?? [membership.role]).flatMap((role) => legacySalesPermissions[role] ?? []);
     const canView = ["owner", "admin"].includes(membership.role)
-      || (customRoles ? customRoles.some((role: string) => salesRoles.has(role)) : salesRoles.has(membership.role));
+      || permissions.some((permission) => ["sales_read", "sales_manage"].includes(permission));
     if (!canView) return { membership, sales: [] as Sale[], denied: true };
     const { data } = await supabase.from("sales")
       .select("id,total,created_at,cashier_id,customer_id")
