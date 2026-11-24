@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-const allowed=["admin","manager","cashier","stock","accountant","viewer"];
+const allowed=["cashier"];
 function go(code:string):never{redirect("/app/team?status="+encodeURIComponent(code));}
 export async function manageMember(formData:FormData){
  const supabase=await createClient();
@@ -39,7 +39,9 @@ export async function inviteMember(formData:FormData){
  const fullName=String(formData.get("full_name")??"").trim().slice(0,120);
  const role=String(formData.get("role")??"cashier");
  if(!/^[0-9a-f-]{36}$/i.test(tenantId)||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||!allowed.includes(role)) go("validation");
- const {data,error}=await supabase.functions.invoke("invite-tenant-member",{body:{tenant_id:tenantId,email,full_name:fullName,role}});
+ const customRoleProfileId=String(formData.get("custom_role_profile_id")??"").trim();
+ if(!/^[0-9a-f-]{36}$/i.test(customRoleProfileId)) go("validation");
+ const {data,error}=await supabase.functions.invoke("invite-tenant-member",{body:{tenant_id:tenantId,email,full_name:fullName,role:"cashier",custom_role_profile_id:customRoleProfileId}});
  if(error){
   let detail="";
   const response=(error as {context?:Response}).context;
