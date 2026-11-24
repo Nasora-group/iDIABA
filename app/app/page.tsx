@@ -25,11 +25,11 @@ const sectorNames: Record<string, string> = {
 };
 
 const companyModules: { title: string; description: string; href: string; action: string; icon: typeof CreditCard; access?: string[]; adminOnly?: boolean; secondaryHref?: string; secondaryLabel?: string }[] = [
-  { title: "Caisse", description: "Scanner, rechercher, vendre et encaisser.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard, access: ["cash_register"] },
+  { title: "Caisse", description: "Scanner, rechercher, vendre et encaisser.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard, access: ["cash_register", "cash_manage"] },
   { title: "Ventes", description: "Retrouver les ventes et les tickets depuis la caisse.", href: "/app/sales", action: "Voir les ventes", icon: BarChart3, access: ["sales_read", "sales_manage"] },
   { title: "Produits & Stocks", description: "Catalogue, quantités, mouvements et inventaires.", href: "/app/products", secondaryHref: "/app/stock", secondaryLabel: "Ouvrir les stocks", action: "Gérer les produits", icon: Package, access: ["products_read", "products_manage", "stock_read", "stock_manage"] },
   { title: "Approvisionnement", description: "Fournisseurs, commandes et réceptions.", href: "/app/purchasing", action: "Gérer les achats", icon: Boxes, access: ["purchasing_read", "purchasing_manage"] },
-  { title: "Rapports", description: "Chiffre d’affaires, marges et activité.", href: "/app/reports", action: "Consulter", icon: BarChart3, access: ["reports_read", "accounting_read"] },
+  { title: "Rapports", description: "Chiffre d’affaires, marges et activité.", href: "/app/reports", action: "Consulter", icon: BarChart3, access: ["reports_read", "accounting_read", "accounting_manage"] },
   { title: "Personnel", description: "Employés, profils personnalisés et accès.", href: "/app/team", action: "Gérer", icon: Users, adminOnly: true },
   { title: "Paramètres", description: "Configuration de votre entreprise.", href: "/app/company-settings", action: "Configurer", icon: Settings2, adminOnly: true },
 ];
