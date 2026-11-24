@@ -6,7 +6,7 @@ import POSCheckout from "./pos-client";
 import CashClosePreview from "./cash-close-preview";
 import OfflinePOSSeed from "./offline-seed";
 
-type Workspace = { tenant_id: string; role: string; tenant: { name: string } | null };
+type Workspace = { tenant_id: string; role: string; custom_role_profile_id: string | null; tenant: { name: string } | null };
 type Location = { id: string; name: string; code: string };
 type Product = { id: string; name: string; sku: string; barcode: string | null; unit: string; product_kind: "product" | "service"; sale_price: string | number; tax_rate: string | number; is_active: boolean };
 type CashSession = { id: string; tenant_id: string; location_id: string; opened_by: string; opening_cash: string | number; opened_at: string; location: { name: string; code: string } | null };
@@ -25,19 +25,25 @@ export default async function POSPage({ searchParams }: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   const { data: memberships } = await supabase.from("tenant_memberships")
-    .select("tenant_id,role,tenant:tenants(name)").eq("user_id", user.id);
+    .select("tenant_id,role,custom_role_profile_id,tenant:tenants(name)").eq("user_id", user.id);
   const workspaces = (memberships ?? []) as unknown as Workspace[];
+  const customProfileIds = [...new Set(workspaces.map((workspace) => workspace.custom_role_profile_id).filter((id): id is string => Boolean(id)))];
+  const { data: customProfiles } = customProfileIds.length
+    ? await supabase.from("tenant_role_profiles").select("id,permissions").in("id", customProfileIds)
+    : { data: [] as { id: string; permissions: string[] }[] };
+  const permissionsByProfile = new Map((customProfiles ?? []).map((profile) => [profile.id, new Set(profile.permissions ?? [])]));
 
   const data = await Promise.all(workspaces.map(async (workspace) => {
+    const isManager = ["owner", "admin", "manager"].includes(workspace.role)
+      || Boolean(workspace.custom_role_profile_id && permissionsByProfile.get(workspace.custom_role_profile_id)?.has("cash_manage"));
     let openSessionsQuery = supabase.from("cash_sessions")
       .select("id,tenant_id,location_id,opened_by,opening_cash,opened_at,location:stock_locations(name,code)")
       .eq("tenant_id", workspace.tenant_id)
       .eq("status", "open");
     // Managers can reconcile all sessions in their assigned locations; cashiers see only their own.
-    if (!["owner", "admin", "manager"].includes(workspace.role)) {
+    if (!isManager) {
       openSessionsQuery = openSessionsQuery.eq("opened_by", user.id);
     }
-    const isManager = ["owner", "admin", "manager"].includes(workspace.role);
     const [locationsResult, productsResult, sessionsResult, closedResult, salesResult] = await Promise.all([
       supabase.from("stock_locations").select("id,name,code").eq("tenant_id", workspace.tenant_id).eq("location_type", "store").eq("is_active", true).order("name"),
       supabase.from("products").select("id,name,sku,barcode,unit,product_kind,track_stock,sale_price,tax_rate,is_active").eq("tenant_id", workspace.tenant_id).eq("is_active", true).order("name"),
