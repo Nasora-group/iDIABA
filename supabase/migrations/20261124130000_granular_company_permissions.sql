@@ -18,7 +18,7 @@ alter table public.tenant_role_profiles
 -- Backfill existing profiles without removing their legacy role grants.
 update public.tenant_role_profiles
 set permissions = (
-  select coalesce(array_agg(distinct permission), '{}'::text[])
+  select coalesce(array_agg(distinct perms.permission), '{}'::text[])
   from unnest(allowed_roles) as legacy(role_name)
   cross join lateral unnest(
     case legacy.role_name
@@ -43,7 +43,7 @@ set permissions = (
       ]::text[]
       else '{}'::text[]
     end
-  ) as permission
+  ) as perms(permission)
 )
 where cardinality(permissions) = 0;
 
