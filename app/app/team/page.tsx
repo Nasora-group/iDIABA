@@ -6,7 +6,6 @@ type Workspace = { tenant_id:string; role:string; tenant:{id:string;name:string}
 type Member = { user_id:string; role:string; created_at:string; custom_role_profile_id:string|null; profile:{full_name:string}|null };
 type CustomRole={id:string;name:string;allowed_roles:string[]};
 export const dynamic="force-dynamic";
-const roles=[["cashier","Accès minimal (à personnaliser)"]];
 const labels:Record<string,string>={owner:"Propriétaire",admin:"Administrateur",manager:"Responsable",cashier:"Caissier",stock:"Gestionnaire stock",accountant:"Comptable",viewer:"Consultation"};
 export default async function TeamPage({searchParams}:{searchParams:Promise<{status?:string}>}) {
  const params=await searchParams; const supabase=await createClient(); const {data:{user}}=await supabase.auth.getUser(); if(!user) return null;
