@@ -32,7 +32,7 @@ export default async function SalesPage() {
       ? customProfile.permissions
       : (customProfile?.allowed_roles ?? [membership.role]).flatMap((role: string) => legacySalesPermissions[role] ?? []);
     const canView = ["owner", "admin"].includes(membership.role)
-      || permissions.some((permission) => ["sales_read", "sales_manage"].includes(permission));
+      || permissions.some((permission: string) => ["sales_read", "sales_manage"].includes(permission));
     if (!canView) return { membership, sales: [] as Sale[], denied: true };
     const { data } = await supabase.from("sales")
       .select("id,total,created_at,cashier_id,customer_id")
