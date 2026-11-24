@@ -30,7 +30,7 @@ export default async function SalesPage() {
     const customProfile = membership.custom_role_profile_id ? profiles.get(membership.custom_role_profile_id) : null;
     const permissions = customProfile?.permissions?.length
       ? customProfile.permissions
-      : (customProfile?.allowed_roles ?? [membership.role]).flatMap((role) => legacySalesPermissions[role] ?? []);
+      : (customProfile?.allowed_roles ?? [membership.role]).flatMap((role: string) => legacySalesPermissions[role] ?? []);
     const canView = ["owner", "admin"].includes(membership.role)
       || permissions.some((permission) => ["sales_read", "sales_manage"].includes(permission));
     if (!canView) return { membership, sales: [] as Sale[], denied: true };
