@@ -376,3 +376,15 @@ footer{padding:25px 0;border-top:1px solid var(--line);color:var(--muted);font-s
 .app-module-main>div{width:100%}
 .app-module-secondary{display:inline-flex;align-items:center;gap:5px;margin-top:2px;color:var(--brand-dark);font-size:12px;font-weight:700;text-decoration:none}
 .app-module-secondary:hover,.app-module-main:hover .app-module-link{text-decoration:underline}
+
+
+/* Granular company permission editor */
+.role-permission-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.75rem;margin:.75rem 0 1rem}
+.role-permission-group{min-width:0;margin:0;padding:.8rem;border:1px solid var(--border,#dfe5e2);border-radius:12px;background:var(--surface,#fff)}
+.role-permission-group legend{padding:0 .35rem;font-size:.82rem;font-weight:750;color:var(--text,#24352b)}
+.role-permission-item{display:flex!important;align-items:flex-start!important;gap:.65rem;padding:.55rem .15rem;border-bottom:1px solid var(--border,#edf0ee);cursor:pointer}
+.role-permission-item:last-child{border-bottom:0}
+.role-permission-item input[type=checkbox]{width:18px;height:18px;flex:0 0 18px;margin:.12rem 0 0;accent-color:var(--primary,#16834a)}
+.role-permission-item span{display:grid;gap:.15rem}
+.role-permission-item strong{font-size:.83rem;font-weight:650}
+.role-permission-item small{font-size:.73rem;line-height:1.35;color:var(--muted,#64736a)}
