@@ -84,6 +84,26 @@ export default async function AppHome() {
   }
 
 
+  const now = new Date();
+  const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const adminMetrics = new Map<string, { revenue: number; salesCount: number; grossMargin: number; expenses: number; openSessions: number; pendingOrders: number; activeProducts: number }>();
+  await Promise.all(memberships.filter((membership) => ["owner", "admin"].includes(membership.role)).map(async (membership) => {
+    const [reportResult, sessionsResult, ordersResult, productsResult] = await Promise.all([
+      supabase.rpc("get_tenant_management_report", { p_tenant_id: membership.tenant_id, p_from: periodStart.toISOString(), p_to: now.toISOString() }),
+      supabase.from("cash_sessions").select("id", { count: "exact", head: true }).eq("tenant_id", membership.tenant_id).eq("status", "open"),
+      supabase.from("purchase_orders").select("id", { count: "exact", head: true }).eq("tenant_id", membership.tenant_id).in("status", ["ordered", "partially_received"]),
+      supabase.from("products").select("id", { count: "exact", head: true }).eq("tenant_id", membership.tenant_id).eq("is_active", true),
+    ]);
+    const report = reportResult.data as { revenue?: number; sales_count?: number; gross_margin?: number; expenses?: number } | null;
+    adminMetrics.set(membership.tenant_id, {
+      revenue: Number(report?.revenue ?? 0), salesCount: Number(report?.sales_count ?? 0),
+      grossMargin: Number(report?.gross_margin ?? 0), expenses: Number(report?.expenses ?? 0),
+      openSessions: sessionsResult.count ?? 0, pendingOrders: ordersResult.count ?? 0,
+      activeProducts: productsResult.count ?? 0,
+    });
+  }));
+  const formatMoney = (value: number) => value.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " FCFA";
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -125,6 +145,19 @@ export default async function AppHome() {
             return (
               <section className="catalog-tenant" key={membership.tenant_id}>
                 <div className="catalog-heading"><div><h2>{membership.tenant!.name}</h2><p>Espaces de cette entreprise</p></div><span className="pill">{membership.role}</span></div>
+                {canManageCompany && (() => {
+                  const metrics = adminMetrics.get(membership.tenant_id);
+                  return metrics ? (
+                    <section className="report-stat-grid" aria-label="Indicateurs de gestion du mois en cours">
+                      <article><span>Chiffre d’affaires du mois</span><strong>{formatMoney(metrics.revenue)}</strong><small>{metrics.salesCount} ventes validées</small></article>
+                      <article><span>Marge brute connue</span><strong>{formatMoney(metrics.grossMargin)}</strong><small>Selon les coûts d’achat enregistrés</small></article>
+                      <article><span>Dépenses enregistrées</span><strong>{formatMoney(metrics.expenses)}</strong><small>Depuis le début du mois</small></article>
+                      <article><span>Caisses ouvertes</span><strong>{metrics.openSessions}</strong><small>Sessions actuellement ouvertes</small></article>
+                      <article><span>Achats en attente</span><strong>{metrics.pendingOrders}</strong><small>Commandes à réceptionner</small></article>
+                      <article><span>Articles actifs</span><strong>{metrics.activeProducts}</strong><small>Catalogue de l’entreprise</small></article>
+                    </section>
+                  ) : <p className="catalog-help">Les indicateurs de gestion sont momentanément indisponibles.</p>;
+                })()}
                 <div className="app-module-grid">
                   {visibleModules.map((module) => {
                     const { title, description, href, action, icon: Icon, secondaryHref, secondaryLabel } = module;
