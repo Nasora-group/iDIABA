@@ -29,7 +29,7 @@ export default async function SalesPage() {
   const groups = await Promise.all(memberships.map(async (membership) => {
     const customRoles = membership.custom_role_profile_id ? profiles.get(membership.custom_role_profile_id) ?? [] : null;
     const canView = ["owner", "admin"].includes(membership.role)
-      || (customRoles ? customRoles.some((role) => salesRoles.has(role)) : salesRoles.has(membership.role));
+      || (customRoles ? customRoles.some((role: string) => salesRoles.has(role)) : salesRoles.has(membership.role));
     if (!canView) return { membership, sales: [] as Sale[], denied: true };
     const { data } = await supabase.from("sales")
       .select("id,total,created_at,cashier_id,customer_id")
