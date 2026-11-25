@@ -71,6 +71,25 @@ class InventoryLine(Base):
     counted: Mapped[float] = mapped_column(Float)
     difference: Mapped[float] = mapped_column(Float)
 
+class StockTransfer(Base):
+    __tablename__ = "stock_transfers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    source_warehouse_id: Mapped[int] = mapped_column(ForeignKey("warehouses.id"))
+    destination_warehouse_id: Mapped[int] = mapped_column(ForeignKey("warehouses.id"))
+    reference: Mapped[str] = mapped_column(String(60))
+    status: Mapped[str] = mapped_column(String(20), default="VALIDE")
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class StockTransferLine(Base):
+    __tablename__ = "stock_transfer_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    transfer_id: Mapped[int] = mapped_column(ForeignKey("stock_transfers.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    quantity: Mapped[float] = mapped_column(Float)
+    unit_cost: Mapped[float] = mapped_column(Float, default=0)
+
 class Refund(Base):
     __tablename__ = "refunds"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -292,6 +311,74 @@ async def inventory_validate(inventory_id: int, x: InventoryPost, user: User = D
     inv.status = "VALIDE"
     await db.commit()
     return {"status": inv.status, "adjustments": sum(abs(l.difference) for l in lines)}
+
+class TransferItem(BaseModel):
+    product_id: int
+    quantity: float = Field(gt=0)
+
+class TransferIn(BaseModel):
+    source_warehouse_id: int
+    destination_warehouse_id: int
+    reference: str = Field(min_length=2, max_length=60)
+    lines: list[TransferItem] = Field(min_length=1)
+
+@router.get("/stock/transfers")
+async def stock_transfers(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "stock.read", db)
+    rows = (await db.scalars(select(StockTransfer).where(StockTransfer.tenant_id == user.tenant_id).order_by(StockTransfer.id.desc()).limit(200))).all()
+    return [{"id": r.id, "reference": r.reference, "source_warehouse_id": r.source_warehouse_id, "destination_warehouse_id": r.destination_warehouse_id, "status": r.status, "created_at": r.created_at} for r in rows]
+
+@router.post("/stock/transfers")
+async def stock_transfer_create(x: TransferIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "stock.write", db)
+    if x.source_warehouse_id == x.destination_warehouse_id:
+        raise HTTPException(400, "Les dépôts source et destination doivent être différents")
+    source = await db.scalar(select(Warehouse).where(Warehouse.id == x.source_warehouse_id, Warehouse.tenant_id == user.tenant_id))
+    destination = await db.scalar(select(Warehouse).where(Warehouse.id == x.destination_warehouse_id, Warehouse.tenant_id == user.tenant_id))
+    if not source or not destination:
+        raise HTTPException(404, "Dépôt source ou destination introuvable")
+    transfer = StockTransfer(tenant_id=user.tenant_id, source_warehouse_id=source.id, destination_warehouse_id=destination.id, reference=x.reference, created_by=user.id)
+    db.add(transfer)
+    await db.flush()
+    prepared = []
+    requested = {}
+    for item in x.lines:
+        requested[item.product_id] = requested.get(item.product_id, 0) + item.quantity
+    for product_id, quantity in requested.items():
+        product = await db.scalar(select(Product).where(Product.id == product_id, Product.tenant_id == user.tenant_id, Product.active.is_(True)))
+        if not product:
+            raise HTTPException(404, "Article introuvable dans cette entreprise")
+        source_stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == source.id, WarehouseStock.product_id == product.id))
+        available = source_stock.quantity if source_stock else 0
+        if available < quantity:
+            raise HTTPException(409, f"Stock insuffisant pour {product.name} : disponible {available:g}")
+        destination_stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == destination.id, WarehouseStock.product_id == product.id))
+        prepared.append((product, source_stock, destination_stock, quantity))
+    for product, source_stock, destination_stock, quantity in prepared:
+        source_stock.quantity -= quantity
+        if destination_stock is None:
+            destination_stock = WarehouseStock(tenant_id=user.tenant_id, warehouse_id=destination.id, product_id=product.id, quantity=0)
+            db.add(destination_stock)
+        destination_stock.quantity += quantity
+        db.add(StockTransferLine(transfer_id=transfer.id, product_id=product.id, quantity=quantity, unit_cost=product.purchase_price))
+        db.add(Movement(tenant_id=user.tenant_id, warehouse_id=source.id, product_id=product.id, kind="TRANSFERT_SORTIE", quantity=-quantity, unit_cost=product.purchase_price, reference=x.reference))
+        db.add(Movement(tenant_id=user.tenant_id, warehouse_id=destination.id, product_id=product.id, kind="TRANSFERT_ENTREE", quantity=quantity, unit_cost=product.purchase_price, reference=x.reference))
+    db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="TRANSFERT_STOCK", detail=f"Transfert {x.reference} : {source.name} vers {destination.name}"))
+    await db.commit()
+    return {"id": transfer.id, "reference": transfer.reference, "status": transfer.status}
+
+@router.get("/stock/valuation")
+async def stock_valuation(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "stock.read", db)
+    rows = (await db.execute(
+        select(Product.id, Product.sku, Product.name, Product.purchase_price, func.coalesce(func.sum(WarehouseStock.quantity), 0))
+        .outerjoin(WarehouseStock, (WarehouseStock.product_id == Product.id) & (WarehouseStock.tenant_id == user.tenant_id))
+        .where(Product.tenant_id == user.tenant_id, Product.active.is_(True))
+        .group_by(Product.id, Product.sku, Product.name, Product.purchase_price)
+        .order_by(Product.name)
+    )).all()
+    items = [{"product_id": r[0], "sku": r[1], "name": r[2], "unit_cost": float(r[3] or 0), "quantity": float(r[4] or 0), "value": float(r[3] or 0) * float(r[4] or 0)} for r in rows]
+    return {"total_value": sum(x["value"] for x in items), "items": items}
 
 class RefundIn(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
