@@ -152,7 +152,7 @@ async def add_product(x:ProductIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")
   await db.rollback();raise HTTPException(409,"Cette référence existe déjà")
  await db.refresh(p);return {"id":p.id,"name":p.name}
 def unit_conversion(old_unit:str,new_unit:str):
- scales={"mg":("mass",0.000001),"g":("mass",0.001),"kg":("mass",1),"ml":("volume",0.001),"L":("volume",1),"cm":("length",0.01),"m":("length",1)}
+ scales={"mg":("mass",0.000001),"g":("mass",0.001),"kg":("mass",1),"ml":("volume",0.001),"L":("volume",1),"cm":("length",0.01),"m":("length",1),"Pièce":("count",1),"Unité":("count",1)}
  if old_unit==new_unit:return 1.0
  old=scales.get(old_unit);new=scales.get(new_unit)
  if not old or not new or old[0]!=new[0]: raise HTTPException(409,"Changement d'unité impossible : choisissez une unité de la même famille. Les unités de stock ne sont pas interchangeables.")
@@ -206,6 +206,8 @@ async def import_products(x:ProductImport,u:User=Depends(roles("ADMIN","GERANT",
    if product is None:
     product=Product(tenant_id=u.tenant_id,**values);db.add(product);await db.flush();created+=1
    else:
+    if product.unit!=values["unit"]:
+     raise HTTPException(409,f"Unité différente pour {sku}. Modifiez d'abord l'unité dans le catalogue pour appliquer la conversion correctement.")
     for key,value in values.items(): setattr(product,key,value)
     updated+=1
    stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==warehouse.id,WarehouseStock.product_id==product.id).with_for_update())
