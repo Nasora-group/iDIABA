@@ -29,7 +29,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
 
   const workspaces = await Promise.all(memberships.map(async membership => {
     const profile = membership.custom_role_profile_id ? profileMap.get(membership.custom_role_profile_id) : null;
-    const granted = profile?.permissions?.length ? profile.permissions : (profile?.allowed_roles ?? [membership.role]).flatMap(role => legacyPermissions[role] ?? []);
+    const granted = profile?.permissions?.length ? profile.permissions : (profile?.allowed_roles ?? [membership.role]).flatMap((role: string) => legacyPermissions[role] ?? []);
     const canManage = ["owner","admin"].includes(membership.role) || granted.includes("sales_manage");
     const canRead = canManage || granted.includes("sales_read");
     if (!canRead) return { membership, canManage, customers: [] as Customer[], products: [] as Product[], documents: [] as Document[], error: null };
