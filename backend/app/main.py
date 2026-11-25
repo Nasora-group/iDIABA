@@ -173,8 +173,9 @@ class SaleIn(BaseModel):
  warehouse_id:int;customer_id:Optional[int]=None;channel:str="COMMERCE";table_name:str="";lines:list[LineIn];payments:list[PayIn];client_sale_id:Optional[str]=Field(default=None,min_length=8,max_length=64)
 @app.post("/api/sales")
 async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+ tenant_id=u.tenant_id
  if x.client_sale_id:
-  existing=await db.scalar(select(Sale).where(Sale.tenant_id==u.tenant_id,Sale.client_sale_id==x.client_sale_id))
+  existing=await db.scalar(select(Sale).where(Sale.tenant_id==tenant_id,Sale.client_sale_id==x.client_sale_id))
   if existing:
    return {"id":existing.id,"status":existing.status,"total":existing.total,"change":existing.change_amount}
  if not x.lines or not x.payments: raise HTTPException(400,"La vente doit contenir au moins un article et un paiement")
@@ -244,7 +245,7 @@ async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depen
  except IntegrityError:
   await db.rollback()
   if x.client_sale_id:
-   existing=await db.scalar(select(Sale).where(Sale.tenant_id==u.tenant_id,Sale.client_sale_id==x.client_sale_id))
+   existing=await db.scalar(select(Sale).where(Sale.tenant_id==tenant_id,Sale.client_sale_id==x.client_sale_id))
    if existing:
     return {"id":existing.id,"status":existing.status,"total":existing.total,"change":existing.change_amount}
   raise HTTPException(409,"Conflit lors de l’enregistrement de la vente. Vérifiez la vente avant de recommencer.")
