@@ -3,7 +3,6 @@ from datetime import datetime,date,timedelta,timezone
 from typing import Optional
 from fastapi import FastAPI,Depends,HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel,Field
 from jose import jwt,JWTError
@@ -138,32 +137,16 @@ async def sale_create(x:SaleIn,u:User=Depends(auth),db:AsyncSession=Depends(dbde
  items=[];subtotal=0;tax=0
  for line in x.lines:
   p=await db.scalar(select(Product).where(Product.id==line.product_id,Product.tenant_id==u.tenant_id,Product.active.is_(True)))
-  if not p: raise HTTPException(404,"Article introuvable")
-  recipe=[]
-  if p.kind=="COMPOSE":
-   recipe=(await db.scalars(select(Recipe).where(Recipe.tenant_id==u.tenant_id,Recipe.product_id==p.id))).all()
-   if not recipe: raise HTTPException(409,f"Fiche recette absente : {p.name}")
-   for part in recipe:
-    ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id))
-    if not ingredient or ingredient.stock<part.quantity*line.quantity: raise HTTPException(409,f"Stock ingrédient insuffisant : {ingredient.name if ingredient else 'inconnu'}")
-  elif p.stock<line.quantity: raise HTTPException(409,f"Stock insuffisant : {p.name}")
-  st=p.sale_price*line.quantity;items.append((p,line.quantity,st,recipe));subtotal+=st;tax+=st*p.tax_rate/100
+  if not p or p.stock<line.quantity: raise HTTPException(409,"Article absent ou stock insuffisant")
+  st=p.sale_price*line.quantity;items.append((p,line.quantity,st));subtotal+=st;tax+=st*p.tax_rate/100
  total=round(subtotal+tax,2);paid=sum(p.amount for p in x.payments)
  if paid<total: raise HTTPException(400,"Paiement insuffisant")
  credit=sum(p.amount for p in x.payments if p.method=="CREDIT_CLIENT")
  if credit and not customer: raise HTTPException(400,"Client obligatoire pour un crédit")
  if credit and customer.balance_due+credit>customer.credit_limit: raise HTTPException(409,"Plafond crédit dépassé")
  s=Sale(tenant_id=u.tenant_id,user_id=u.id,customer_id=x.customer_id,cash_id=cash.id,warehouse_id=wh.id,channel=x.channel,table_name=x.table_name,status="PAYE",subtotal=subtotal,tax=tax,total=total);db.add(s);await db.flush()
- for p,q,st,recipe in items:
-  db.add(SaleLine(sale_id=s.id,product_id=p.id,label=p.name,quantity=q,unit_price=p.sale_price,total=st))
-  if recipe:
-   for part in recipe:
-    ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id))
-    ingredient.stock-=part.quantity*q
-    db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wh.id,product_id=ingredient.id,kind="SORTIE_VENTE_RECETTE",quantity=-part.quantity*q,unit_cost=ingredient.purchase_price,reference=f"VTE-{s.id}"))
-  else:
-   p.stock-=q
-   db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wh.id,product_id=p.id,kind="SORTIE_VENTE",quantity=-q,unit_cost=p.purchase_price,reference=f"VTE-{s.id}"))
+ for p,q,st in items:
+  p.stock-=q;db.add(SaleLine(sale_id=s.id,product_id=p.id,label=p.name,quantity=q,unit_price=p.sale_price,total=st));db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wh.id,product_id=p.id,kind="SORTIE_VENTE",quantity=-q,unit_cost=p.purchase_price,reference=f"VTE-{s.id}"))
  for p in x.payments:
   db.add(Payment(sale_id=s.id,method=p.method,amount=p.amount,reference=p.reference))
   if p.method=="ESPECES": cash.expected+=p.amount
@@ -198,9 +181,3 @@ async def dashboard(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depe
 @app.get("/api/sales")
 async def sales(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":s.id,"total":s.total,"status":s.status,"created_at":s.created_at} for s in (await db.scalars(select(Sale).where(Sale.tenant_id==u.tenant_id).order_by(Sale.created_at.desc()).limit(100))).all()]
-
-
-# En production, l'API sert aussi l'application React compilée.
-_frontend=os.path.abspath(os.path.join(os.path.dirname(__file__),"../../frontend/dist"))
-if os.path.isdir(_frontend):
- app.mount("/",StaticFiles(directory=_frontend,html=True),name="frontend")
