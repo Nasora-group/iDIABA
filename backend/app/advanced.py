@@ -1,11 +1,14 @@
 """Modules métier complémentaires iDIABA V2. Toutes les écritures sont tenant-scoped."""
 import json
 import os
+import secrets
+import csv
+import io
 from datetime import datetime
 from html import escape
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from pydantic import BaseModel, Field
 from sqlalchemy import String, Float, Integer, Boolean, DateTime, ForeignKey, select, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -78,6 +81,14 @@ class Refund(Base):
     amount: Mapped[float] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(20), default="VALIDE")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class RefundLine(Base):
+    __tablename__ = "refund_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    refund_id: Mapped[int] = mapped_column(ForeignKey("refunds.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    quantity: Mapped[float] = mapped_column(Float)
+    amount: Mapped[float] = mapped_column(Float)
 
 class RestaurantTable(Base):
     __tablename__ = "restaurant_tables"
@@ -294,24 +305,37 @@ async def sale_refund(sale_id: int, x: RefundIn, user: User = Depends(auth), db:
         raise HTTPException(404, "Vente introuvable, annulée ou déjà remboursée")
     original = (await db.scalars(select(SaleLine).where(SaleLine.sale_id == sale.id))).all()
     refund_amount = 0
+    requested = {}
+    prepared = []
     for item in x.lines:
         line = next((l for l in original if l.product_id == item.product_id), None)
-        if not line or item.counted <= 0 or item.counted > line.quantity:
+        if not line or item.counted <= 0:
             raise HTTPException(409, "Quantité de retour invalide")
-        already = await db.scalar(select(func.coalesce(func.sum(Refund.amount), 0)).where(Refund.sale_id == sale.id, Refund.status == "VALIDE"))
-        if already and already >= sale.total:
-            raise HTTPException(409, "Cette vente a déjà été intégralement remboursée")
+        requested[item.product_id] = requested.get(item.product_id, 0) + item.counted
+        already_qty = await db.scalar(select(func.coalesce(func.sum(RefundLine.quantity), 0)).join(Refund, Refund.id == RefundLine.refund_id).where(Refund.sale_id == sale.id, Refund.status == "VALIDE", RefundLine.product_id == item.product_id))
+        if float(already_qty or 0) + requested[item.product_id] > line.quantity:
+            raise HTTPException(409, "La quantité retournée dépasse la quantité vendue")
         amount = round(line.unit_price * item.counted, 2)
         refund_amount += amount
         product = await db.scalar(select(Product).where(Product.id == item.product_id, Product.tenant_id == user.tenant_id))
+        if not product:
+            raise HTTPException(404, "Article introuvable")
         stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == sale.warehouse_id, WarehouseStock.product_id == product.id))
         if stock:
             stock.quantity += item.counted
+        else:
+            stock = WarehouseStock(tenant_id=user.tenant_id, warehouse_id=sale.warehouse_id, product_id=product.id, quantity=item.counted)
+            db.add(stock)
         product.stock += item.counted
         db.add(Movement(tenant_id=user.tenant_id, warehouse_id=sale.warehouse_id, product_id=product.id, kind="RETOUR_CLIENT", quantity=item.counted, unit_cost=product.purchase_price, reference=f"RET-{sale.id}"))
+        prepared.append((item.product_id, item.counted, amount))
     if refund_amount > sale.total:
         raise HTTPException(409, "Montant de remboursement supérieur à la vente")
-    db.add(Refund(tenant_id=user.tenant_id, sale_id=sale.id, user_id=user.id, reason=x.reason, amount=refund_amount))
+    refund = Refund(tenant_id=user.tenant_id, sale_id=sale.id, user_id=user.id, reason=x.reason, amount=refund_amount)
+    db.add(refund)
+    await db.flush()
+    for product_id, quantity, amount in prepared:
+        db.add(RefundLine(refund_id=refund.id, product_id=product_id, quantity=quantity, amount=amount))
     db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="REMBOURSEMENT", detail=f"Vente {sale.id} : {refund_amount:.0f}"))
     await db.commit()
     return {"status": "VALIDE", "amount": refund_amount}
@@ -388,6 +412,71 @@ async def sale_invoice(sale_id: int, user: User = Depends(auth), db: AsyncSessio
     <table><thead><tr><th>Article</th><th>Qté</th><th>PU</th><th>Total</th></tr></thead><tbody>{rows}</tbody></table>
     <p class="total">Total TTC : {sale.total:,.0f} FCFA</p><button onclick="window.print()">Imprimer</button></html>"""
     return Response(content=html, media_type="text/html; charset=utf-8")
+
+class CompanyIn(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    mode: str = "HYBRIDE"
+    address: str = ""
+    phone: str = ""
+    ninea: str = ""
+    rc: str = ""
+    currency: str = "FCFA"
+    tax_rate: float = Field(default=18, ge=0, le=100)
+    admin_name: str = Field(min_length=2, max_length=120)
+    admin_email: str = Field(min_length=5, max_length=160)
+    admin_password: str = Field(min_length=8, max_length=128)
+
+@router.post("/platform/bootstrap")
+async def platform_bootstrap(x: CompanyIn, bootstrap_key: str = Header(default="", alias="X-Platform-Bootstrap-Key"), db: AsyncSession = Depends(dbdep)):
+    configured = os.getenv("PLATFORM_BOOTSTRAP_KEY", "")
+    if not configured or not secrets.compare_digest(bootstrap_key, configured):
+        raise HTTPException(403, "Provisionnement plateforme non autorisé")
+    existing = await db.scalar(select(User).where(User.role == "SUPER_ADMIN"))
+    if existing:
+        raise HTTPException(409, "Le Super Admin plateforme existe déjà")
+    tenant = await db.scalar(select(Tenant).order_by(Tenant.id))
+    if not tenant:
+        raise HTTPException(409, "Créez d'abord une entreprise de référence")
+    email = x.admin_email.strip().lower()
+    if await db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(409, "Adresse e-mail déjà utilisée")
+    admin = User(tenant_id=tenant.id, email=email, name=x.admin_name, password_hash=hasher.hash(x.admin_password), role="SUPER_ADMIN", active=True)
+    db.add(admin)
+    await db.commit()
+    return {"status": "created", "email": email}
+
+@router.get("/platform/companies")
+async def platform_companies(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    if user.role != "SUPER_ADMIN":
+        raise HTTPException(403, "Réservé au Super Admin plateforme")
+    rows = (await db.scalars(select(Tenant).order_by(Tenant.id))).all()
+    return [{"id": t.id, "name": t.name, "mode": t.mode, "phone": t.phone, "currency": t.currency} for t in rows]
+
+@router.post("/platform/companies")
+async def platform_company_create(x: CompanyIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    if user.role != "SUPER_ADMIN":
+        raise HTTPException(403, "Réservé au Super Admin plateforme")
+    email = x.admin_email.strip().lower()
+    if await db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(409, "Adresse e-mail déjà utilisée")
+    tenant = Tenant(name=x.name, mode=x.mode, address=x.address, phone=x.phone, ninea=x.ninea, rc=x.rc, currency=x.currency, tax_rate=x.tax_rate)
+    db.add(tenant)
+    await db.flush()
+    admin = User(tenant_id=tenant.id, email=email, name=x.admin_name, password_hash=hasher.hash(x.admin_password), role="ADMIN", active=True)
+    db.add(admin)
+    db.add(Subscription(tenant_id=tenant.id, plan="ESSENTIEL", status="ESSAI", monthly_price=0))
+    await db.commit()
+    return {"id": tenant.id, "name": tenant.name, "admin_email": email}
+
+@router.get("/sales/export.csv")
+async def sales_export(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    rows = (await db.scalars(select(Sale).where(Sale.tenant_id == user.tenant_id).order_by(Sale.created_at.desc()))).all()
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow(["Vente", "Date", "Statut", "Canal", "Sous-total", "Taxes", "Total FCFA"])
+    for sale in rows:
+        writer.writerow([sale.id, sale.created_at.isoformat(), sale.status, sale.channel, sale.subtotal, sale.tax, sale.total])
+    return Response(content="\\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": "attachment; filename=idiaba-ventes.csv"})
 
 @router.get("/platform/overview")
 async def platform_overview(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
