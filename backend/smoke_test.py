@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy import select,func,cast,Date
 from sqlalchemy.dialects import postgresql
 from app.main import Base, Sale
-from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe,LineIn,PayIn,aggregate_sale_lines,payment_settlement,startup
+from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe,LineIn,PayIn,aggregate_sale_lines,payment_settlement,startup,unit_conversion
 from app.advanced import Subscription
 
 dashboard_sql=select(func.count(Sale.id)).where(Sale.tenant_id==1,cast(Sale.created_at,Date)==date(2026,11,25))
@@ -62,4 +62,4 @@ print("ADVANCED ROUTES OK: profils, achats, réceptions, inventaires, transferts
 product_paths={route.path for route in app.routes}
 assert {"/api/products","/api/products/{product_id}","/api/products/import"} <= product_paths
 assert {"products","warehouse_stocks","stock_movements"} <= set(Base.metadata.tables)
-print("PRODUCT CATALOG OK: create, edit, Excel import, stock ledger and unit conversion routes")
+assert abs(unit_conversion("g","kg")-0.001)<1e-12\nassert abs(unit_conversion("L","ml")-1000)<1e-12\nassert unit_conversion("Pièce","Unité")==1\nprint("PRODUCT CATALOG OK: create, edit, Excel import, stock ledger and unit conversion routes")
