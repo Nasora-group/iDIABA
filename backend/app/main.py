@@ -163,7 +163,7 @@ async def update_product(product_id:int,x:ProductIn,u:User=Depends(roles("ADMIN"
  if not p: raise HTTPException(404,"Produit introuvable")
  factor=unit_conversion(p.unit,x.unit)
  if abs(factor-1.0)>1e-12:
-  from app.advanced import PurchaseLine,InventoryLine,StockTransferLine,RefundLine
+  from app.advanced import PurchaseLine,InventoryLine,StockTransferLine,RefundLine,KitchenOrderLine
   stocks=(await db.scalars(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.product_id==p.id).with_for_update())).all()
   for row in stocks: row.quantity*=factor
   recipes=(await db.scalars(select(Recipe).where(Recipe.tenant_id==u.tenant_id,Recipe.ingredient_id==p.id))).all()
