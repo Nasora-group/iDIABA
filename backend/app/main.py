@@ -225,7 +225,18 @@ async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depen
  if change>cash_tendered: raise HTTPException(400,"La monnaie doit être rendue sur le paiement en espèces")
  if credit and not customer: raise HTTPException(400,"Client obligatoire pour un crédit")
  if credit and customer.balance_due+credit>customer.credit_limit: raise HTTPException(409,"Plafond crédit dépassé")
- s=Sale(tenant_id=u.tenant_id,user_id=u.id,customer_id=x.customer_id,cash_id=cash.id,warehouse_id=wh.id,channel=x.channel,table_name=x.table_name,status="PAYE",subtotal=subtotal,tax=tax,total=total,client_sale_id=x.client_sale_id,change_amount=change);db.add(s);await db.flush()
+ async def duplicate_result():
+  await db.rollback()
+  if x.client_sale_id:
+   existing=await db.scalar(select(Sale).where(Sale.tenant_id==tenant_id,Sale.client_sale_id==x.client_sale_id))
+   if existing:
+    return {"id":existing.id,"status":existing.status,"total":existing.total,"change":existing.change_amount}
+  raise HTTPException(409,"Conflit lors de l’enregistrement de la vente. Vérifiez la vente avant de recommencer.")
+ s=Sale(tenant_id=u.tenant_id,user_id=u.id,customer_id=x.customer_id,cash_id=cash.id,warehouse_id=wh.id,channel=x.channel,table_name=x.table_name,status="PAYE",subtotal=subtotal,tax=tax,total=total,client_sale_id=x.client_sale_id,change_amount=change);db.add(s)
+ try:
+  await db.flush()
+ except IntegrityError:
+  return await duplicate_result()
  for p,q,st,recipe in items:
   db.add(SaleLine(sale_id=s.id,product_id=p.id,label=p.name,quantity=q,unit_price=p.sale_price,total=st))
   if recipe:
@@ -254,12 +265,7 @@ async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depen
  try:
   await db.commit()
  except IntegrityError:
-  await db.rollback()
-  if x.client_sale_id:
-   existing=await db.scalar(select(Sale).where(Sale.tenant_id==tenant_id,Sale.client_sale_id==x.client_sale_id))
-   if existing:
-    return {"id":existing.id,"status":existing.status,"total":existing.total,"change":existing.change_amount}
-  raise HTTPException(409,"Conflit lors de l’enregistrement de la vente. Vérifiez la vente avant de recommencer.")
+  return await duplicate_result()
  return {"id":s.id,"status":s.status,"total":total,"change":change}
 class StockIn(BaseModel): warehouse_id:int;product_id:int;quantity:float;unit_cost:float=0;kind:str="ENTREE_ACHAT"
 @app.get("/api/stock/movements")
