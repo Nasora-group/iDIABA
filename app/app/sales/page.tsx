@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createInvoiceFromSale } from "@/app/app/documents/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,14 +34,16 @@ export default async function SalesPage() {
       : (customProfile?.allowed_roles ?? [membership.role]).flatMap((role: string) => legacySalesPermissions[role] ?? []);
     const canView = ["owner", "admin"].includes(membership.role)
       || permissions.some((permission: string) => ["sales_read", "sales_manage"].includes(permission));
-    if (!canView) return { membership, sales: [] as Sale[], denied: true };
-    const { data } = await supabase.from("sales")
-      .select("id,total,created_at,cashier_id,customer_id")
-      .eq("tenant_id", membership.tenant_id)
-      .eq("status", "completed")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    return { membership, sales: (data ?? []) as Sale[], denied: false };
+    if (!canView) return { membership, sales: [] as Sale[], invoicedSaleIds: new Set<string>(), canManage: false, denied: true };
+    const [salesResult, invoiceResult] = await Promise.all([
+      supabase.from("sales").select("id,total,created_at,cashier_id,customer_id")
+        .eq("tenant_id", membership.tenant_id).eq("status", "completed")
+        .order("created_at", { ascending: false }).limit(100),
+      supabase.from("commercial_documents").select("source_sale_id")
+        .eq("tenant_id", membership.tenant_id).eq("document_type", "invoice"),
+    ]);
+    const invoicedSaleIds = new Set((invoiceResult.data ?? []).map(row => row.source_sale_id).filter((id): id is string => Boolean(id)));
+    return { membership, sales: (salesResult.data ?? []) as Sale[], invoicedSaleIds, canManage: ["owner","admin"].includes(membership.role) || permissions.includes("sales_manage"), denied: false };
   }));
 
   const cashierIds = [...new Set(groups.flatMap((g) => g.sales.map((s) => s.cashier_id).filter((id): id is string => Boolean(id))))];
@@ -53,13 +56,13 @@ export default async function SalesPage() {
     <main className="shell">
       <header className="topbar">
         <Link href="/app" className="brand"><span className="mark">i</span><span>iDIABA</span></Link>
-        <nav className="product-nav"><Link href="/app">Accueil</Link><Link href="/app/pos">Caisse</Link><span>Ventes</span></nav>
+        <nav className="product-nav"><Link href="/app">Accueil</Link><Link href="/app/pos">Caisse</Link><Link href="/app/documents">Devis & documents</Link><span>Ventes</span></nav>
       </header>
       <section className="workspace catalog-workspace">
         <p className="eyebrow">ACTIVITÉ COMMERCIALE</p>
         <h1>Ventes</h1>
-        <p className="lead">Consultez les ventes validées et retrouvez les tickets sans passer par l’écran d’encaissement.</p>
-        {groups.map(({ membership, sales, denied }) => (
+        <p className="lead">Consultez les ventes validées, retrouvez les tickets et générez les factures clients sans refaire les opérations de caisse.</p>
+        {groups.map(({ membership, sales, invoicedSaleIds, canManage, denied }) => (
           <section className="catalog-tenant" key={membership.tenant_id}>
             <div className="catalog-heading"><div><h2>{membership.tenant?.name ?? "Entreprise"}</h2><p>{sales.length} vente(s) récente(s)</p></div><Link className="secondary" href="/app/pos">Nouvelle vente</Link></div>
             {denied ? <p className="catalog-empty">Votre profil ne dispose pas de l’accès aux ventes.</p> : sales.length ? (
@@ -69,7 +72,7 @@ export default async function SalesPage() {
                   <td><strong>{sale.id.slice(0, 8).toUpperCase()}</strong></td>
                   <td>{sale.cashier_id ? names.get(sale.cashier_id) ?? "Utilisateur" : "Non renseigné"}</td>
                   <td><strong>{money(sale.total)} FCFA</strong></td>
-                  <td><Link href={`/app/pos/receipt/${sale.id}`}>Voir le ticket</Link></td>
+                  <td><div className="commercial-document-actions"><Link href={`/app/pos/receipt/${sale.id}`}>Voir le ticket</Link>{canManage && (invoicedSaleIds.has(sale.id) ? <small>Facture créée</small> : <form action={createInvoiceFromSale}><input type="hidden" name="tenant_id" value={membership.tenant_id}/><input type="hidden" name="sale_id" value={sale.id}/><button className="secondary" type="submit">Générer facture</button></form>)}</div></td>
                 </tr>)}
               </tbody></table></div>
             ) : <p className="catalog-empty">Aucune vente finalisée pour le moment.</p>}
