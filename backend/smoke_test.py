@@ -4,6 +4,7 @@ from sqlalchemy import select,func,cast,Date
 from sqlalchemy.dialects import postgresql
 from app.main import Base, Sale
 from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe,LineIn,PayIn,aggregate_sale_lines,payment_settlement,startup
+from app.advanced import Subscription
 
 dashboard_sql=select(func.count(Sale.id)).where(Sale.tenant_id==1,cast(Sale.created_at,Date)==date(2026,11,25))
 compiled=str(dashboard_sql.compile(dialect=postgresql.dialect()))
@@ -15,7 +16,9 @@ async def main():
  assert payment_settlement(1000,[PayIn(method="ESPECES",amount=1200)]) == (0,200)
  assert payment_settlement(1000,[PayIn(method="ESPECES",amount=800),PayIn(method="CREDIT_CLIENT",amount=200)]) == (200,0)
  async with Session() as db:
-  assert await db.scalar(select(func.count(Tenant.id))) == 1
+  tenant_count = await db.scalar(select(func.count(Tenant.id)))
+  assert tenant_count == 1
+  assert await db.scalar(select(func.count(Subscription.id))) == tenant_count
   assert await db.scalar(select(func.count(User.id)).where(User.tenant_id == 1)) == 2
   platform_admin = await db.scalar(select(User).where(User.role == "SUPER_ADMIN"))
   assert platform_admin is None or platform_admin.tenant_id is None

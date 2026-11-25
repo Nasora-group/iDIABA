@@ -560,8 +560,8 @@ async def platform_bootstrap(x: CompanyIn, bootstrap_key: str = Header(default="
 async def platform_companies(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
     if user.role != "SUPER_ADMIN":
         raise HTTPException(403, "Réservé au Super Admin plateforme")
-    rows = (await db.scalars(select(Tenant).order_by(Tenant.id))).all()
-    return [{"id": t.id, "name": t.name, "mode": t.mode, "phone": t.phone, "currency": t.currency} for t in rows]
+    rows = (await db.execute(select(Tenant, Subscription).outerjoin(Subscription, Subscription.tenant_id == Tenant.id).order_by(Tenant.id))).all()
+    return [{"id": t.id, "name": t.name, "mode": t.mode, "phone": t.phone, "currency": t.currency, "subscription": ({"plan": sub.plan, "status": sub.status, "monthly_price": sub.monthly_price, "starts_at": sub.starts_at, "ends_at": sub.ends_at} if sub else None)} for t, sub in rows]
 
 @router.post("/platform/companies")
 async def platform_company_create(x: CompanyIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):

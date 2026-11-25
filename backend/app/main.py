@@ -106,6 +106,7 @@ async def startup():
    await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS client_sale_id VARCHAR(64)"))
    await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS change_amount DOUBLE PRECISION NOT NULL DEFAULT 0"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
+   await connection.execute(text("INSERT INTO subscriptions (tenant_id, plan, status, monthly_price, starts_at) SELECT id, 'ESSENTIEL', 'ESSAI', 0, CURRENT_TIMESTAMP FROM tenants ON CONFLICT (tenant_id) DO NOTHING"))
   print("[startup] Isolation du compte Super Admin appliquée", flush=True)
  elif engine.dialect.name == "sqlite":
   async with engine.begin() as connection:
@@ -115,6 +116,7 @@ async def startup():
    if "change_amount" not in columns:
     await connection.execute(text("ALTER TABLE sales ADD COLUMN change_amount FLOAT NOT NULL DEFAULT 0"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
+   await connection.execute(text("INSERT OR IGNORE INTO subscriptions (tenant_id, plan, status, monthly_price, starts_at) SELECT id, 'ESSENTIEL', 'ESSAI', 0, CURRENT_TIMESTAMP FROM tenants"))
  print("[startup] Initialisation des données de démonstration", flush=True)
  # Import différé : seed.py réutilise les modèles et la session de ce module.
  from seed import seed
