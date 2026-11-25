@@ -196,9 +196,12 @@ async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depen
  if x.customer_id:
   customer=await db.scalar(select(Customer).where(Customer.id==x.customer_id,Customer.tenant_id==u.tenant_id).with_for_update())
   if not customer: raise HTTPException(404,"Client introuvable")
+ combined_lines={}
+ for line in x.lines:
+  combined_lines[line.product_id]=combined_lines.get(line.product_id,0)+line.quantity
  items=[];subtotal=0;tax=0
- for line in sorted(x.lines,key=lambda item:item.product_id):
-  p=await db.scalar(select(Product).where(Product.id==line.product_id,Product.tenant_id==u.tenant_id,Product.active.is_(True)).with_for_update())
+ for product_id,quantity in sorted(combined_lines.items()):
+  p=await db.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==u.tenant_id,Product.active.is_(True)).with_for_update())
   if not p: raise HTTPException(404,"Article introuvable")
   warehouse_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==p.id).with_for_update())
   recipe=[]
@@ -208,9 +211,9 @@ async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depen
    for part in recipe:
     ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id).with_for_update())
     ingredient_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==part.ingredient_id).with_for_update())
-    if not ingredient or not ingredient_stock or ingredient_stock.quantity<part.quantity*line.quantity: raise HTTPException(409,f"Stock ingrédient insuffisant : {ingredient.name if ingredient else 'inconnu'}")
-  elif not warehouse_stock or warehouse_stock.quantity<line.quantity: raise HTTPException(409,f"Stock insuffisant : {p.name}")
-  st=p.sale_price*line.quantity;items.append((p,line.quantity,st,recipe));subtotal+=st;tax+=st*p.tax_rate/100
+    if not ingredient or not ingredient_stock or ingredient_stock.quantity<part.quantity*quantity: raise HTTPException(409,f"Stock ingrédient insuffisant : {ingredient.name if ingredient else 'inconnu'}")
+  elif not warehouse_stock or warehouse_stock.quantity<quantity: raise HTTPException(409,f"Stock insuffisant : {p.name}")
+  st=p.sale_price*quantity;items.append((p,quantity,st,recipe));subtotal+=st;tax+=st*p.tax_rate/100
  total=round(subtotal+tax,2)
  credit=round(sum(p.amount for p in x.payments if p.method=="CREDIT_CLIENT"),2)
  if credit>total: raise HTTPException(400,"Le crédit client dépasse le total de la vente")
