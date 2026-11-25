@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy import select,func,cast,Date
 from sqlalchemy.dialects import postgresql
 from app.main import Base, Sale
-from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe,LineIn,PayIn,aggregate_sale_lines,payment_settlement,startup
+from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe,LineIn,PayIn,aggregate_sale_lines,payment_settlement,startup,unit_conversion
 from app.advanced import Subscription
 
 dashboard_sql=select(func.count(Sale.id)).where(Sale.tenant_id==1,cast(Sale.created_at,Date)==date(2026,11,25))
@@ -57,3 +57,12 @@ assert {
     "kitchen_order_lines", "subscriptions", "stock_transfers", "stock_transfer_lines",
 } <= set(Base.metadata.tables)
 print("ADVANCED ROUTES OK: profils, achats, réceptions, inventaires, transferts, valorisation, retours, restaurant, factures, SaaS")
+
+# Catalogue : création, modification et import Excel tenant-scoped.
+product_paths={route.path for route in app.routes}
+assert {"/api/products","/api/products/{product_id}","/api/products/import"} <= product_paths
+assert {"products","warehouse_stocks","stock_movements"} <= set(Base.metadata.tables)
+assert abs(unit_conversion("g","kg")-0.001)<1e-12
+assert abs(unit_conversion("L","ml")-1000)<1e-12
+assert unit_conversion("Pièce","Unité")==1
+print("PRODUCT CATALOG OK: create, edit, Excel import, stock ledger and unit conversion routes")

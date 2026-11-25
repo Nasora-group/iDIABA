@@ -142,10 +142,92 @@ async def warehouses(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep))
 async def products(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":p.id,"sku":p.sku,"barcode":p.barcode,"name":p.name,"category":p.category,"unit":p.unit,"purchase_price":p.purchase_price,"sale_price":p.sale_price,"tax_rate":p.tax_rate,"stock":p.stock,"min_stock":p.min_stock,"kind":p.kind} for p in (await db.scalars(select(Product).where(Product.tenant_id==u.tenant_id,Product.active.is_(True)).order_by(Product.name))).all()]
 class ProductIn(BaseModel):
- sku:str;name:str;barcode:str="";category:str="Général";unit:str="Pièce";purchase_price:float=0;sale_price:float=Field(ge=0);tax_rate:float=18;min_stock:float=0;kind:str="SIMPLE"
+ sku:str=Field(min_length=1,max_length=50);name:str=Field(min_length=1,max_length=150);barcode:str="";category:str="Général";unit:str=Field(default="Pièce",min_length=1,max_length=20);purchase_price:float=Field(default=0,ge=0);sale_price:float=Field(ge=0);tax_rate:float=Field(default=18,ge=0,le=100);min_stock:float=Field(default=0,ge=0);kind:str="SIMPLE"
 @app.post("/api/products")
-async def add_product(x:ProductIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
- p=Product(tenant_id=u.tenant_id,**x.model_dump());db.add(p);await db.commit();return {"id":p.id,"name":p.name}
+async def add_product(x:ProductIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
+ p=Product(tenant_id=u.tenant_id,**x.model_dump());db.add(p)
+ try:
+  await db.commit()
+ except IntegrityError:
+  await db.rollback();raise HTTPException(409,"Cette référence existe déjà")
+ await db.refresh(p);return {"id":p.id,"name":p.name}
+def unit_conversion(old_unit:str,new_unit:str):
+ scales={"mg":("mass",0.000001),"g":("mass",0.001),"kg":("mass",1),"ml":("volume",0.001),"L":("volume",1),"cm":("length",0.01),"m":("length",1),"Pièce":("count",1),"Unité":("count",1)}
+ if old_unit==new_unit:return 1.0
+ old=scales.get(old_unit);new=scales.get(new_unit)
+ if not old or not new or old[0]!=new[0]: raise HTTPException(409,"Changement d'unité impossible : choisissez une unité de la même famille. Les unités de stock ne sont pas interchangeables.")
+ return old[1]/new[1]
+@app.put("/api/products/{product_id}")
+async def update_product(product_id:int,x:ProductIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
+ p=await db.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==u.tenant_id).with_for_update())
+ if not p: raise HTTPException(404,"Produit introuvable")
+ factor=unit_conversion(p.unit,x.unit)
+ if abs(factor-1.0)>1e-12:
+  from app.advanced import PurchaseLine,InventoryLine,StockTransferLine,RefundLine,KitchenOrderLine
+  stocks=(await db.scalars(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.product_id==p.id).with_for_update())).all()
+  for row in stocks: row.quantity*=factor
+  recipes=(await db.scalars(select(Recipe).where(Recipe.tenant_id==u.tenant_id,Recipe.ingredient_id==p.id))).all()
+  for row in recipes: row.quantity*=factor
+  purchases=(await db.scalars(select(PurchaseLine).where(PurchaseLine.product_id==p.id))).all()
+  for row in purchases: row.quantity*=factor;row.received*=factor;row.unit_cost/=factor
+  sales=(await db.scalars(select(SaleLine).where(SaleLine.product_id==p.id))).all()
+  for row in sales: row.quantity*=factor;row.unit_price/=factor
+  movements=(await db.scalars(select(Movement).where(Movement.tenant_id==u.tenant_id,Movement.product_id==p.id))).all()
+  for row in movements: row.quantity*=factor;row.unit_cost/=factor
+  inventory_lines=(await db.scalars(select(InventoryLine).where(InventoryLine.product_id==p.id))).all()
+  for row in inventory_lines: row.theoretical*=factor;row.counted*=factor;row.difference*=factor
+  transfer_lines=(await db.scalars(select(StockTransferLine).where(StockTransferLine.product_id==p.id))).all()
+  for row in transfer_lines: row.quantity*=factor;row.unit_cost/=factor
+  refund_lines=(await db.scalars(select(RefundLine).where(RefundLine.product_id==p.id))).all()
+  for row in refund_lines: row.quantity*=factor
+  p.stock*=factor;p.min_stock*=factor;p.purchase_price/=factor;p.sale_price/=factor
+ for key,value in x.model_dump().items(): setattr(p,key,value)
+ try:
+  await db.commit()
+ except IntegrityError:
+  await db.rollback();raise HTTPException(409,"Référence ou code-barres déjà utilisé")
+ return {"id":p.id,"name":p.name,"updated":True,"unit_converted":abs(factor-1.0)>1e-12,"conversion_factor":factor}
+class ProductImportLine(BaseModel):
+ sku:str=Field(min_length=1,max_length=50);name:str=Field(min_length=1,max_length=150);barcode:str="";category:str="Général";unit:str=Field(default="Pièce",min_length=1,max_length=20);purchase_price:float=Field(default=0,ge=0);sale_price:float=Field(default=0,ge=0);tax_rate:float=Field(default=18,ge=0,le=100);min_stock:float=Field(default=0,ge=0);quantity:float=Field(default=0,ge=0);kind:str="SIMPLE"
+class ProductImport(BaseModel):
+ warehouse_id:int;mode:str="REPLACE";items:list[ProductImportLine]=Field(min_length=1,max_length=2000)
+@app.post("/api/products/import")
+async def import_products(x:ProductImport,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
+ if x.mode not in {"REPLACE","ADD"}: raise HTTPException(400,"Mode d'importation invalide")
+ warehouse=await db.scalar(select(Warehouse).where(Warehouse.id==x.warehouse_id,Warehouse.tenant_id==u.tenant_id))
+ if not warehouse: raise HTTPException(404,"Dépôt introuvable")
+ normalized=[item.sku.strip().casefold() for item in x.items]
+ if len(normalized)!=len(set(normalized)): raise HTTPException(400,"Le fichier contient des références en double")
+ created=updated=stock_changes=0
+ try:
+  for item in x.items:
+   values=item.model_dump();quantity=values.pop("quantity");sku=values["sku"].strip()
+   product=await db.scalar(select(Product).where(Product.tenant_id==u.tenant_id,Product.sku==sku).with_for_update())
+   if product is None:
+    product=Product(tenant_id=u.tenant_id,**values);db.add(product);await db.flush();created+=1
+   else:
+    if product.unit!=values["unit"]:
+     raise HTTPException(409,f"Unité différente pour {sku}. Modifiez d'abord l'unité dans le catalogue pour appliquer la conversion correctement.")
+    for key,value in values.items(): setattr(product,key,value)
+    updated+=1
+   stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==warehouse.id,WarehouseStock.product_id==product.id).with_for_update())
+   current=stock.quantity if stock else 0.0
+   target=quantity if x.mode=="REPLACE" else current+quantity
+   delta=target-current
+   if stock is None:
+    stock=WarehouseStock(tenant_id=u.tenant_id,warehouse_id=warehouse.id,product_id=product.id,quantity=target);db.add(stock)
+   else: stock.quantity=target
+   product.stock=(product.stock or 0)+delta
+   if abs(delta)>1e-9:
+    db.add(Movement(tenant_id=u.tenant_id,warehouse_id=warehouse.id,product_id=product.id,kind="IMPORT_CATALOGUE",quantity=delta,unit_cost=product.purchase_price,reference="IMPORT-EXCEL"))
+    stock_changes+=1
+  db.add(Audit(tenant_id=u.tenant_id,user_id=u.id,action="IMPORT_CATALOGUE",detail=f"Import {len(x.items)} produits · {created} créés · {updated} modifiés"))
+  await db.commit()
+ except IntegrityError:
+  await db.rollback();raise HTTPException(409,"Import annulé : référence ou code-barres déjà utilisé. Aucune ligne n'a été enregistrée.")
+ except Exception:
+  await db.rollback();raise
+ return {"imported":len(x.items),"created":created,"updated":updated,"stock_changes":stock_changes,"mode":x.mode}
 @app.get("/api/customers")
 async def customers(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"phone":x.phone,"credit_limit":x.credit_limit,"balance_due":x.balance_due} for x in (await db.scalars(select(Customer).where(Customer.tenant_id==u.tenant_id))).all()]
