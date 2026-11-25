@@ -86,7 +86,7 @@ export default function App(){
     if(!e.status||e.status>=500){await offline.queue.put(queued);setCart([]);setMsg("Connexion interrompue. Vente conservée localement pour synchronisation.");}
     else{setMsg(e.message);}
    }
-  }finally{setBusy(false);}
+  }catch(e:any){setMsg(e.message);}finally{setBusy(false);}
  }
  async function saveUser(e:any){e.preventDefault();setBusy(true);try{await api("/api/users",{name:form.name,email:form.email,password:form.password,role:form.role||"CAISSIER"});setForm({});setMsg("Utilisateur créé");await refresh();}catch(e:any){setMsg(e.message)}finally{setBusy(false)}}
  async function toggleUser(u:User){try{await api("/api/users/"+u.id+"/update",{active:!u.active});setMsg("Compte mis à jour");await refresh();}catch(e:any){setMsg(e.message)}}
