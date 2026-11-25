@@ -8,14 +8,17 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel,Field
 from jose import jwt,JWTError
 from pwdlib import PasswordHash
-from sqlalchemy import String,Float,Integer,Boolean,DateTime,ForeignKey,select,func
+from sqlalchemy import String,Float,Integer,Boolean,DateTime,ForeignKey,UniqueConstraint,select,func
 from sqlalchemy.orm import DeclarativeBase,Mapped,mapped_column
 from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker,AsyncSession
 
 URL=os.getenv("DATABASE_URL","sqlite+aiosqlite:///./idiaba.db")
+if URL.startswith("postgres://"): URL=URL.replace("postgres://","postgresql+asyncpg://",1)
+elif URL.startswith("postgresql://"): URL=URL.replace("postgresql://","postgresql+asyncpg://",1)
 engine=create_async_engine(URL,connect_args={"check_same_thread":False} if URL.startswith("sqlite") else {})
 Session=async_sessionmaker(engine,expire_on_commit=False)
 SECRET=os.getenv("JWT_SECRET","dev-secret-change-before-production")
+if os.getenv("RENDER") and SECRET=="dev-secret-change-before-production": raise RuntimeError("JWT_SECRET must be configured in production")
 hasher=PasswordHash.recommended()
 oauth=OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 class Base(DeclarativeBase): pass
@@ -28,6 +31,10 @@ class User(Base):
 class Warehouse(Base):
  __tablename__="warehouses"
  id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[int]=mapped_column(ForeignKey("tenants.id"),index=True);name:Mapped[str]=mapped_column(String(100));code:Mapped[str]=mapped_column(String(20))
+class WarehouseStock(Base):
+ __tablename__="warehouse_stocks"
+ id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[int]=mapped_column(ForeignKey("tenants.id"),index=True);warehouse_id:Mapped[int]=mapped_column(ForeignKey("warehouses.id"));product_id:Mapped[int]=mapped_column(ForeignKey("products.id"));quantity:Mapped[float]=mapped_column(Float,default=0)
+ __table_args__=(UniqueConstraint("tenant_id","warehouse_id","product_id"),)
 class Product(Base):
  __tablename__="products"
  id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[int]=mapped_column(ForeignKey("tenants.id"),index=True);sku:Mapped[str]=mapped_column(String(50));barcode:Mapped[str]=mapped_column(String(80),default="");name:Mapped[str]=mapped_column(String(150));category:Mapped[str]=mapped_column(String(80),default="Général");unit:Mapped[str]=mapped_column(String(20),default="Pièce");purchase_price:Mapped[float]=mapped_column(Float,default=0);sale_price:Mapped[float]=mapped_column(Float,default=0);tax_rate:Mapped[float]=mapped_column(Float,default=18);stock:Mapped[float]=mapped_column(Float,default=0);min_stock:Mapped[float]=mapped_column(Float,default=0);kind:Mapped[str]=mapped_column(String(20),default="SIMPLE");active:Mapped[bool]=mapped_column(Boolean,default=True)
@@ -149,14 +156,16 @@ async def sale_create(x:SaleIn,u:User=Depends(auth),db:AsyncSession=Depends(dbde
  for line in x.lines:
   p=await db.scalar(select(Product).where(Product.id==line.product_id,Product.tenant_id==u.tenant_id,Product.active.is_(True)))
   if not p: raise HTTPException(404,"Article introuvable")
+  warehouse_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==p.id))
   recipe=[]
   if p.kind=="COMPOSE":
    recipe=(await db.scalars(select(Recipe).where(Recipe.tenant_id==u.tenant_id,Recipe.product_id==p.id))).all()
    if not recipe: raise HTTPException(409,f"Fiche recette absente : {p.name}")
    for part in recipe:
     ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id))
-    if not ingredient or ingredient.stock<part.quantity*line.quantity: raise HTTPException(409,f"Stock ingrédient insuffisant : {ingredient.name if ingredient else 'inconnu'}")
-  elif p.stock<line.quantity: raise HTTPException(409,f"Stock insuffisant : {p.name}")
+    ingredient_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==part.ingredient_id))
+    if not ingredient or not ingredient_stock or ingredient_stock.quantity<part.quantity*line.quantity: raise HTTPException(409,f"Stock ingrédient insuffisant : {ingredient.name if ingredient else 'inconnu'}")
+  elif not warehouse_stock or warehouse_stock.quantity<line.quantity: raise HTTPException(409,f"Stock insuffisant : {p.name}")
   st=p.sale_price*line.quantity;items.append((p,line.quantity,st,recipe));subtotal+=st;tax+=st*p.tax_rate/100
  total=round(subtotal+tax,2);paid=sum(p.amount for p in x.payments)
  if paid<total: raise HTTPException(400,"Paiement insuffisant")
@@ -170,9 +179,13 @@ async def sale_create(x:SaleIn,u:User=Depends(auth),db:AsyncSession=Depends(dbde
    for part in recipe:
     ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id))
     ingredient.stock-=part.quantity*q
+    ingredient_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==ingredient.id))
+    ingredient_stock.quantity-=part.quantity*q
     db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wh.id,product_id=ingredient.id,kind="SORTIE_VENTE_RECETTE",quantity=-part.quantity*q,unit_cost=ingredient.purchase_price,reference=f"VTE-{s.id}"))
   else:
    p.stock-=q
+   warehouse_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==p.id))
+   warehouse_stock.quantity-=q
    db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wh.id,product_id=p.id,kind="SORTIE_VENTE",quantity=-q,unit_cost=p.purchase_price,reference=f"VTE-{s.id}"))
  for p in x.payments:
   db.add(Payment(sale_id=s.id,method=p.method,amount=p.amount,reference=p.reference))
@@ -189,16 +202,24 @@ async def stock_movements(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSessio
 async def stock_move(x:StockIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
  p=await db.scalar(select(Product).where(Product.id==x.product_id,Product.tenant_id==u.tenant_id));w=await db.scalar(select(Warehouse).where(Warehouse.id==x.warehouse_id,Warehouse.tenant_id==u.tenant_id))
  if not p or not w: raise HTTPException(404,"Article ou dépôt introuvable")
- if x.kind=="PERTE_CASSE" and p.stock<x.quantity: raise HTTPException(409,"Stock insuffisant")
- p.stock+=-x.quantity if x.kind=="PERTE_CASSE" else x.quantity
+ ws=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==w.id,WarehouseStock.product_id==p.id))
+ if not ws: ws=WarehouseStock(tenant_id=u.tenant_id,warehouse_id=w.id,product_id=p.id,quantity=0);db.add(ws)
+ if x.kind=="PERTE_CASSE" and ws.quantity<x.quantity: raise HTTPException(409,"Stock insuffisant dans ce dépôt")
+ delta=-x.quantity if x.kind=="PERTE_CASSE" else x.quantity
+ p.stock+=delta;ws.quantity+=delta
  db.add(Movement(tenant_id=u.tenant_id,**x.model_dump()));await db.commit();return {"stock":p.stock}
 class TransferIn(BaseModel): from_warehouse_id:int;to_warehouse_id:int;product_id:int;quantity:float=Field(gt=0)
 @app.post("/api/stock/transfers")
 async def transfer(x:TransferIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
  p=await db.scalar(select(Product).where(Product.id==x.product_id,Product.tenant_id==u.tenant_id))
  wh=(await db.scalars(select(Warehouse).where(Warehouse.tenant_id==u.tenant_id,Warehouse.id.in_([x.from_warehouse_id,x.to_warehouse_id])))).all()
- if not p or len(wh)!=2 or p.stock<x.quantity: raise HTTPException(409,"Transfert impossible")
- p.stock-=x.quantity
+ if not p or len(wh)!=2 or x.from_warehouse_id==x.to_warehouse_id: raise HTTPException(409,"Transfert impossible")
+ source=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==x.from_warehouse_id,WarehouseStock.product_id==p.id))
+ target=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==x.to_warehouse_id,WarehouseStock.product_id==p.id))
+ if not source or source.quantity<x.quantity: raise HTTPException(409,"Stock insuffisant dans le dépôt source")
+ source.quantity-=x.quantity
+ if not target: target=WarehouseStock(tenant_id=u.tenant_id,warehouse_id=x.to_warehouse_id,product_id=p.id,quantity=0);db.add(target) 
+ target.quantity+=x.quantity
  for wid,k,q in [(x.from_warehouse_id,"TRANSFERT_SORTIE",-x.quantity),(x.to_warehouse_id,"TRANSFERT_ENTREE",x.quantity)]: db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wid,product_id=p.id,kind=k,quantity=q,unit_cost=p.purchase_price,reference="Transfert"))
  await db.commit();return {"status":"OK"}
 @app.get("/api/dashboard")
