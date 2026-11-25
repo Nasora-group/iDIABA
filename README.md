@@ -1,15 +1,16 @@
-# iDIABA
+# iDIABA 2.0
+Gestion commerciale et caisse universelle pour commerces, négoce, retail et restauration au Sénégal.
 
-**Logiciel de caisse enregistreuse et de gestion commerciale (ERP) pour tous types de commerces.**
+- Frontend : React + Vite + TypeScript + Zustand + Dexie + PWA.
+- Backend : FastAPI + SQLAlchemy async + Pydantic + JWT.
+- Base locale : SQLite. FCFA, NINEA, RC, TVA paramétrable.
+- Rôles : ADMIN, GERANT, CAISSIER.
+- Dépôts, catalogue, recettes, stock journalisé, clients/fournisseurs, sessions de caisse, paiements Wave/Orange Money/Free Money/espèces/carte/crédit, ventes et dashboard.
 
-La caisse est le poste de vente quotidien. L'administrateur de chaque entreprise dispose d'un back-office complet pour gérer les ventes, achats, stocks, fournisseurs, clients, caisses, finances, personnel et rapports. Le Super Admin gère la plateforme SaaS et ses entreprises clientes.
+## Lancement
+Terminal backend : `cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && python seed.py && uvicorn app.main:app --reload`
+Terminal frontend : `cd frontend && npm install && npm run dev`
 
-- Pas de boutique en ligne ni de commandes clients en ligne.
-- Architecture multi-entreprises avec isolation stricte des données.
-- Plusieurs établissements, dépôts et caisses.
-- Paiements configurables, notamment espèces, Wave et Orange Money.
-- Interface caisse rapide et back-office complet, dans l'esprit de gestion de Sage 100.
+Démo : admin@demo.sn / admin123 · caisse@demo.sn / caisse123 · PIN gérant 1234.
 
-Le périmètre fonctionnel, les règles métier et les critères de validation sont décrits dans [docs/PRODUCT_SCOPE.md](docs/PRODUCT_SCOPE.md).
-
-Le développement doit préserver les données existantes, privilégier les migrations additives et valider les cycles vente-caisse-stock et achat-réception-stock avant tout déploiement de production.
+La base Supabase de production reste intacte. Un instantané des données a été créé dans le schéma privé idiaba_backup_20261125. Les données Supabase ne sont pas encore importées dans SQLite : effectuer la migration avant bascule opérationnelle. En production, prévoir un disque persistant, un secret JWT fort, CORS restreint et des sauvegardes externes.
