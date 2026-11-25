@@ -84,7 +84,14 @@ def roles(*allowed):
 app=FastAPI(title="iDIABA API",version="2.0")
 app.add_middleware(CORSMiddleware,allow_origins=os.getenv("CORS_ORIGINS","http://localhost:5173").split(","),allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 @app.on_event("startup")
-async def startup(): await init()
+async def startup():
+ print("[startup] Initialisation du schéma", flush=True)
+ await init()
+ print("[startup] Initialisation des données de démonstration", flush=True)
+ # Import différé : seed.py réutilise les modèles et la session de ce module.
+ from seed import seed
+ await seed()
+ print("[startup] Application prête", flush=True)
 @app.get("/api/health")
 async def health(): return {"status":"ok","service":"idiaba"}
 class Login(BaseModel): email:str;password:str
