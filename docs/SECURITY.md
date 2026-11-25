@@ -1,4 +1,0 @@
-# Sécurité\n\n- RLS obligatoire pour chaque table métier.\n- Séparation stricte des entreprises.\n- Secrets uniquement dans variables d'environnement; aucun secret dans Git.\n- Permissions explicites pour actions sensibles (annulation, ajustement stock, remise, clôture).\n- Audit des opérations critiques.\n- Validation serveur des prix, quantités, montants et droits.\n- Sauvegardes et tests de restauration avant mise en production.
-- Les paiements Wave doivent être confirmés par webhook signé, avec contrôle anti-rejeu, idempotence, montant et devise. Un retour navigateur ne prouve jamais un paiement.
-- Les clés Wave, le secret webhook et la clé service-role Supabase restent exclusivement dans les variables d'environnement serveur.
-- Ne pas activer un abonnement Orange Money sans confirmation réelle de la transaction; l'intégration automatique attend les accès marchands Sonatel.
