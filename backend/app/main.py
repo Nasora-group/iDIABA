@@ -151,16 +151,42 @@ async def add_product(x:ProductIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")
  except IntegrityError:
   await db.rollback();raise HTTPException(409,"Cette référence existe déjà")
  await db.refresh(p);return {"id":p.id,"name":p.name}
+def unit_conversion(old_unit:str,new_unit:str):
+ scales={"mg":("mass",0.000001),"g":("mass",0.001),"kg":("mass",1),"ml":("volume",0.001),"L":("volume",1),"cm":("length",0.01),"m":("length",1)}
+ if old_unit==new_unit:return 1.0
+ old=scales.get(old_unit);new=scales.get(new_unit)
+ if not old or not new or old[0]!=new[0]: raise HTTPException(409,"Changement d'unité impossible : choisissez une unité de la même famille. Les unités de stock ne sont pas interchangeables.")
+ return old[1]/new[1]
 @app.put("/api/products/{product_id}")
 async def update_product(product_id:int,x:ProductIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
- p=await db.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==u.tenant_id))
+ p=await db.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==u.tenant_id).with_for_update())
  if not p: raise HTTPException(404,"Produit introuvable")
+ factor=unit_conversion(p.unit,x.unit)
+ if abs(factor-1.0)>1e-12:
+  from app.advanced import PurchaseLine,InventoryLine,StockTransferLine,RefundLine
+  stocks=(await db.scalars(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.product_id==p.id).with_for_update())).all()
+  for row in stocks: row.quantity*=factor
+  recipes=(await db.scalars(select(Recipe).where(Recipe.tenant_id==u.tenant_id,Recipe.ingredient_id==p.id))).all()
+  for row in recipes: row.quantity*=factor
+  purchases=(await db.scalars(select(PurchaseLine).where(PurchaseLine.product_id==p.id))).all()
+  for row in purchases: row.quantity*=factor;row.received*=factor;row.unit_cost/=factor
+  sales=(await db.scalars(select(SaleLine).where(SaleLine.product_id==p.id))).all()
+  for row in sales: row.quantity*=factor;row.unit_price/=factor
+  movements=(await db.scalars(select(Movement).where(Movement.tenant_id==u.tenant_id,Movement.product_id==p.id))).all()
+  for row in movements: row.quantity*=factor;row.unit_cost/=factor
+  inventory_lines=(await db.scalars(select(InventoryLine).where(InventoryLine.product_id==p.id))).all()
+  for row in inventory_lines: row.theoretical*=factor;row.counted*=factor;row.difference*=factor
+  transfer_lines=(await db.scalars(select(StockTransferLine).where(StockTransferLine.product_id==p.id))).all()
+  for row in transfer_lines: row.quantity*=factor;row.unit_cost/=factor
+  refund_lines=(await db.scalars(select(RefundLine).where(RefundLine.product_id==p.id))).all()
+  for row in refund_lines: row.quantity*=factor
+  p.stock*=factor;p.min_stock*=factor;p.purchase_price/=factor;p.sale_price/=factor
  for key,value in x.model_dump().items(): setattr(p,key,value)
  try:
   await db.commit()
  except IntegrityError:
   await db.rollback();raise HTTPException(409,"Référence ou code-barres déjà utilisé")
- return {"id":p.id,"name":p.name,"updated":True}
+ return {"id":p.id,"name":p.name,"updated":True,"unit_converted":abs(factor-1.0)>1e-12,"conversion_factor":factor}
 class ProductImportLine(BaseModel):
  sku:str=Field(min_length=1,max_length=50);name:str=Field(min_length=1,max_length=150);barcode:str="";category:str="Général";unit:str=Field(default="Pièce",min_length=1,max_length=20);purchase_price:float=Field(default=0,ge=0);sale_price:float=Field(default=0,ge=0);tax_rate:float=Field(default=18,ge=0,le=100);min_stock:float=Field(default=0,ge=0);quantity:float=Field(default=0,ge=0);kind:str="SIMPLE"
 class ProductImport(BaseModel):
