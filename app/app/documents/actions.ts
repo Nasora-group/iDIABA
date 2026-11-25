@@ -24,11 +24,12 @@ export async function createCommercialDocument(formData: FormData) {
       || !["quote", "sales_order"].includes(documentType)
       || notes.length > 2000 || itemsRaw.length > 30000) fail("validation");
 
-  let items: unknown;
-  try { items = JSON.parse(itemsRaw); } catch { fail("items"); }
-  if (!Array.isArray(items) || items.length < 1 || items.length > 100) fail("items");
+  let parsedItems: unknown;
+  try { parsedItems = JSON.parse(itemsRaw); } catch { fail("items"); }
+  if (!Array.isArray(parsedItems) || parsedItems.length < 1 || parsedItems.length > 100) fail("items");
+  const itemRows = parsedItems as unknown[];
 
-  const normalized = items.map((item: unknown) => {
+  const normalized = itemRows.map((item: unknown) => {
     if (!item || typeof item !== "object") return null;
     const row = item as Record<string, unknown>;
     const productId = String(row.product_id ?? "");
@@ -42,7 +43,7 @@ export async function createCommercialDocument(formData: FormData) {
         || Number(taxRate) > 100) return null;
     return { product_id: productId, quantity, unit_price: unitPrice, tax_rate: taxRate };
   });
-  if (normalized.some((item) => item === null)) fail("items");
+  if (normalized.some((item: { product_id: string; quantity: string; unit_price: string; tax_rate: string } | null) => item === null)) fail("items");
 
   const { error } = await supabase.rpc("create_commercial_document", {
     p_tenant_id: tenantId,
