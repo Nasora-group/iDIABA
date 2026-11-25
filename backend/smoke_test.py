@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy import select,func,cast,Date
 from sqlalchemy.dialects import postgresql
 from app.main import Base, Sale
-from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe,Sale
+from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe
 
 dashboard_sql=select(func.count(Sale.id)).where(Sale.tenant_id==1,cast(Sale.created_at,Date)==date(2026,11,25))
 compiled=str(dashboard_sql.compile(dialect=postgresql.dialect()))
