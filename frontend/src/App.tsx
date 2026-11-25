@@ -57,9 +57,9 @@ export default function App(){
   if(!navigator.onLine||!currentUser||currentUser.role==="SUPER_ADMIN"||currentUser.tenant_id===null)return;
   const rows=await offline.queue.where("status").equals("PENDING").toArray();
   for(const row of rows){
-   if(row.tenant_id!==currentUser.tenant_id)continue;
+   if(row.tenant_id!==currentUser.tenant_id){if(row.tenant_id==null)await offline.queue.update(row.id,{status:"ERROR"});continue;}
    try{await api("/api/sales",row.payload);await offline.queue.update(row.id,{status:"SYNCED"});}
-   catch(e:any){if(e.status>=400&&e.status<500){await offline.queue.update(row.id,{status:"ERROR"});continue;}break;}
+   catch(e:any){if(e.status>=400&&e.status<500&&e.status!==401&&e.status!==403){await offline.queue.update(row.id,{status:"ERROR"});continue;}break;}
   }
   if(rows.length)try{await refresh(currentUser)}catch{}
  }
