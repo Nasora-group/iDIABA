@@ -77,7 +77,7 @@ async def auth(token:str=Depends(oauth),db:AsyncSession=Depends(dbdep)):
  u=await db.get(User,uid)
  if not u or not u.active: raise HTTPException(401,"Compte inactif")
  return u
-async def tenant_auth(u:User=Depends(tenant_auth)):
+async def tenant_auth(u:User=Depends(auth)):
  if u.role == "SUPER_ADMIN" or u.tenant_id is None:
   raise HTTPException(403,"Le Super Admin doit utiliser exclusivement le portail de gestion des entreprises")
  return u
