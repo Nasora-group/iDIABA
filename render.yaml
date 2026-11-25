@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: idiaba-v2
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    repo: https://github.com/Nasora-group/iDIABA
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    preDeployCommand: cd backend && python seed.py
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: idiaba-v2-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PYTHONUNBUFFERED
+        value: "1"
+databases:
+  - name: idiaba-v2-db
+    plan: basic-256mb
+    region: frankfurt
+    databaseName: idiaba
