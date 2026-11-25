@@ -12,26 +12,29 @@ const box:CSSProperties={background:"#fff",border:"1px solid #e5e7eb",borderRadi
 const field:React.CSSProperties={padding:10,border:"1px solid #d1d5db",borderRadius:8,minWidth:120};
 const btn:React.CSSProperties={padding:"10px 14px",border:0,borderRadius:8,background:"#166534",color:"#fff",cursor:"pointer",fontWeight:600};
 export default function AdvancedPanel({role}:{role:string}){
- const [section,setSection]=useState("Profils"),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false);
+ const [section,setSection]=useState(role==="SUPER_ADMIN"?"Super Admin":"Profils"),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false);
  const [profiles,setProfiles]=useState<any[]>([]),[permissions,setPermissions]=useState<string[]>([]),[catalog,setCatalog]=useState<string[]>([]);
  const [suppliers,setSuppliers]=useState<any[]>([]),[warehouses,setWarehouses]=useState<any[]>([]),[products,setProducts]=useState<any[]>([]),[sales,setSales]=useState<any[]>([]);
  const [purchases,setPurchases]=useState<any[]>([]),[tables,setTables]=useState<any[]>([]),[orders,setOrders]=useState<any[]>([]),[overview,setOverview]=useState<any>(null),[companies,setCompanies]=useState<any[]>([]),[transfers,setTransfers]=useState<any[]>([]),[valuation,setValuation]=useState<any>(null);
  const [form,setForm]=useState<any>({});
  const update=(k:string,v:any)=>setForm((x:any)=>({...x,[k]:v}));
  const load=async()=>{
+  if(role==="SUPER_ADMIN"){
+   const [platformOverview,platformCompanies]=await Promise.all([api("/api/platform/overview"),api("/api/platform/companies")]);
+   setOverview(platformOverview);setCompanies(platformCompanies);return;
+  }
   const [pr,pc,su,wh,pro,sa,po,tb,od,tr,va]=await Promise.all([
    api("/api/profiles").catch(()=>[]),api("/api/permissions").catch(()=>[]),api("/api/suppliers").catch(()=>[]),
    api("/api/warehouses").catch(()=>[]),api("/api/products").catch(()=>[]),api("/api/sales").catch(()=>[]),
    api("/api/purchases").catch(()=>[]),api("/api/restaurant/tables").catch(()=>[]),api("/api/restaurant/orders").catch(()=>[]),api("/api/stock/transfers").catch(()=>[]),api("/api/stock/valuation").catch(()=>null)
   ]);
   setProfiles(pr);setCatalog(pc);setSuppliers(su);setWarehouses(wh);setProducts(pro);setSales(sa);setPurchases(po);setTables(tb);setOrders(od);setTransfers(tr);setValuation(va);
-  if(role==="SUPER_ADMIN"){setOverview(await api("/api/platform/overview").catch(()=>null));setCompanies(await api("/api/platform/companies").catch(()=>[]));}
  };
  useEffect(()=>{load().catch((e:any)=>setMsg(e.message));},[]);
  async function downloadCsv(){try{const token=localStorage.getItem("idiaba_token");const r=await fetch("/api/sales/export.csv",{headers:token?{Authorization:"Bearer "+token}:{}});if(!r.ok)throw new Error("Export impossible");const url=URL.createObjectURL(await r.blob());const a=document.createElement("a");a.href=url;a.download="idiaba-ventes.csv";a.click();URL.revokeObjectURL(url);}catch(e:any){setMsg(e.message)}}
  async function openInvoice(id:number){try{const token=localStorage.getItem("idiaba_token");const r=await fetch("/api/sales/"+id+"/invoice",{headers:token?{Authorization:"Bearer "+token}:{}});if(!r.ok)throw new Error("Impossible d’ouvrir la facture");const url=URL.createObjectURL(await r.blob());window.open(url,"_blank","noopener");}catch(e:any){setMsg(e.message)}}
  async function run(fn:()=>Promise<any>,done:string){setBusy(true);setMsg("");try{await fn();await load();setForm({});setMsg(done);}catch(e:any){setMsg(e.message)}finally{setBusy(false)}}
- const sections=["Profils","Achats","Inventaires","Transferts & valeur","Retours","Restaurant","Factures",...(role==="SUPER_ADMIN"?["Super Admin"]:[])];
+ const sections=role==="SUPER_ADMIN"?["Super Admin"]:["Profils","Achats","Inventaires","Transferts & valeur","Retours","Restaurant","Factures"];
  return <div style={{padding:16,maxWidth:1100,margin:"auto"}}>
   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>{sections.map(s=><button key={s} onClick={()=>setSection(s)} style={{...field,background:section===s?"#dcfce7":"#fff",fontWeight:600}}>{s}</button>)}</div>
   {msg&&<p style={{padding:10,background:"#f0fdf4",borderRadius:8}} onClick={()=>setMsg("")}>{msg}　×</p>}
