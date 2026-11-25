@@ -27,6 +27,7 @@ const sectorNames: Record<string, string> = {
 const companyModules: { title: string; description: string; href: string; action: string; icon: typeof CreditCard; access?: string[]; adminOnly?: boolean; secondaryHref?: string; secondaryLabel?: string; secondaryAccess?: string[] }[] = [
   { title: "Caisse", description: "Scanner, rechercher, vendre et encaisser.", href: "/app/pos", action: "Ouvrir la caisse", icon: CreditCard, access: ["cash_register", "cash_manage"] },
   { title: "Ventes", description: "Retrouver les ventes et les tickets depuis la caisse.", href: "/app/sales", action: "Voir les ventes", icon: BarChart3, access: ["sales_read", "sales_manage"] },
+  { title: "Devis & commandes", description: "Préparer les devis, suivre leur acceptation et créer les commandes clients.", href: "/app/documents", action: "Gérer les documents", icon: BarChart3, access: ["sales_manage"] },
   { title: "Produits & Stocks", description: "Catalogue, quantités, mouvements et inventaires.", href: "/app/products", secondaryHref: "/app/stock", secondaryLabel: "Ouvrir les stocks", secondaryAccess: ["stock_read", "stock_manage"], action: "Gérer les produits", icon: Package, access: ["products_read", "products_manage"] },
   { title: "Approvisionnement", description: "Fournisseurs, commandes et réceptions.", href: "/app/purchasing", action: "Gérer les achats", icon: Boxes, access: ["purchasing_read", "purchasing_manage"] },
   { title: "Rapports & comptabilité", description: "Chiffre d’affaires, marges et suivi financier.", href: "/app/reports", action: "Consulter les rapports", icon: BarChart3, access: ["reports_read"], secondaryHref: "/app/accounting", secondaryLabel: "Ouvrir la comptabilité", secondaryAccess: ["accounting_read", "accounting_manage"] },
@@ -190,6 +191,7 @@ export default async function AppHome() {
                     </div>
                     <div className="app-module-grid">
                       <Link className="app-module-secondary" href="/app/customers">Clients, fidélité et retours <ArrowUpRight size={13} /></Link>
+                      <Link className="app-module-secondary" href="/app/documents">Devis, commandes et factures <ArrowUpRight size={13} /></Link>
                       <Link className="app-module-secondary" href="/app/inventory">Inventaires et ajustements <ArrowUpRight size={13} /></Link>
                       <Link className="app-module-secondary" href="/app/accounting">Comptabilité, dépenses et journaux <ArrowUpRight size={13} /></Link>
                       <Link className="app-module-secondary" href="/app/audit">Journal d’audit et traçabilité <ArrowUpRight size={13} /></Link>
