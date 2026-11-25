@@ -12,13 +12,15 @@ assert "CAST(sales.created_at AS DATE)" in compiled
 async def main():
  async with Session() as db:
   assert await db.scalar(select(func.count(Tenant.id))) == 1
-  assert await db.scalar(select(func.count(User.id))) == 2
+  assert await db.scalar(select(func.count(User.id)).where(User.tenant_id == 1)) == 2
+  platform_admin = await db.scalar(select(User).where(User.role == "SUPER_ADMIN"))
+  assert platform_admin is None or platform_admin.tenant_id is None
   assert await db.scalar(select(func.count(Warehouse.id))) == 2
   assert await db.scalar(select(func.count(Product.id))) == 13
   assert await db.scalar(select(func.count(WarehouseStock.id))) == 10
   assert await db.scalar(select(func.count(Customer.id))) == 3
   assert await db.scalar(select(func.count(Recipe.id))) == 6
- print("SMOKE OK: 1 entreprise, 2 utilisateurs, 2 dépôts, 10 stocks-dépôt, 13 produits, 3 clients, 6 composants recette")
+ print("SMOKE OK: données entreprise isolées, compte plateforme indépendant, 2 dépôts, 10 stocks-dépôt, 13 produits, 3 clients, 6 composants recette")
 asyncio.run(main())
 
 # Vérification des routes de gestion des comptes et des rôles stock.
