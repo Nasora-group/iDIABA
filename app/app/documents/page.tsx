@@ -34,8 +34,12 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
     const canRead = canManage || granted.includes("sales_read");
     if (!canRead) return { membership, canManage, customers: [] as Customer[], products: [] as Product[], documents: [] as Document[], error: null };
     const [customers, products, documents] = await Promise.all([
-      supabase.from("customers").select("id,name").eq("tenant_id",membership.tenant_id).eq("is_active",true).order("name").limit(500),
-      supabase.from("products").select("id,name,sku,sale_price,tax_rate").eq("tenant_id",membership.tenant_id).eq("is_active",true).order("name").limit(1000),
+      canManage
+        ? supabase.from("customers").select("id,name").eq("tenant_id",membership.tenant_id).eq("is_active",true).order("name").limit(500)
+        : Promise.resolve({ data: [], error: null }),
+      canManage
+        ? supabase.from("products").select("id,name,sku,sale_price,tax_rate").eq("tenant_id",membership.tenant_id).eq("is_active",true).order("name").limit(1000)
+        : Promise.resolve({ data: [], error: null }),
       supabase.from("commercial_documents").select("id,document_number,document_type,status,customer_id,customer:customers(name),issue_date,valid_until,total,paid_amount,currency_code,source_sale_id").eq("tenant_id",membership.tenant_id).order("created_at",{ascending:false}).limit(200),
     ]);
     return { membership, canManage, customers: (customers.data ?? []) as Customer[], products: (products.data ?? []) as Product[], documents: (documents.data ?? []) as unknown as Document[], error: customers.error?.message ?? products.error?.message ?? documents.error?.message ?? null };
