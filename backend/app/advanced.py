@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.main import (
     Base, app, dbdep, auth, roles, User, Tenant, Product, Warehouse,
     WarehouseStock, Movement, Supplier, Sale, SaleLine, Payment, Cash,
-    Audit, hasher
+    Audit, hasher, tenant_auth
 )
 
 router = APIRouter(prefix="/api", tags=["modules métier"])
@@ -164,7 +164,7 @@ PERMISSION_KEYS = {
 }
 
 async def permitted(user: User, permission: str, db: AsyncSession):
-    if user.role in {"ADMIN", "SUPER_ADMIN"}:
+    if user.role == "ADMIN":
         return
     profile = await db.scalar(select(RoleProfile).where(
         RoleProfile.tenant_id == user.tenant_id,
@@ -180,17 +180,17 @@ class ProfileIn(BaseModel):
     permissions: list[str] = []
 
 @router.get("/permissions")
-async def permission_catalog(user: User = Depends(auth)):
+async def permission_catalog(user: User = Depends(tenant_auth)):
     return sorted(PERMISSION_KEYS)
 
 @router.get("/profiles")
-async def profiles(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def profiles(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "users.read", db)
     rows = (await db.scalars(select(RoleProfile).where(RoleProfile.tenant_id == user.tenant_id))).all()
     return [{"id": r.id, "role_key": r.role_key, "name": r.name, "permissions": json.loads(r.permissions), "active": r.active} for r in rows]
 
 @router.post("/profiles")
-async def profile_create(x: ProfileIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def profile_create(x: ProfileIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "users.write", db)
     if set(x.permissions) - PERMISSION_KEYS:
         raise HTTPException(400, "Droit inconnu")
@@ -214,13 +214,13 @@ class PurchaseIn(BaseModel):
     lines: list[PurchaseItem] = Field(min_length=1)
 
 @router.get("/purchases")
-async def purchase_list(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def purchase_list(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "purchases.read", db)
     rows = (await db.scalars(select(PurchaseOrder).where(PurchaseOrder.tenant_id == user.tenant_id).order_by(PurchaseOrder.id.desc()).limit(200))).all()
     return [{"id": r.id, "reference": r.reference, "supplier_id": r.supplier_id, "warehouse_id": r.warehouse_id, "status": r.status, "total": r.total, "created_at": r.created_at} for r in rows]
 
 @router.post("/purchases")
-async def purchase_create(x: PurchaseIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def purchase_create(x: PurchaseIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "purchases.write", db)
     supplier = await db.scalar(select(Supplier).where(Supplier.id == x.supplier_id, Supplier.tenant_id == user.tenant_id))
     warehouse = await db.scalar(select(Warehouse).where(Warehouse.id == x.warehouse_id, Warehouse.tenant_id == user.tenant_id))
@@ -246,7 +246,7 @@ class ReceiptIn(BaseModel):
     lines: list[PurchaseItem] = Field(min_length=1)
 
 @router.post("/purchases/{order_id}/receive")
-async def purchase_receive(order_id: int, x: ReceiptIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def purchase_receive(order_id: int, x: ReceiptIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "purchases.write", db)
     order = await db.scalar(select(PurchaseOrder).where(PurchaseOrder.id == order_id, PurchaseOrder.tenant_id == user.tenant_id))
     if not order or order.status in {"RECU", "ANNULE"}:
@@ -282,7 +282,7 @@ class InventoryPost(BaseModel):
     lines: list[CountLine] = Field(min_length=1)
 
 @router.post("/inventories")
-async def inventory_start(x: InventoryStart, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def inventory_start(x: InventoryStart, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "inventory.write", db)
     warehouse = await db.scalar(select(Warehouse).where(Warehouse.id == x.warehouse_id, Warehouse.tenant_id == user.tenant_id))
     if not warehouse:
@@ -298,7 +298,7 @@ async def inventory_start(x: InventoryStart, user: User = Depends(auth), db: Asy
     return {"id": inv.id, "lines": len(products), "status": inv.status}
 
 @router.post("/inventories/{inventory_id}/validate")
-async def inventory_validate(inventory_id: int, x: InventoryPost, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def inventory_validate(inventory_id: int, x: InventoryPost, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "inventory.write", db)
     inv = await db.scalar(select(Inventory).where(Inventory.id == inventory_id, Inventory.tenant_id == user.tenant_id, Inventory.status == "BROUILLON"))
     if not inv:
@@ -335,13 +335,13 @@ class TransferIn(BaseModel):
     lines: list[TransferItem] = Field(min_length=1)
 
 @router.get("/stock/transfers")
-async def stock_transfers(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def stock_transfers(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "stock.read", db)
     rows = (await db.scalars(select(StockTransfer).where(StockTransfer.tenant_id == user.tenant_id).order_by(StockTransfer.id.desc()).limit(200))).all()
     return [{"id": r.id, "reference": r.reference, "source_warehouse_id": r.source_warehouse_id, "destination_warehouse_id": r.destination_warehouse_id, "status": r.status, "created_at": r.created_at} for r in rows]
 
 @router.post("/stock/transfers")
-async def stock_transfer_create(x: TransferIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def stock_transfer_create(x: TransferIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "stock.write", db)
     if x.source_warehouse_id == x.destination_warehouse_id:
         raise HTTPException(400, "Les dépôts source et destination doivent être différents")
@@ -380,7 +380,7 @@ async def stock_transfer_create(x: TransferIn, user: User = Depends(auth), db: A
     return {"id": transfer.id, "reference": transfer.reference, "status": transfer.status}
 
 @router.get("/stock/valuation")
-async def stock_valuation(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def stock_valuation(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "stock.read", db)
     rows = (await db.execute(
         select(Product.id, Product.sku, Product.name, Product.purchase_price, func.coalesce(func.sum(WarehouseStock.quantity), 0))
@@ -399,7 +399,7 @@ class RefundIn(BaseModel):
     lines: list[CountLine] = Field(min_length=1)
 
 @router.post("/sales/{sale_id}/refund")
-async def sale_refund(sale_id: int, x: RefundIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def sale_refund(sale_id: int, x: RefundIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "sales.refund", db)
     if x.refund_method not in {"ESPECES", "WAVE", "ORANGE_MONEY", "CARTE", "VIREMENT"}:
         raise HTTPException(400, "Mode de remboursement invalide")
@@ -459,13 +459,13 @@ class TableIn(BaseModel):
     seats: int = Field(default=4, ge=1, le=40)
 
 @router.get("/restaurant/tables")
-async def restaurant_tables(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def restaurant_tables(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "restaurant.read", db)
     rows = (await db.scalars(select(RestaurantTable).where(RestaurantTable.tenant_id == user.tenant_id, RestaurantTable.active.is_(True)))).all()
     return [{"id": r.id, "name": r.name, "seats": r.seats} for r in rows]
 
 @router.post("/restaurant/tables")
-async def restaurant_table_create(x: TableIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def restaurant_table_create(x: TableIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "restaurant.write", db)
     row = RestaurantTable(tenant_id=user.tenant_id, name=x.name, seats=x.seats)
     db.add(row)
@@ -479,7 +479,7 @@ class KitchenIn(BaseModel):
     lines: list[CountLine] = Field(min_length=1)
 
 @router.post("/restaurant/orders")
-async def kitchen_order_create(x: KitchenIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def kitchen_order_create(x: KitchenIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "restaurant.write", db)
     if x.table_id and not await db.scalar(select(RestaurantTable).where(RestaurantTable.id == x.table_id, RestaurantTable.tenant_id == user.tenant_id, RestaurantTable.active.is_(True))):
         raise HTTPException(404, "Table introuvable")
@@ -494,13 +494,13 @@ async def kitchen_order_create(x: KitchenIn, user: User = Depends(auth), db: Asy
     return {"id": order.id, "status": order.status}
 
 @router.get("/restaurant/orders")
-async def kitchen_orders(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def kitchen_orders(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "restaurant.read", db)
     rows = (await db.scalars(select(KitchenOrder).where(KitchenOrder.tenant_id == user.tenant_id).order_by(KitchenOrder.id.desc()).limit(100))).all()
     return [{"id": r.id, "table_id": r.table_id, "note": r.note, "status": r.status, "created_at": r.created_at} for r in rows]
 
 @router.post("/restaurant/orders/{order_id}/status")
-async def kitchen_order_status(order_id: int, status: str, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def kitchen_order_status(order_id: int, status: str, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "restaurant.write", db)
     if status not in {"A_PREPARER", "EN_PREPARATION", "PRETE", "SERVIE", "ANNULEE"}:
         raise HTTPException(400, "Statut invalide")
@@ -512,7 +512,7 @@ async def kitchen_order_status(order_id: int, status: str, user: User = Depends(
     return {"id": row.id, "status": row.status}
 
 @router.get("/sales/{sale_id}/invoice")
-async def sale_invoice(sale_id: int, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def sale_invoice(sale_id: int, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     sale = await db.scalar(select(Sale).where(Sale.id == sale_id, Sale.tenant_id == user.tenant_id))
     if not sale:
         raise HTTPException(404, "Vente introuvable")
@@ -548,13 +548,10 @@ async def platform_bootstrap(x: CompanyIn, bootstrap_key: str = Header(default="
     existing = await db.scalar(select(User).where(User.role == "SUPER_ADMIN"))
     if existing:
         raise HTTPException(409, "Le Super Admin plateforme existe déjà")
-    tenant = await db.scalar(select(Tenant).order_by(Tenant.id))
-    if not tenant:
-        raise HTTPException(409, "Créez d'abord une entreprise de référence")
     email = x.admin_email.strip().lower()
     if await db.scalar(select(User).where(User.email == email)):
         raise HTTPException(409, "Adresse e-mail déjà utilisée")
-    admin = User(tenant_id=tenant.id, email=email, name=x.admin_name, password_hash=hasher.hash(x.admin_password), role="SUPER_ADMIN", active=True)
+    admin = User(tenant_id=None, email=email, name=x.admin_name, password_hash=hasher.hash(x.admin_password), role="SUPER_ADMIN", active=True)
     db.add(admin)
     await db.commit()
     return {"status": "created", "email": email}
@@ -583,7 +580,7 @@ async def platform_company_create(x: CompanyIn, user: User = Depends(auth), db: 
     return {"id": tenant.id, "name": tenant.name, "admin_email": email}
 
 @router.get("/sales/export.csv")
-async def sales_export(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+async def sales_export(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     rows = (await db.scalars(select(Sale).where(Sale.tenant_id == user.tenant_id).order_by(Sale.created_at.desc()))).all()
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
