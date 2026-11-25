@@ -202,11 +202,11 @@ async def sale_create(x:SaleIn,u:User=Depends(auth),db:AsyncSession=Depends(dbde
  await db.commit();return {"id":s.id,"status":s.status,"total":total,"change":max(0,paid-total)}
 class StockIn(BaseModel): warehouse_id:int;product_id:int;quantity:float;unit_cost:float=0;kind:str="ENTREE_ACHAT"
 @app.get("/api/stock/movements")
-async def stock_movements(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+async def stock_movements(u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
  rows=(await db.scalars(select(Movement).where(Movement.tenant_id==u.tenant_id).order_by(Movement.created_at.desc()).limit(200))).all()
  return [{"id":x.id,"warehouse_id":x.warehouse_id,"product_id":x.product_id,"kind":x.kind,"quantity":x.quantity,"unit_cost":x.unit_cost,"reference":x.reference,"created_at":x.created_at} for x in rows]
 @app.post("/api/stock/movements")
-async def stock_move(x:StockIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+async def stock_move(x:StockIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
  p=await db.scalar(select(Product).where(Product.id==x.product_id,Product.tenant_id==u.tenant_id));w=await db.scalar(select(Warehouse).where(Warehouse.id==x.warehouse_id,Warehouse.tenant_id==u.tenant_id))
  if not p or not w: raise HTTPException(404,"Article ou dépôt introuvable")
  ws=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==w.id,WarehouseStock.product_id==p.id))
@@ -217,7 +217,7 @@ async def stock_move(x:StockIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncS
  db.add(Movement(tenant_id=u.tenant_id,**x.model_dump()));await db.commit();return {"stock":p.stock}
 class TransferIn(BaseModel): from_warehouse_id:int;to_warehouse_id:int;product_id:int;quantity:float=Field(gt=0)
 @app.post("/api/stock/transfers")
-async def transfer(x:TransferIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+async def transfer(x:TransferIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
  p=await db.scalar(select(Product).where(Product.id==x.product_id,Product.tenant_id==u.tenant_id))
  wh=(await db.scalars(select(Warehouse).where(Warehouse.tenant_id==u.tenant_id,Warehouse.id.in_([x.from_warehouse_id,x.to_warehouse_id])))).all()
  if not p or len(wh)!=2 or x.from_warehouse_id==x.to_warehouse_id: raise HTTPException(409,"Transfert impossible")
@@ -243,6 +243,50 @@ async def dashboard(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depe
 async def sales(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":s.id,"total":s.total,"status":s.status,"created_at":s.created_at} for s in (await db.scalars(select(Sale).where(Sale.tenant_id==u.tenant_id).order_by(Sale.created_at.desc()).limit(100))).all()]
 
+
+
+# Administration des comptes : les comptes sont toujours isolés par entreprise.
+USER_ROLES={"ADMIN","GERANT","CAISSIER","STOCK","VENDEUR"}
+class UserCreate(BaseModel):
+ name:str=Field(min_length=2,max_length=120)
+ email:str=Field(min_length=5,max_length=160)
+ password:str=Field(min_length=8,max_length=128)
+ role:str="CAISSIER"
+class UserUpdate(BaseModel):
+ name:Optional[str]=Field(default=None,min_length=2,max_length=120)
+ role:Optional[str]=None
+ active:Optional[bool]=None
+ password:Optional[str]=Field(default=None,min_length=8,max_length=128)
+@app.get("/api/users")
+async def users_list(u:User=Depends(roles("ADMIN")),db:AsyncSession=Depends(dbdep)):
+ rows=(await db.scalars(select(User).where(User.tenant_id==u.tenant_id).order_by(User.name))).all()
+ return [{"id":x.id,"name":x.name,"email":x.email,"role":x.role,"active":x.active} for x in rows]
+@app.post("/api/users")
+async def users_create(x:UserCreate,u:User=Depends(roles("ADMIN")),db:AsyncSession=Depends(dbdep)):
+ email=x.email.strip().lower()
+ if x.role not in USER_ROLES: raise HTTPException(400,"Profil non autorisé")
+ if await db.scalar(select(User).where(User.email==email)): raise HTTPException(409,"Cette adresse e-mail est déjà utilisée")
+ item=User(tenant_id=u.tenant_id,name=x.name.strip(),email=email,password_hash=hasher.hash(x.password),role=x.role,active=True)
+ db.add(item);await db.flush()
+ db.add(Audit(tenant_id=u.tenant_id,user_id=u.id,action="CREATION_UTILISATEUR",detail=f"Compte créé : {email} ({x.role})"))
+ await db.commit();await db.refresh(item)
+ return {"id":item.id,"name":item.name,"email":item.email,"role":item.role,"active":item.active}
+@app.post("/api/users/{uid}/update")
+async def users_update(uid:int,x:UserUpdate,u:User=Depends(roles("ADMIN")),db:AsyncSession=Depends(dbdep)):
+ item=await db.scalar(select(User).where(User.id==uid,User.tenant_id==u.tenant_id))
+ if not item: raise HTTPException(404,"Utilisateur introuvable")
+ changes=x.model_dump(exclude_unset=True)
+ if "role" in changes and changes["role"] not in USER_ROLES: raise HTTPException(400,"Profil non autorisé")
+ if uid==u.id and changes.get("active") is False: raise HTTPException(400,"Vous ne pouvez pas désactiver votre propre compte")
+ if item.role=="ADMIN" and item.active and (changes.get("active") is False or changes.get("role") not in (None,"ADMIN")):
+  admins=await db.scalar(select(func.count(User.id)).where(User.tenant_id==u.tenant_id,User.role=="ADMIN",User.active.is_(True)))
+  if admins<=1: raise HTTPException(409,"Impossible de désactiver le dernier administrateur")
+ password=changes.pop("password",None)
+ for key,value in changes.items(): setattr(item,key,value)
+ if password: item.password_hash=hasher.hash(password)
+ db.add(Audit(tenant_id=u.tenant_id,user_id=u.id,action="MODIFICATION_UTILISATEUR",detail=f"Compte modifié : {item.email}"))
+ await db.commit()
+ return {"id":item.id,"name":item.name,"email":item.email,"role":item.role,"active":item.active}
 
 # En production, l'API sert aussi l'application React compilée.
 _frontend=os.path.abspath(os.path.join(os.path.dirname(__file__),"../../frontend/dist"))

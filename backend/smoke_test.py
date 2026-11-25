@@ -20,3 +20,9 @@ async def main():
   assert await db.scalar(select(func.count(Recipe.id))) == 6
  print("SMOKE OK: 1 entreprise, 2 utilisateurs, 2 dépôts, 10 stocks-dépôt, 13 produits, 3 clients, 6 composants recette")
 asyncio.run(main())
+
+# Vérification des routes de gestion des comptes et des rôles stock.
+from app.main import app, USER_ROLES
+paths={route.path for route in app.routes}
+assert {"/api/users","/api/users/{uid}/update","/api/stock/movements","/api/cash/{cid}/close"} <= paths
+assert {"ADMIN","GERANT","CAISSIER","VENDEUR","STOCK"} <= USER_ROLES
