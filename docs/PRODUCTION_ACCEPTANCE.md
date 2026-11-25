@@ -1,83 +1,113 @@
-# iDIABA — Checklist de validation avant exploitation
+# iDIABA V2 — Checklist de validation avant exploitation
 
-Cette checklist distingue les contrôles automatisés des tests manuels qui nécessitent des comptes et des données réelles.
+Cette checklist décrit la pile réellement déployée : React 19 + Vite + TypeScript + Dexie/PWA, API FastAPI + SQLAlchemy async, PostgreSQL managé Render. Elle sépare les contrôles CI des essais fonctionnels qui nécessitent des comptes dédiés.
 
-## Contrôles automatisés
+## Contrôles automatisés CI
 
-- [ ] CI : lint
-- [ ] CI : TypeScript
-- [ ] CI : build Next.js
-- [ ] CI : validation Edge Function et Deno
-- [ ] Déploiement Render confirmé `live`
-- [ ] Migrations Supabase vérifiées
-- [ ] Vérifier logs Render après déploiement
+Le workflow `.github/workflows/ci.yml` exécute actuellement :
 
-## Sécurité multi-entreprise
+- [ ] Backend : installation des dépendances Python 3.12.
+- [ ] Backend : compilation Python (`compileall`).
+- [ ] Backend : import de l'application FastAPI.
+- [ ] Backend : initialisation du seed et exécution de `smoke_test.py`.
+- [ ] Frontend : installation des dépendances Node 22.
+- [ ] Frontend : `npm run build` (TypeScript `tsc -b` puis Vite).
+- [ ] Déploiement Render confirmé `live` sur le commit attendu.
+- [ ] Route `/api/health` répond HTTP 200.
+- [ ] Journaux Render vérifiés après déploiement.
 
-- [ ] Créer deux entreprises de test avec deux utilisateurs différents.
-- [ ] Vérifier qu'un utilisateur ne voit ni ventes, produits, clients, stocks, fournisseurs, achats ou documents comptables de l'autre entreprise.
-- [ ] Tester chaque rôle (owner/admin/manager/cashier/stock) avec permissions positives et négatives.
-- [ ] Affecter un utilisateur à un seul dépôt et vérifier que les données opérationnelles des autres dépôts sont refusées.
-- [ ] Vérifier les transferts : expédition par équipe source, réception par équipe destination.
-- [ ] Confirmer que les RPC sensibles rejettent les appels sans authentification et sans rôle requis.
+## Données et bascule
 
-## Catalogue
+- [ ] Confirmer la base source historique et son périmètre avant toute migration.
+- [ ] Exporter et vérifier une sauvegarde restaurable de la base source.
+- [ ] Établir le mapping des tables et identifiants vers le schéma iDIABA V2.
+- [ ] Tester l'import sur une base de préproduction, sans écraser les données de V2.
+- [ ] Comparer les nombres d'entreprises, utilisateurs, produits, mouvements, ventes, paiements et soldes avant/après.
+- [ ] Vérifier les totaux financiers et les stocks par dépôt.
+- [ ] Ne basculer les utilisateurs qu'après validation métier et technique.
 
-- [ ] Créer un produit avec SKU et code-barres.
-- [ ] Modifier nom, SKU, code-barres, catégorie, unité, prix et taxe.
-- [ ] Archiver puis réactiver le produit; vérifier que l'historique reste intact.
-- [ ] Créer, modifier, archiver et réactiver une catégorie.
-- [ ] Modifier un produit affecté à une catégorie archivée et vérifier que l'affectation n'est pas perdue par inadvertance.
-- [ ] Vérifier les doublons SKU/code-barres.
+**État constaté le 25 novembre 2026 :** iDIABA V2 utilise PostgreSQL Render. L'ancien projet Supabase et son schéma de sauvegarde ne sont pas la base de données runtime de V2. Aucune migration des données historiques Supabase vers PostgreSQL Render n'est déclarée terminée. La base V2 observée contient encore les données de démonstration (1 entreprise, 3 comptes, 13 produits et 4 ventes). Cette étape doit être traitée avant une mise en exploitation avec les données historiques.
 
-## Stock et achats
+## Sécurité multi-entreprise et profils
 
-- [ ] Saisir une réception d'achat et vérifier l'augmentation du stock.
-- [ ] Réceptionner partiellement puis compléter une commande.
-- [ ] Vérifier qu'une quantité supérieure au reliquat est refusée.
-- [ ] Définir un seuil par produit et dépôt.
-- [ ] Vérifier l'alerte lorsque stock <= seuil, y compris stock nul sans mouvement.
-- [ ] Vérifier le calcul de la quantité à commander.
-- [ ] Archiver/réactiver un fournisseur et vérifier qu'il est exclu des nouvelles commandes lorsqu'il est archivé.
-- [ ] Modifier les coordonnées d'un fournisseur et vérifier les commandes historiques.
+- [ ] Vérifier que le Super Admin plateforme n'est rattaché à aucune entreprise et n'accède pas aux données métier.
+- [ ] Créer deux entreprises de test et des utilisateurs distincts.
+- [ ] Vérifier qu'un utilisateur ne lit ni ne modifie les ventes, produits, clients, stocks, fournisseurs, achats ou documents d'une autre entreprise.
+- [ ] Tester les profils ADMIN, GERANT, CAISSIER, VENDEUR et STOCK.
+- [ ] Vérifier les autorisations positives et négatives pour chaque module.
+- [ ] Affecter un utilisateur à un seul dépôt et refuser l'accès opérationnel aux autres dépôts.
+- [ ] Vérifier que les actions sensibles sont journalisées dans audit_logs.
+- [ ] Vérifier les limites d'utilisateurs et les droits selon l'abonnement.
 
-## Caisse
+## Catalogue et commerce universel
 
-- [ ] Ouvrir une session de caisse et saisir un fonds initial.
-- [ ] Vendre en espèces, Wave manuel et Orange Money manuel.
-- [ ] Tester un paiement partagé.
-- [ ] Vérifier le refus de vente si stock insuffisant.
-- [ ] Scanner un code-barres/SKU avec scanner USB ou Bluetooth.
-- [ ] Tester quantité invalide au scan et confirmer qu'aucun produit n'est ajouté.
-- [ ] Imprimer un ticket et choisir « Enregistrer en PDF ».
-- [ ] Vérifier ticket, total, taxes, paiement, caissier et dépôt.
+- [ ] Créer et modifier un produit avec SKU, code-barres, catégorie, unité, prix et taxe.
+- [ ] Vérifier les produits simples, variantes, services et produits composés/recettes.
+- [ ] Vérifier les doublons SKU/code-barres dans une même entreprise.
+- [ ] Archiver puis réactiver un produit sans perdre l'historique.
+- [ ] Vérifier les tarifs et prix par liste lorsque configurés.
+- [ ] Tester les articles de restauration et la déduction des ingrédients selon la recette.
 
-## Mode hors connexion
+## Stock, inventaires et achats
 
-- [ ] Préparer le catalogue et la session, puis couper Internet.
-- [ ] Scanner des produits et saisir une vente hors connexion.
-- [ ] Vérifier que la vente reste dans la file locale après fermeture/réouverture.
+- [ ] Vérifier les entrées, sorties et ajustements avec historique des mouvements.
+- [ ] Réaliser un inventaire, contrôler les écarts puis valider.
+- [ ] Vérifier les seuils d'alerte et les propositions de réapprovisionnement.
+- [ ] Créer une commande fournisseur, réceptionner partiellement puis totalement.
+- [ ] Refuser une réception supérieure au reliquat.
+- [ ] Vérifier le coût d'achat et la valorisation du stock.
+- [ ] Tester les lots, dates de péremption et sortie FEFO si le suivi par lot est activé.
+- [ ] Tester un transfert multi-articles : expédition, réception partielle et réception finale.
+- [ ] Vérifier qu'un transfert ne crée pas de stock disponible avant sa réception.
+
+## Caisse et ventes
+
+- [ ] Ouvrir une caisse avec ou sans fonds initial, selon la configuration de l'entreprise.
+- [ ] Vendre en espèces, Wave manuel, Orange Money manuel, carte ou crédit selon les moyens activés.
+- [ ] Tester les paiements partagés et contrôler le reste à payer.
+- [ ] Refuser une vente si le stock disponible est insuffisant lorsque le contrôle est activé.
+- [ ] Tester la recherche et le scan SKU/code-barres.
+- [ ] Imprimer un ticket et utiliser l'enregistrement PDF.
+- [ ] Contrôler le ticket, les taxes, le paiement, le caissier, le dépôt et le total.
+- [ ] Tester l'annulation, le remboursement partiel et total, avec le moyen de remboursement correct.
+- [ ] Vérifier les mouvements de caisse, le comptage de clôture et les écarts.
+
+## Restaurant
+
+- [ ] Créer et gérer les tables.
+- [ ] Ouvrir une commande sur table et ajouter/modifier des articles.
+- [ ] Envoyer les articles en préparation et suivre les commandes cuisine.
+- [ ] Encaisser une commande et vérifier la libération de la table.
+- [ ] Vérifier la consommation des ingrédients selon les recettes.
+
+## Mode hors connexion et synchronisation
+
+- [ ] Précharger le catalogue et les données nécessaires.
+- [ ] Couper Internet et vérifier l'accès aux écrans essentiels.
+- [ ] Vérifier la conservation locale des opérations après fermeture/réouverture.
 - [ ] Rétablir Internet et synchroniser.
-- [ ] Vérifier qu'une vente ne se synchronise qu'une fois (idempotence).
-- [ ] Tester une vente en conflit de stock et confirmer que l'erreur est visible et que la file ne perd pas la vente.
-- [ ] Vérifier la synchronisation des paiements et la session de caisse.
+- [ ] Vérifier l'idempotence : aucune vente ou paiement en double.
+- [ ] Tester les conflits de stock et afficher clairement les opérations à résoudre.
+- [ ] Vérifier qu'aucune opération en attente n'est perdue.
 
-## Comptabilité et abonnements
+## Comptabilité, rapports et abonnements
 
-- [ ] Vérifier la balance comptable (débits = crédits).
-- [ ] Saisir une dépense et vérifier les écritures.
-- [ ] Enregistrer un règlement de facture fournisseur et vérifier le solde restant.
-- [ ] Tester demande/validation/rejet d'abonnement avec compte Platform Admin.
-- [ ] Vérifier le plafond de deux utilisateurs du plan d'essai et les limites du plan souscrit.
-- [ ] Wave/Orange Money restent manuels tant que les API et credentials marchands ne sont pas disponibles.
+- [ ] Vérifier les totaux de ventes, marges, achats, dépenses et stocks.
+- [ ] Vérifier que les écritures comptables sont équilibrées lorsque la comptabilité est activée.
+- [ ] Saisir une dépense et contrôler son impact sur les comptes.
+- [ ] Enregistrer un règlement fournisseur et contrôler le solde restant.
+- [ ] Vérifier les rapports par période, entreprise et dépôt.
+- [ ] Tester la création, l'activation et la suspension d'un abonnement depuis l'espace plateforme.
+- [ ] Confirmer les limites du plan d'essai et des plans payants.
+- [ ] Garder les paiements Wave/Orange Money en mode manuel tant que les API et identifiants marchands ne sont pas configurés.
 
-## Configuration de sécurité / exploitation
+## Exploitation et appareils
 
-- [ ] Activer la protection contre les mots de passe compromis dans Supabase Auth.
-- [ ] Tester la procédure de sauvegarde et restauration (backup/restore).
-- [ ] Vérifier les comptes Platform Admin et MFA si disponible.
-- [ ] Vérifier les paramètres de l'entreprise (logo, adresse, RCCM, NINEA, téléphone).
-- [ ] Tester l'application sur smartphone et tablette, particulièrement les formulaires POS, stock et achats.
-- [ ] Vérifier les alertes, logs et erreurs après les scénarios de test.
+- [ ] Vérifier les sauvegardes PostgreSQL Render et réaliser un test de restauration contrôlé.
+- [ ] Vérifier la robustesse du secret JWT et la politique de renouvellement des sessions.
+- [ ] Vérifier les paramètres de l'entreprise : logo, adresse, RCCM, NINEA, téléphone et devise.
+- [ ] Tester sur smartphone, tablette et ordinateur, en priorité la caisse.
+- [ ] Tester les imprimantes tickets et les scanners USB/Bluetooth disponibles.
+- [ ] Vérifier les journaux, erreurs et alertes après les scénarios de recette.
 
-**État au 22 novembre 2026 :** les contrôles CI sont exécutés pour chaque PR; les tests de bout en bout ci-dessus restent à effectuer avec des comptes de test et les paramètres d'exploitation.
+**Règle de validation :** une case n'est cochée qu'après un test réellement exécuté et documenté. Les tests de recette doivent être réalisés avec des comptes et des données dédiés, jamais en modifiant les données historiques de production.
