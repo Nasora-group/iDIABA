@@ -22,7 +22,7 @@ export default function AdvancedPanel({role}:{role:string}){
   const [pr,pc,su,wh,pro,sa,po,tb,od,tr,va]=await Promise.all([
    api("/api/profiles").catch(()=>[]),api("/api/permissions").catch(()=>[]),api("/api/suppliers").catch(()=>[]),
    api("/api/warehouses").catch(()=>[]),api("/api/products").catch(()=>[]),api("/api/sales").catch(()=>[]),
-   api("/api/purchases").catch(()=>[]),api("/api/restaurant/tables").catch(()=>[]),api("/api/restaurant/orders").catch(()=>[])
+   api("/api/purchases").catch(()=>[]),api("/api/restaurant/tables").catch(()=>[]),api("/api/restaurant/orders").catch(()=>[]),api("/api/stock/transfers").catch(()=>[]),api("/api/stock/valuation").catch(()=>null)
   ]);
   setProfiles(pr);setCatalog(pc);setSuppliers(su);setWarehouses(wh);setProducts(pro);setSales(sa);setPurchases(po);setTables(tb);setOrders(od);setTransfers(tr);setValuation(va);
   if(role==="SUPER_ADMIN"){setOverview(await api("/api/platform/overview").catch(()=>null));setCompanies(await api("/api/platform/companies").catch(()=>[]));}
