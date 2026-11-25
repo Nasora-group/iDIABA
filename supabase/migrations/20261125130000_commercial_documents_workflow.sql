@@ -7,7 +7,7 @@ create table if not exists public.commercial_documents (
   document_number text not null,
   document_type text not null check (document_type in ('quote','sales_order','invoice')),
   status text not null default 'draft' check (status in ('draft','sent','accepted','rejected','converted','cancelled','issued','partially_paid','paid')),
-  customer_id uuid references public.customers(id) on delete restrict,
+  customer_id uuid,
   source_document_id uuid,
   source_sale_id uuid references public.sales(id) on delete restrict,
   issue_date date not null default current_date,
