@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy import select,func,cast,Date
 from sqlalchemy.dialects import postgresql
 from app.main import Base, Sale
-from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe
+from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe,Sale
 
 dashboard_sql=select(func.count(Sale.id)).where(Sale.tenant_id==1,cast(Sale.created_at,Date)==date(2026,11,25))
 compiled=str(dashboard_sql.compile(dialect=postgresql.dialect()))
@@ -20,6 +20,8 @@ async def main():
   assert await db.scalar(select(func.count(WarehouseStock.id))) == 10
   assert await db.scalar(select(func.count(Customer.id))) == 3
   assert await db.scalar(select(func.count(Recipe.id))) == 6
+  assert {"client_sale_id","change_amount"} <= set(Sale.__table__.columns.keys())
+  assert any(c.name=="uq_sales_tenant_client_sale" for c in Sale.__table__.constraints)
  print("SMOKE OK: données entreprise isolées, compte plateforme indépendant, 2 dépôts, 10 stocks-dépôt, 13 produits, 3 clients, 6 composants recette")
 asyncio.run(main())
 
