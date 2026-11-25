@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel,Field
 from jose import jwt,JWTError
 from pwdlib import PasswordHash
-from sqlalchemy import String,Float,Integer,Boolean,DateTime,ForeignKey,UniqueConstraint,select,func
+from sqlalchemy import String,Float,Integer,Boolean,DateTime,Date,ForeignKey,UniqueConstraint,select,func,cast
 from sqlalchemy.orm import DeclarativeBase,Mapped,mapped_column
 from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker,AsyncSession
 
@@ -231,9 +231,11 @@ async def transfer(x:TransferIn,u:User=Depends(roles("ADMIN","GERANT")),db:Async
  await db.commit();return {"status":"OK"}
 @app.get("/api/dashboard")
 async def dashboard(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
- today=date.today().isoformat()
- rev=await db.scalar(select(func.coalesce(func.sum(Sale.total),0)).where(Sale.tenant_id==u.tenant_id,func.date(Sale.created_at)==today))
- sales=await db.scalar(select(func.count(Sale.id)).where(Sale.tenant_id==u.tenant_id,func.date(Sale.created_at)==today))
+ today=date.today()
+ # Comparaison DATE/DATE explicite : PostgreSQL refuse DATE = VARCHAR.
+ today_filter=cast(Sale.created_at,Date)==today
+ rev=await db.scalar(select(func.coalesce(func.sum(Sale.total),0)).where(Sale.tenant_id==u.tenant_id,today_filter))
+ sales=await db.scalar(select(func.count(Sale.id)).where(Sale.tenant_id==u.tenant_id,today_filter))
  low=(await db.scalars(select(Product).where(Product.tenant_id==u.tenant_id,Product.stock<=Product.min_stock))).all()
  debts=(await db.scalars(select(Customer).where(Customer.tenant_id==u.tenant_id,Customer.balance_due>0))).all()
  return {"revenue_today":rev or 0,"sales_today":sales or 0,"low_stock":[{"name":p.name,"stock":p.stock} for p in low],"receivables":[{"name":c.name,"balance_due":c.balance_due} for c in debts]}
