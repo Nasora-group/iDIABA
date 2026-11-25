@@ -2,7 +2,7 @@ import asyncio
 from datetime import date
 from sqlalchemy import select,func,cast,Date
 from sqlalchemy.dialects import postgresql
-from app.main import Sale
+from app.main import Base, Sale
 from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe
 
 dashboard_sql=select(func.count(Sale.id)).where(Sale.tenant_id==1,cast(Sale.created_at,Date)==date(2026,11,25))
@@ -26,3 +26,23 @@ from app.main import app, USER_ROLES
 paths={route.path for route in app.routes}
 assert {"/api/users","/api/users/{uid}/update","/api/stock/movements","/api/cash/{cid}/close"} <= paths
 assert {"ADMIN","GERANT","CAISSIER","VENDEUR","STOCK"} <= USER_ROLES
+
+# Modules complémentaires : modèles et routes chargés avant le démarrage.
+from app.advanced import (
+    RoleProfile, PurchaseOrder, PurchaseLine, Inventory, InventoryLine,
+    Refund, RefundLine, RestaurantTable, KitchenOrder, KitchenOrderLine, Subscription,
+)
+advanced_paths={route.path for route in app.routes}
+assert {
+    "/api/profiles", "/api/purchases", "/api/purchases/{order_id}/receive",
+    "/api/inventories", "/api/inventories/{inventory_id}/validate",
+    "/api/sales/{sale_id}/refund", "/api/restaurant/tables",
+    "/api/restaurant/orders", "/api/sales/{sale_id}/invoice",
+    "/api/platform/overview", "/api/platform/companies", "/api/platform/bootstrap", "/api/platform/companies/{tenant_id}/subscription", "/api/sales/export.csv",
+} <= advanced_paths
+assert {
+    "role_profiles", "purchase_orders", "purchase_lines", "inventories",
+    "inventory_lines", "refunds", "refund_lines", "restaurant_tables", "kitchen_orders",
+    "kitchen_order_lines", "subscriptions",
+} <= set(Base.metadata.tables)
+print("ADVANCED ROUTES OK: profils, achats, réceptions, inventaires, retours, restaurant, factures, SaaS")

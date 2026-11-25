@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime,date,timedelta,timezone
 from typing import Optional
 from fastapi import FastAPI,Depends,HTTPException
@@ -77,8 +78,13 @@ async def auth(token:str=Depends(oauth),db:AsyncSession=Depends(dbdep)):
  if not u or not u.active: raise HTTPException(401,"Compte inactif")
  return u
 def roles(*allowed):
- async def check(u:User=Depends(auth)):
-  if u.role not in allowed: raise HTTPException(403,"Accès refusé")
+ async def check(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+  if u.role in allowed or u.role=="SUPER_ADMIN": return u
+  from app.advanced import RoleProfile
+  profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
+  permissions=set(json.loads(profile.permissions or "[]")) if profile else set()
+  required="users.write" if allowed==("ADMIN",) else ("stock.write" if "STOCK" in allowed else "reports.read")
+  if required not in permissions: raise HTTPException(403,"Accès refusé")
   return u
  return check
 app=FastAPI(title="iDIABA API",version="2.0")
@@ -264,7 +270,9 @@ async def users_list(u:User=Depends(roles("ADMIN")),db:AsyncSession=Depends(dbde
 @app.post("/api/users")
 async def users_create(x:UserCreate,u:User=Depends(roles("ADMIN")),db:AsyncSession=Depends(dbdep)):
  email=x.email.strip().lower()
- if x.role not in USER_ROLES: raise HTTPException(400,"Profil non autorisé")
+ if x.role not in USER_ROLES:
+  from app.advanced import RoleProfile
+  if not await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==x.role,RoleProfile.active.is_(True))): raise HTTPException(400,"Profil non autorisé")
  if await db.scalar(select(User).where(User.email==email)): raise HTTPException(409,"Cette adresse e-mail est déjà utilisée")
  item=User(tenant_id=u.tenant_id,name=x.name.strip(),email=email,password_hash=hasher.hash(x.password),role=x.role,active=True)
  db.add(item);await db.flush()
@@ -276,7 +284,9 @@ async def users_update(uid:int,x:UserUpdate,u:User=Depends(roles("ADMIN")),db:As
  item=await db.scalar(select(User).where(User.id==uid,User.tenant_id==u.tenant_id))
  if not item: raise HTTPException(404,"Utilisateur introuvable")
  changes=x.model_dump(exclude_unset=True)
- if "role" in changes and changes["role"] not in USER_ROLES: raise HTTPException(400,"Profil non autorisé")
+ if "role" in changes and changes["role"] not in USER_ROLES:
+  from app.advanced import RoleProfile
+  if not await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==changes["role"],RoleProfile.active.is_(True))): raise HTTPException(400,"Profil non autorisé")
  if uid==u.id and changes.get("active") is False: raise HTTPException(400,"Vous ne pouvez pas désactiver votre propre compte")
  if item.role=="ADMIN" and item.active and (changes.get("active") is False or changes.get("role") not in (None,"ADMIN")):
   admins=await db.scalar(select(func.count(User.id)).where(User.tenant_id==u.tenant_id,User.role=="ADMIN",User.active.is_(True)))
@@ -287,6 +297,9 @@ async def users_update(uid:int,x:UserUpdate,u:User=Depends(roles("ADMIN")),db:As
  db.add(Audit(tenant_id=u.tenant_id,user_id=u.id,action="MODIFICATION_UTILISATEUR",detail=f"Compte modifié : {item.email}"))
  await db.commit()
  return {"id":item.id,"name":item.name,"email":item.email,"role":item.role,"active":item.active}
+
+# Modules métier additionnels (modèles chargés avant create_all au démarrage).
+from app import advanced  # noqa: F401
 
 # En production, l'API sert aussi l'application React compilée.
 _frontend=os.path.abspath(os.path.join(os.path.dirname(__file__),"../../frontend/dist"))
