@@ -50,9 +50,9 @@ create table if not exists public.commercial_document_items (
   constraint commercial_document_items_document_fk
     foreign key (tenant_id, document_id)
     references public.commercial_documents(tenant_id, id) on delete restrict,
-  constraint commercial_document_items_product_tenant_fk
-    foreign key (tenant_id, product_id)
-    references public.products(tenant_id, id) on delete restrict
+  constraint commercial_document_items_product_fk
+    foreign key (product_id)
+    references public.products(id) on delete restrict
 );
 
 create index if not exists idx_commercial_documents_tenant_date
