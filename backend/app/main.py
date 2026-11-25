@@ -9,7 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel,Field
 from jose import jwt,JWTError
 from pwdlib import PasswordHash
-from sqlalchemy import String,Float,Integer,Boolean,DateTime,Date,ForeignKey,UniqueConstraint,select,func,cast
+from sqlalchemy import String,Float,Integer,Boolean,DateTime,Date,ForeignKey,UniqueConstraint,select,func,cast,text
 from sqlalchemy.orm import DeclarativeBase,Mapped,mapped_column
 from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker,AsyncSession
 
@@ -28,7 +28,7 @@ class Tenant(Base):
  id:Mapped[int]=mapped_column(primary_key=True);name:Mapped[str]=mapped_column(String(160));mode:Mapped[str]=mapped_column(String(20),default="HYBRIDE");address:Mapped[str]=mapped_column(String(200),default="");phone:Mapped[str]=mapped_column(String(40),default="");ninea:Mapped[str]=mapped_column(String(50),default="");rc:Mapped[str]=mapped_column(String(50),default="");currency:Mapped[str]=mapped_column(String(10),default="FCFA");tax_rate:Mapped[float]=mapped_column(Float,default=18)
 class User(Base):
  __tablename__="users"
- id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[int]=mapped_column(ForeignKey("tenants.id"),index=True);email:Mapped[str]=mapped_column(String(160),unique=True,index=True);name:Mapped[str]=mapped_column(String(120));password_hash:Mapped[str]=mapped_column(String(255));role:Mapped[str]=mapped_column(String(20),default="CAISSIER");pin_hash:Mapped[Optional[str]]=mapped_column(String(255),nullable=True);active:Mapped[bool]=mapped_column(Boolean,default=True)
+ id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[Optional[int]]=mapped_column(ForeignKey("tenants.id"),index=True,nullable=True);email:Mapped[str]=mapped_column(String(160),unique=True,index=True);name:Mapped[str]=mapped_column(String(120));password_hash:Mapped[str]=mapped_column(String(255));role:Mapped[str]=mapped_column(String(20),default="CAISSIER");pin_hash:Mapped[Optional[str]]=mapped_column(String(255),nullable=True);active:Mapped[bool]=mapped_column(Boolean,default=True)
 class Warehouse(Base):
  __tablename__="warehouses"
  id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[int]=mapped_column(ForeignKey("tenants.id"),index=True);name:Mapped[str]=mapped_column(String(100));code:Mapped[str]=mapped_column(String(20))
@@ -77,9 +77,13 @@ async def auth(token:str=Depends(oauth),db:AsyncSession=Depends(dbdep)):
  u=await db.get(User,uid)
  if not u or not u.active: raise HTTPException(401,"Compte inactif")
  return u
+async def tenant_auth(u:User=Depends(tenant_auth)):
+ if u.role == "SUPER_ADMIN" or u.tenant_id is None:
+  raise HTTPException(403,"Le Super Admin doit utiliser exclusivement le portail de gestion des entreprises")
+ return u
 def roles(*allowed):
- async def check(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
-  if u.role in allowed or u.role=="SUPER_ADMIN": return u
+ async def check(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+  if u.role in allowed: return u
   from app.advanced import RoleProfile
   profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
   permissions=set(json.loads(profile.permissions or "[]")) if profile else set()
@@ -93,6 +97,11 @@ app.add_middleware(CORSMiddleware,allow_origins=os.getenv("CORS_ORIGINS","http:/
 async def startup():
  print("[startup] Initialisation du schéma", flush=True)
  await init()
+ if engine.dialect.name == "postgresql":
+  async with engine.begin() as connection:
+   await connection.execute(text("ALTER TABLE users ALTER COLUMN tenant_id DROP NOT NULL"))
+   await connection.execute(text("UPDATE users SET tenant_id = NULL WHERE role = 'SUPER_ADMIN' AND tenant_id IS NOT NULL"))
+  print("[startup] Isolation du compte Super Admin appliquée", flush=True)
  print("[startup] Initialisation des données de démonstration", flush=True)
  # Import différé : seed.py réutilise les modèles et la session de ce module.
  from seed import seed
@@ -106,15 +115,16 @@ async def login(x:Login,db:AsyncSession=Depends(dbdep)):
  u=await db.scalar(select(User).where(User.email==x.email.lower(),User.active.is_(True)))
  if not u or not hasher.verify(x.password,u.password_hash): raise HTTPException(401,"Identifiants incorrects")
  exp=datetime.now(timezone.utc)+timedelta(hours=12)
- t=await db.get(Tenant,u.tenant_id)
- return {"access_token":jwt.encode({"sub":str(u.id),"exp":exp},SECRET,algorithm="HS256"),"user":{"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id},"tenant":{"name":t.name,"mode":t.mode,"currency":t.currency}}
+ t=await db.get(Tenant,u.tenant_id) if u.tenant_id is not None else None
+ tenant_data=None if t is None else {"name":t.name,"mode":t.mode,"currency":t.currency}
+ return {"access_token":jwt.encode({"sub":str(u.id),"exp":exp},SECRET,algorithm="HS256"),"user":{"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id},"tenant":tenant_data}
 @app.get("/api/auth/me")
 async def me(u:User=Depends(auth)): return {"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id}
 @app.get("/api/warehouses")
-async def warehouses(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+async def warehouses(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"code":x.code} for x in (await db.scalars(select(Warehouse).where(Warehouse.tenant_id==u.tenant_id))).all()]
 @app.get("/api/products")
-async def products(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+async def products(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":p.id,"sku":p.sku,"barcode":p.barcode,"name":p.name,"category":p.category,"unit":p.unit,"purchase_price":p.purchase_price,"sale_price":p.sale_price,"tax_rate":p.tax_rate,"stock":p.stock,"min_stock":p.min_stock,"kind":p.kind} for p in (await db.scalars(select(Product).where(Product.tenant_id==u.tenant_id,Product.active.is_(True)).order_by(Product.name))).all()]
 class ProductIn(BaseModel):
  sku:str;name:str;barcode:str="";category:str="Général";unit:str="Pièce";purchase_price:float=0;sale_price:float=Field(ge=0);tax_rate:float=18;min_stock:float=0;kind:str="SIMPLE"
@@ -122,7 +132,7 @@ class ProductIn(BaseModel):
 async def add_product(x:ProductIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
  p=Product(tenant_id=u.tenant_id,**x.model_dump());db.add(p);await db.commit();return {"id":p.id,"name":p.name}
 @app.get("/api/customers")
-async def customers(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+async def customers(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"phone":x.phone,"credit_limit":x.credit_limit,"balance_due":x.balance_due} for x in (await db.scalars(select(Customer).where(Customer.tenant_id==u.tenant_id))).all()]
 class CustomerIn(BaseModel):
  name:str;phone:str="";credit_limit:float=Field(ge=0)
@@ -139,16 +149,16 @@ async def supplier_create(x:SupplierIn,u:User=Depends(roles("ADMIN","GERANT")),d
  c=Supplier(tenant_id=u.tenant_id,**x.model_dump());db.add(c);await db.commit();await db.refresh(c);return {"id":c.id,"name":c.name}
 class OpenCash(BaseModel): opening:float=Field(ge=0)
 @app.get("/api/cash/current")
-async def cash_current(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+async def cash_current(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  c=await db.scalar(select(Cash).where(Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN"))
  return None if not c else {"id":c.id,"opening":c.opening,"expected":c.expected}
 @app.post("/api/cash/open")
-async def cash_open(x:OpenCash,u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+async def cash_open(x:OpenCash,u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  if await db.scalar(select(Cash).where(Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN")): raise HTTPException(409,"Caisse déjà ouverte")
  c=Cash(tenant_id=u.tenant_id,user_id=u.id,opening=x.opening,expected=x.opening);db.add(c);await db.commit();await db.refresh(c);return {"id":c.id,"status":c.status}
 class CloseCash(BaseModel): counted:float=Field(ge=0)
 @app.post("/api/cash/{cid}/close")
-async def cash_close(cid:int,x:CloseCash,u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+async def cash_close(cid:int,x:CloseCash,u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  c=await db.scalar(select(Cash).where(Cash.id==cid,Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN"))
  if not c: raise HTTPException(404,"Session introuvable")
  c.counted=x.counted;c.variance=x.counted-c.expected;c.status="CLOSED";c.closed_at=datetime.utcnow();await db.commit();return {"expected":c.expected,"counted":c.counted,"variance":c.variance}
@@ -157,7 +167,7 @@ class PayIn(BaseModel): method:str;amount:float=Field(gt=0);reference:str=""
 class SaleIn(BaseModel):
  warehouse_id:int;customer_id:Optional[int]=None;channel:str="COMMERCE";table_name:str="";lines:list[LineIn];payments:list[PayIn]
 @app.post("/api/sales")
-async def sale_create(x:SaleIn,u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  cash=await db.scalar(select(Cash).where(Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN"))
  wh=await db.scalar(select(Warehouse).where(Warehouse.id==x.warehouse_id,Warehouse.tenant_id==u.tenant_id))
  if not cash or not wh: raise HTTPException(409,"Ouvrez la caisse et sélectionnez un dépôt")
@@ -246,7 +256,7 @@ async def dashboard(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depe
  debts=(await db.scalars(select(Customer).where(Customer.tenant_id==u.tenant_id,Customer.balance_due>0))).all()
  return {"revenue_today":rev or 0,"sales_today":sales or 0,"low_stock":[{"name":p.name,"stock":p.stock} for p in low],"receivables":[{"name":c.name,"balance_due":c.balance_due} for c in debts]}
 @app.get("/api/sales")
-async def sales(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+async def sales(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":s.id,"total":s.total,"status":s.status,"created_at":s.created_at} for s in (await db.scalars(select(Sale).where(Sale.tenant_id==u.tenant_id).order_by(Sale.created_at.desc()).limit(100))).all()]
 
 
