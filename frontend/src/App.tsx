@@ -10,10 +10,10 @@ type Line={product:Product;qty:number};
 type Customer={id:number;name:string;phone:string;credit_limit:number;balance_due:number};
 type Supplier={id:number;name:string;phone:string;balance_due:number};
 class OfflineDB extends Dexie {
- queue!:Table<{id:string;payload:any;status:string;created:number}>;
+ queue!:Table<{id:string;tenant_id?:number|null;payload:any;status:string;created:number}>;
  products!:Table<Product,number>;
  cache!:Table<{key:string;value:any},string>;
- constructor(){super("idiaba-offline");this.version(1).stores({queue:"id,status,created"});this.version(2).stores({queue:"id,status,created",products:"id",cache:"key"});}
+ constructor(){super("idiaba-offline");this.version(1).stores({queue:"id,status,created"});this.version(2).stores({queue:"id,status,created",products:"id",cache:"key"});this.version(3).stores({queue:"id,status,created,tenant_id",products:"id",cache:"key"});}
 }
 const offline=new OfflineDB();
 const useAuth=create<{token:string|null;user:User|null;set:(t:string,u:User)=>void;clear:()=>void}>(set=>({
@@ -28,7 +28,7 @@ const api=async(path:string,body?:any,method?:string)=>{
   headers:{"Content-Type":"application/json",...(token?{Authorization:"Bearer "+token}:{})},
   ...(body!==undefined?{body:JSON.stringify(body)}:{})
  });
- if(!r.ok){let detail="Erreur API";try{detail=(await r.json()).detail||detail}catch{}throw new Error(detail);}
+ if(!r.ok){let detail="Erreur API";try{detail=(await r.json()).detail||detail}catch{}const error:any=new Error(detail);error.status=r.status;throw error;}
  if(r.status===204)return null;
  return r.json();
 };
@@ -44,7 +44,7 @@ export default function App(){
  const [form,setForm]=useState<any>({}),[busy,setBusy]=useState(false);
  const admin=user?.role==="ADMIN", manager=["ADMIN","GERANT"].includes(user?.role||""), stockRole=["ADMIN","GERANT","STOCK"].includes(user?.role||"");
  const tabs=user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]]:[["Caisse",ShoppingCart],["Catalogue",Archive],["Stocks",Package],["Clients",Users],...(manager?[["Fournisseurs",Truck],["Rapports",BarChart3]] as any:[]),...(admin?[["Utilisateurs",UserCog],["Gestion avancée",Layers]] as any:[])];
- useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue()};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine)syncQueue();return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[]);
+ useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue(user)};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine&&user)syncQueue(user);return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[user?.id,user?.role,user?.tenant_id]);
  async function refresh(current:User|null=user){
   const [p,w,c,cu,sa]=await Promise.all([api("/api/products"),api("/api/warehouses"),api("/api/cash/current"),api("/api/customers"),api("/api/sales")]);
   setProducts(p);setWarehouses(w);setCash(c);setCustomers(cu);setSales(sa);
@@ -53,11 +53,15 @@ export default function App(){
   if(["ADMIN","GERANT"].includes(current?.role||"")){const d=await api("/api/dashboard");setDash(d);await offline.cache.put({key:"dashboard",value:d});}
   if(["ADMIN","GERANT"].includes(current?.role||"")){setSuppliers(await api("/api/suppliers"));}
  }
- async function syncQueue(){
-  if(!navigator.onLine||user?.role==="SUPER_ADMIN")return;
+ async function syncQueue(currentUser:User|null=user){
+  if(!navigator.onLine||!currentUser||currentUser.role==="SUPER_ADMIN"||currentUser.tenant_id===null)return;
   const rows=await offline.queue.where("status").equals("PENDING").toArray();
-  for(const row of rows){try{await api("/api/sales",row.payload);await offline.queue.update(row.id,{status:"SYNCED"});}catch{break;}}
-  if(rows.length&&user)try{await refresh(user)}catch{}
+  for(const row of rows){
+   if(row.tenant_id!==currentUser.tenant_id)continue;
+   try{await api("/api/sales",row.payload);await offline.queue.update(row.id,{status:"SYNCED"});}
+   catch(e:any){if(e.status>=400&&e.status<500){await offline.queue.update(row.id,{status:"ERROR"});continue;}break;}
+  }
+  if(rows.length)try{await refresh(currentUser)}catch{}
  }
  useEffect(()=>{if(!token)return;let active=true;(async()=>{try{const me=await api("/api/auth/me");if(!active)return;set(token,me);if(me.role==="SUPER_ADMIN"){setTab("Gestion avancée");return;}await refresh(me);}catch(e:any){if(active){clear();setMsg("Session expirée. Veuillez vous reconnecter.");}}})();return()=>{active=false};},[token]);
  const filtered=products.filter(p=>(p.name+p.sku+p.barcode).toLowerCase().includes(search.toLowerCase()));
@@ -66,7 +70,7 @@ export default function App(){
  function add(p:Product){if(p.kind==="COMPOSE"&&p.stock<=0){/* recette pilotée par ingrédients */}setCart(a=>{const x=a.find(i=>i.product.id===p.id);return x?a.map(i=>i.product.id===p.id?{...i,qty:i.qty+1}:i):[...a,{product:p,qty:1}]});}
  async function openCash(){try{await api("/api/cash/open",{opening:Number(opening)});await refresh();setMsg("Caisse ouverte");}catch(e:any){setMsg(e.message)}}
  async function closeCash(){try{const r=await api("/api/cash/"+cash.id+"/close",{counted:Number(counted||0)});setMsg("Caisse clôturée. Écart : "+fmt(r.variance));setCash(null);setCounted("");await refresh();}catch(e:any){setMsg(e.message)}}
- async function checkout(method:string){if(!cart.length||!warehouses[0]||!cash)return;const payload={warehouse_id:warehouses[0].id,channel:"COMMERCE",lines:cart.map(x=>({product_id:x.product.id,quantity:x.qty})),payments:[{method,amount:total}]};try{if(!navigator.onLine){await offline.queue.add({id:crypto.randomUUID(),payload,status:"PENDING",created:Date.now()});setMsg("Vente mise en attente hors ligne.");}else{const r=await api("/api/sales",payload);setMsg("Vente #"+r.id+" encaissée. Monnaie : "+fmt(r.change));}setCart([]);await refresh();}catch(e:any){setMsg(e.message)}}
+ async function checkout(method:string){if(!cart.length||!warehouses[0]||!cash||!user||user.tenant_id===null)return;const clientSaleId=crypto.randomUUID();const payload={client_sale_id:clientSaleId,warehouse_id:warehouses[0].id,channel:"COMMERCE",lines:cart.map(x=>({product_id:x.product.id,quantity:x.qty})),payments:[{method,amount:total}]};const queued={id:clientSaleId,tenant_id:user.tenant_id,payload,status:"PENDING",created:Date.now()};if(!navigator.onLine){await offline.queue.put(queued);setCart([]);setMsg("Vente enregistrée localement. Synchronisation à la reconnexion.");return;}try{const r=await api("/api/sales",payload);setCart([]);setMsg("Vente #"+r.id+" encaissée. Monnaie : "+fmt(r.change));try{await refresh()}catch{}}catch(e:any){if(!e.status||e.status>=500){await offline.queue.put(queued);setCart([]);setMsg("Connexion interrompue. Vente conservée localement pour synchronisation.");}else{setMsg(e.message);}}}
  async function saveUser(e:any){e.preventDefault();setBusy(true);try{await api("/api/users",{name:form.name,email:form.email,password:form.password,role:form.role||"CAISSIER"});setForm({});setMsg("Utilisateur créé");await refresh();}catch(e:any){setMsg(e.message)}finally{setBusy(false)}}
  async function toggleUser(u:User){try{await api("/api/users/"+u.id+"/update",{active:!u.active});setMsg("Compte mis à jour");await refresh();}catch(e:any){setMsg(e.message)}}
  async function saveProduct(e:any){e.preventDefault();try{await api("/api/products",{sku:form.sku,name:form.name,barcode:form.barcode||"",category:form.category||"Général",unit:form.unit||"Pièce",purchase_price:Number(form.purchase_price||0),sale_price:Number(form.sale_price||0),tax_rate:Number(form.tax_rate??18),min_stock:Number(form.min_stock||0),kind:"SIMPLE"});setForm({});setMsg("Article ajouté");await refresh();}catch(e:any){setMsg(e.message)}}
