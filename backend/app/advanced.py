@@ -248,26 +248,86 @@ class ReceiptIn(BaseModel):
 @router.post("/purchases/{order_id}/receive")
 async def purchase_receive(order_id: int, x: ReceiptIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "purchases.write", db)
-    order = await db.scalar(select(PurchaseOrder).where(PurchaseOrder.id == order_id, PurchaseOrder.tenant_id == user.tenant_id))
+    # Verrouille la commande : deux réceptions concurrentes ne peuvent pas
+    # consommer simultanément le même reliquat.
+    order = await db.scalar(select(PurchaseOrder).where(
+        PurchaseOrder.id == order_id,
+        PurchaseOrder.tenant_id == user.tenant_id
+    ).with_for_update())
     if not order or order.status in {"RECU", "ANNULE"}:
         raise HTTPException(404, "Commande indisponible")
-    lines = (await db.scalars(select(PurchaseLine).where(PurchaseLine.order_id == order.id))).all()
+
+    lines = (await db.scalars(
+        select(PurchaseLine).where(PurchaseLine.order_id == order.id)
+        .order_by(PurchaseLine.id).with_for_update()
+    )).all()
+    ordered_by_product = {}
+    for line in lines:
+        entry = ordered_by_product.setdefault(line.product_id, {"lines": [], "remaining": 0.0})
+        entry["lines"].append(line)
+        entry["remaining"] += max(0.0, line.quantity - line.received)
+
+    # Regroupe les lignes de réception répétées par article. Le coût appliqué
+    # au stock est leur coût moyen pondéré.
+    received_by_product = {}
     for received in x.lines:
-        line = next((l for l in lines if l.product_id == received.product_id), None)
-        if not line or line.received + received.quantity > line.quantity:
+        entry = received_by_product.setdefault(received.product_id, {"quantity": 0.0, "value": 0.0})
+        entry["quantity"] += received.quantity
+        entry["value"] += received.quantity * received.unit_cost
+
+    prepared = []
+    for product_id in sorted(received_by_product):
+        received = received_by_product[product_id]
+        ordered = ordered_by_product.get(product_id)
+        quantity = received["quantity"]
+        if not ordered or quantity > ordered["remaining"] + 1e-9:
             raise HTTPException(409, "Quantité reçue supérieure à la commande")
-        product = await db.scalar(select(Product).where(Product.id == line.product_id, Product.tenant_id == user.tenant_id))
-        stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == order.warehouse_id, WarehouseStock.product_id == product.id))
-        if not stock:
-            stock = WarehouseStock(tenant_id=user.tenant_id, warehouse_id=order.warehouse_id, product_id=product.id, quantity=0)
+        product = await db.scalar(select(Product).where(
+            Product.id == product_id,
+            Product.tenant_id == user.tenant_id
+        ).with_for_update())
+        if not product:
+            raise HTTPException(404, "Article introuvable dans cette entreprise")
+        stock = await db.scalar(select(WarehouseStock).where(
+            WarehouseStock.tenant_id == user.tenant_id,
+            WarehouseStock.warehouse_id == order.warehouse_id,
+            WarehouseStock.product_id == product.id
+        ).with_for_update())
+        unit_cost = received["value"] / quantity
+        prepared.append((product, stock, ordered["lines"], quantity, unit_cost))
+
+    for product, stock, purchase_lines, quantity, unit_cost in prepared:
+        if stock is None:
+            stock = WarehouseStock(
+                tenant_id=user.tenant_id, warehouse_id=order.warehouse_id,
+                product_id=product.id, quantity=0
+            )
             db.add(stock)
-        stock.quantity += received.quantity
-        product.stock += received.quantity
-        line.received += received.quantity
-        product.purchase_price = received.unit_cost
-        db.add(Movement(tenant_id=user.tenant_id, warehouse_id=order.warehouse_id, product_id=product.id, kind="ENTREE_RECEPTION", quantity=received.quantity, unit_cost=received.unit_cost, reference=order.reference))
-    order.status = "RECU" if all(l.received >= l.quantity for l in lines) else "PARTIEL"
-    db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="RECEPTION_ACHAT", detail=f"Réception {order.reference}"))
+        stock.quantity += quantity
+        product.stock += quantity
+        product.purchase_price = unit_cost
+
+        remaining = quantity
+        for line in purchase_lines:
+            available = max(0.0, line.quantity - line.received)
+            allocated = min(available, remaining)
+            if allocated > 0:
+                line.received += allocated
+                remaining -= allocated
+            if remaining <= 1e-9:
+                break
+
+        db.add(Movement(
+            tenant_id=user.tenant_id, warehouse_id=order.warehouse_id,
+            product_id=product.id, kind="ENTREE_RECEPTION",
+            quantity=quantity, unit_cost=unit_cost, reference=order.reference
+        ))
+
+    order.status = "RECU" if all(l.received >= l.quantity - 1e-9 for l in lines) else "PARTIEL"
+    db.add(Audit(
+        tenant_id=user.tenant_id, user_id=user.id, action="RECEPTION_ACHAT",
+        detail=f"Réception {order.reference}"
+    ))
     await db.commit()
     return {"status": order.status}
 
