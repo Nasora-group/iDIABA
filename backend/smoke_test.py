@@ -3,13 +3,17 @@ from datetime import date
 from sqlalchemy import select,func,cast,Date
 from sqlalchemy.dialects import postgresql
 from app.main import Base, Sale
-from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe
+from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe,LineIn,PayIn,aggregate_sale_lines,payment_settlement,startup
 
 dashboard_sql=select(func.count(Sale.id)).where(Sale.tenant_id==1,cast(Sale.created_at,Date)==date(2026,11,25))
 compiled=str(dashboard_sql.compile(dialect=postgresql.dialect()))
 assert "CAST(sales.created_at AS DATE)" in compiled
 
 async def main():
+ await startup()
+ assert aggregate_sale_lines([LineIn(product_id=2,quantity=1),LineIn(product_id=1,quantity=2),LineIn(product_id=1,quantity=3)]) == [(1,5),(2,1)]
+ assert payment_settlement(1000,[PayIn(method="ESPECES",amount=1200)]) == (0,200)
+ assert payment_settlement(1000,[PayIn(method="ESPECES",amount=800),PayIn(method="CREDIT_CLIENT",amount=200)]) == (200,0)
  async with Session() as db:
   assert await db.scalar(select(func.count(Tenant.id))) == 1
   assert await db.scalar(select(func.count(User.id)).where(User.tenant_id == 1)) == 2
@@ -20,6 +24,8 @@ async def main():
   assert await db.scalar(select(func.count(WarehouseStock.id))) == 10
   assert await db.scalar(select(func.count(Customer.id))) == 3
   assert await db.scalar(select(func.count(Recipe.id))) == 6
+  assert {"client_sale_id","change_amount"} <= set(Sale.__table__.columns.keys())
+  assert any(c.name=="uq_sales_tenant_client_sale" for c in Sale.__table__.constraints)
  print("SMOKE OK: données entreprise isolées, compte plateforme indépendant, 2 dépôts, 10 stocks-dépôt, 13 produits, 3 clients, 6 composants recette")
 asyncio.run(main())
 

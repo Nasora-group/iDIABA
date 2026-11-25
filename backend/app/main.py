@@ -11,6 +11,7 @@ from jose import jwt,JWTError
 from pwdlib import PasswordHash
 from sqlalchemy import String,Float,Integer,Boolean,DateTime,Date,ForeignKey,UniqueConstraint,select,func,cast,text
 from sqlalchemy.orm import DeclarativeBase,Mapped,mapped_column
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker,AsyncSession
 
 URL=os.getenv("DATABASE_URL","sqlite+aiosqlite:///./idiaba.db")
@@ -56,7 +57,8 @@ class Cash(Base):
  id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[int]=mapped_column(ForeignKey("tenants.id"),index=True);user_id:Mapped[int]=mapped_column(ForeignKey("users.id"));opening:Mapped[float]=mapped_column(Float,default=0);expected:Mapped[float]=mapped_column(Float,default=0);counted:Mapped[Optional[float]]=mapped_column(Float,nullable=True);variance:Mapped[Optional[float]]=mapped_column(Float,nullable=True);status:Mapped[str]=mapped_column(String(12),default="OPEN");opened_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow);closed_at:Mapped[Optional[datetime]]=mapped_column(DateTime,nullable=True)
 class Sale(Base):
  __tablename__="sales"
- id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[int]=mapped_column(ForeignKey("tenants.id"),index=True);user_id:Mapped[int]=mapped_column(ForeignKey("users.id"));customer_id:Mapped[Optional[int]]=mapped_column(ForeignKey("customers.id"),nullable=True);cash_id:Mapped[int]=mapped_column(ForeignKey("cash_sessions.id"));warehouse_id:Mapped[int]=mapped_column(ForeignKey("warehouses.id"));channel:Mapped[str]=mapped_column(String(20),default="COMMERCE");table_name:Mapped[str]=mapped_column(String(40),default="");status:Mapped[str]=mapped_column(String(24),default="PAYE");subtotal:Mapped[float]=mapped_column(Float);tax:Mapped[float]=mapped_column(Float);total:Mapped[float]=mapped_column(Float);created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
+ __table_args__=(UniqueConstraint("tenant_id","client_sale_id",name="uq_sales_tenant_client_sale"),)
+ id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[int]=mapped_column(ForeignKey("tenants.id"),index=True);user_id:Mapped[int]=mapped_column(ForeignKey("users.id"));customer_id:Mapped[Optional[int]]=mapped_column(ForeignKey("customers.id"),nullable=True);cash_id:Mapped[int]=mapped_column(ForeignKey("cash_sessions.id"));warehouse_id:Mapped[int]=mapped_column(ForeignKey("warehouses.id"));channel:Mapped[str]=mapped_column(String(20),default="COMMERCE");table_name:Mapped[str]=mapped_column(String(40),default="");status:Mapped[str]=mapped_column(String(24),default="PAYE");subtotal:Mapped[float]=mapped_column(Float);tax:Mapped[float]=mapped_column(Float);total:Mapped[float]=mapped_column(Float);client_sale_id:Mapped[Optional[str]]=mapped_column(String(64),nullable=True);change_amount:Mapped[float]=mapped_column(Float,default=0);created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
 class SaleLine(Base):
  __tablename__="sale_lines"
  id:Mapped[int]=mapped_column(primary_key=True);sale_id:Mapped[int]=mapped_column(ForeignKey("sales.id"));product_id:Mapped[int]=mapped_column(ForeignKey("products.id"));label:Mapped[str]=mapped_column(String(150));quantity:Mapped[float]=mapped_column(Float);unit_price:Mapped[float]=mapped_column(Float);total:Mapped[float]=mapped_column(Float)
@@ -101,7 +103,18 @@ async def startup():
   async with engine.begin() as connection:
    await connection.execute(text("ALTER TABLE users ALTER COLUMN tenant_id DROP NOT NULL"))
    await connection.execute(text("UPDATE users SET tenant_id = NULL WHERE role = 'SUPER_ADMIN' AND tenant_id IS NOT NULL"))
+   await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS client_sale_id VARCHAR(64)"))
+   await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS change_amount DOUBLE PRECISION NOT NULL DEFAULT 0"))
+   await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
   print("[startup] Isolation du compte Super Admin appliquée", flush=True)
+ elif engine.dialect.name == "sqlite":
+  async with engine.begin() as connection:
+   columns={row[1] for row in (await connection.execute(text("PRAGMA table_info(sales)"))).all()}
+   if "client_sale_id" not in columns:
+    await connection.execute(text("ALTER TABLE sales ADD COLUMN client_sale_id VARCHAR(64)"))
+   if "change_amount" not in columns:
+    await connection.execute(text("ALTER TABLE sales ADD COLUMN change_amount FLOAT NOT NULL DEFAULT 0"))
+   await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
  print("[startup] Initialisation des données de démonstration", flush=True)
  # Import différé : seed.py réutilise les modèles et la session de ce module.
  from seed import seed
@@ -165,57 +178,100 @@ async def cash_close(cid:int,x:CloseCash,u:User=Depends(tenant_auth),db:AsyncSes
 class LineIn(BaseModel): product_id:int;quantity:float=Field(gt=0)
 class PayIn(BaseModel): method:str;amount:float=Field(gt=0);reference:str=""
 class SaleIn(BaseModel):
- warehouse_id:int;customer_id:Optional[int]=None;channel:str="COMMERCE";table_name:str="";lines:list[LineIn];payments:list[PayIn]
+ warehouse_id:int;customer_id:Optional[int]=None;channel:str="COMMERCE";table_name:str="";lines:list[LineIn];payments:list[PayIn];client_sale_id:Optional[str]=Field(default=None,min_length=8,max_length=64)
+def aggregate_sale_lines(lines:list[LineIn]):
+ combined={}
+ for line in lines:
+  combined[line.product_id]=combined.get(line.product_id,0)+line.quantity
+ return sorted(combined.items())
+def payment_settlement(total:float,payments:list[PayIn]):
+ credit=round(sum(p.amount for p in payments if p.method=="CREDIT_CLIENT"),2)
+ if credit>total: raise HTTPException(400,"Le crédit client dépasse le total de la vente")
+ amount_due=round(total-credit,2)
+ paid=round(sum(p.amount for p in payments if p.method!="CREDIT_CLIENT"),2)
+ if paid<amount_due: raise HTTPException(400,"Paiement insuffisant")
+ change=round(paid-amount_due,2)
+ cash_tendered=sum(p.amount for p in payments if p.method=="ESPECES")
+ if change>cash_tendered: raise HTTPException(400,"La monnaie doit être rendue sur le paiement en espèces")
+ return credit,change
 @app.post("/api/sales")
 async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
- cash=await db.scalar(select(Cash).where(Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN"))
+ tenant_id=u.tenant_id
+ if x.client_sale_id:
+  existing=await db.scalar(select(Sale).where(Sale.tenant_id==tenant_id,Sale.client_sale_id==x.client_sale_id))
+  if existing:
+   return {"id":existing.id,"status":existing.status,"total":existing.total,"change":existing.change_amount}
+ if not x.lines or not x.payments: raise HTTPException(400,"La vente doit contenir au moins un article et un paiement")
+ allowed_methods={"ESPECES","WAVE","ORANGE_MONEY","FREE_MONEY","CARTE_BANCAIRE","CREDIT_CLIENT"}
+ if any(p.method not in allowed_methods for p in x.payments): raise HTTPException(400,"Mode de paiement non pris en charge")
+ cash=await db.scalar(select(Cash).where(Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN").with_for_update())
  wh=await db.scalar(select(Warehouse).where(Warehouse.id==x.warehouse_id,Warehouse.tenant_id==u.tenant_id))
  if not cash or not wh: raise HTTPException(409,"Ouvrez la caisse et sélectionnez un dépôt")
  customer=None
  if x.customer_id:
-  customer=await db.scalar(select(Customer).where(Customer.id==x.customer_id,Customer.tenant_id==u.tenant_id))
+  customer=await db.scalar(select(Customer).where(Customer.id==x.customer_id,Customer.tenant_id==u.tenant_id).with_for_update())
   if not customer: raise HTTPException(404,"Client introuvable")
  items=[];subtotal=0;tax=0
- for line in x.lines:
-  p=await db.scalar(select(Product).where(Product.id==line.product_id,Product.tenant_id==u.tenant_id,Product.active.is_(True)))
+ for product_id,quantity in aggregate_sale_lines(x.lines):
+  p=await db.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==u.tenant_id,Product.active.is_(True)).with_for_update())
   if not p: raise HTTPException(404,"Article introuvable")
-  warehouse_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==p.id))
+  warehouse_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==p.id).with_for_update())
   recipe=[]
   if p.kind=="COMPOSE":
-   recipe=(await db.scalars(select(Recipe).where(Recipe.tenant_id==u.tenant_id,Recipe.product_id==p.id))).all()
+   recipe=(await db.scalars(select(Recipe).where(Recipe.tenant_id==u.tenant_id,Recipe.product_id==p.id).order_by(Recipe.ingredient_id))).all()
    if not recipe: raise HTTPException(409,f"Fiche recette absente : {p.name}")
    for part in recipe:
-    ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id))
-    ingredient_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==part.ingredient_id))
-    if not ingredient or not ingredient_stock or ingredient_stock.quantity<part.quantity*line.quantity: raise HTTPException(409,f"Stock ingrédient insuffisant : {ingredient.name if ingredient else 'inconnu'}")
-  elif not warehouse_stock or warehouse_stock.quantity<line.quantity: raise HTTPException(409,f"Stock insuffisant : {p.name}")
-  st=p.sale_price*line.quantity;items.append((p,line.quantity,st,recipe));subtotal+=st;tax+=st*p.tax_rate/100
- total=round(subtotal+tax,2);paid=sum(p.amount for p in x.payments)
- if paid<total: raise HTTPException(400,"Paiement insuffisant")
- credit=sum(p.amount for p in x.payments if p.method=="CREDIT_CLIENT")
+    ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id).with_for_update())
+    ingredient_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==part.ingredient_id).with_for_update())
+    if not ingredient or not ingredient_stock or ingredient_stock.quantity<part.quantity*quantity: raise HTTPException(409,f"Stock ingrédient insuffisant : {ingredient.name if ingredient else 'inconnu'}")
+  elif not warehouse_stock or warehouse_stock.quantity<quantity: raise HTTPException(409,f"Stock insuffisant : {p.name}")
+  st=p.sale_price*quantity;items.append((p,quantity,st,recipe));subtotal+=st;tax+=st*p.tax_rate/100
+ total=round(subtotal+tax,2)
+ credit,change=payment_settlement(total,x.payments)
  if credit and not customer: raise HTTPException(400,"Client obligatoire pour un crédit")
  if credit and customer.balance_due+credit>customer.credit_limit: raise HTTPException(409,"Plafond crédit dépassé")
- s=Sale(tenant_id=u.tenant_id,user_id=u.id,customer_id=x.customer_id,cash_id=cash.id,warehouse_id=wh.id,channel=x.channel,table_name=x.table_name,status="PAYE",subtotal=subtotal,tax=tax,total=total);db.add(s);await db.flush()
+ async def duplicate_result():
+  await db.rollback()
+  if x.client_sale_id:
+   existing=await db.scalar(select(Sale).where(Sale.tenant_id==tenant_id,Sale.client_sale_id==x.client_sale_id))
+   if existing:
+    return {"id":existing.id,"status":existing.status,"total":existing.total,"change":existing.change_amount}
+  raise HTTPException(409,"Conflit lors de l’enregistrement de la vente. Vérifiez la vente avant de recommencer.")
+ s=Sale(tenant_id=u.tenant_id,user_id=u.id,customer_id=x.customer_id,cash_id=cash.id,warehouse_id=wh.id,channel=x.channel,table_name=x.table_name,status="PAYE",subtotal=subtotal,tax=tax,total=total,client_sale_id=x.client_sale_id,change_amount=change);db.add(s)
+ try:
+  await db.flush()
+ except IntegrityError:
+  return await duplicate_result()
  for p,q,st,recipe in items:
   db.add(SaleLine(sale_id=s.id,product_id=p.id,label=p.name,quantity=q,unit_price=p.sale_price,total=st))
   if recipe:
    for part in recipe:
-    ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id))
+    ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id).with_for_update())
     ingredient.stock-=part.quantity*q
     ingredient_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==ingredient.id))
     ingredient_stock.quantity-=part.quantity*q
     db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wh.id,product_id=ingredient.id,kind="SORTIE_VENTE_RECETTE",quantity=-part.quantity*q,unit_cost=ingredient.purchase_price,reference=f"VTE-{s.id}"))
   else:
    p.stock-=q
-   warehouse_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==p.id))
+   warehouse_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==p.id).with_for_update())
    warehouse_stock.quantity-=q
    db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wh.id,product_id=p.id,kind="SORTIE_VENTE",quantity=-q,unit_cost=p.purchase_price,reference=f"VTE-{s.id}"))
+ change_remaining=change
  for p in x.payments:
-  db.add(Payment(sale_id=s.id,method=p.method,amount=p.amount,reference=p.reference))
-  if p.method=="ESPECES": cash.expected+=p.amount
+  applied=round(p.amount,2)
+  if p.method=="ESPECES" and change_remaining>0:
+   reduction=min(applied,change_remaining)
+   applied=round(applied-reduction,2)
+   change_remaining=round(change_remaining-reduction,2)
+  db.add(Payment(sale_id=s.id,method=p.method,amount=applied,reference=p.reference))
+  if p.method=="ESPECES": cash.expected+=applied
  if credit: customer.balance_due+=credit
  db.add(Audit(tenant_id=u.tenant_id,user_id=u.id,action="VENTE",detail=f"Vente {s.id} - {total:.0f} FCFA"))
- await db.commit();return {"id":s.id,"status":s.status,"total":total,"change":max(0,paid-total)}
+ try:
+  await db.commit()
+ except IntegrityError:
+  return await duplicate_result()
+ return {"id":s.id,"status":s.status,"total":total,"change":change}
 class StockIn(BaseModel): warehouse_id:int;product_id:int;quantity:float;unit_cost:float=0;kind:str="ENTREE_ACHAT"
 @app.get("/api/stock/movements")
 async def stock_movements(u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):

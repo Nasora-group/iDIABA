@@ -10,10 +10,10 @@ type Line={product:Product;qty:number};
 type Customer={id:number;name:string;phone:string;credit_limit:number;balance_due:number};
 type Supplier={id:number;name:string;phone:string;balance_due:number};
 class OfflineDB extends Dexie {
- queue!:Table<{id:string;payload:any;status:string;created:number}>;
+ queue!:Table<{id:string;tenant_id?:number|null;payload:any;status:string;created:number}>;
  products!:Table<Product,number>;
  cache!:Table<{key:string;value:any},string>;
- constructor(){super("idiaba-offline");this.version(1).stores({queue:"id,status,created"});this.version(2).stores({queue:"id,status,created",products:"id",cache:"key"});}
+ constructor(){super("idiaba-offline");this.version(1).stores({queue:"id,status,created"});this.version(2).stores({queue:"id,status,created",products:"id",cache:"key"});this.version(3).stores({queue:"id,status,created,tenant_id",products:"id",cache:"key"});}
 }
 const offline=new OfflineDB();
 const useAuth=create<{token:string|null;user:User|null;set:(t:string,u:User)=>void;clear:()=>void}>(set=>({
@@ -28,7 +28,7 @@ const api=async(path:string,body?:any,method?:string)=>{
   headers:{"Content-Type":"application/json",...(token?{Authorization:"Bearer "+token}:{})},
   ...(body!==undefined?{body:JSON.stringify(body)}:{})
  });
- if(!r.ok){let detail="Erreur API";try{detail=(await r.json()).detail||detail}catch{}throw new Error(detail);}
+ if(!r.ok){let detail="Erreur API";try{detail=(await r.json()).detail||detail}catch{}const error:any=new Error(detail);error.status=r.status;throw error;}
  if(r.status===204)return null;
  return r.json();
 };
@@ -44,7 +44,7 @@ export default function App(){
  const [form,setForm]=useState<any>({}),[busy,setBusy]=useState(false);
  const admin=user?.role==="ADMIN", manager=["ADMIN","GERANT"].includes(user?.role||""), stockRole=["ADMIN","GERANT","STOCK"].includes(user?.role||"");
  const tabs=user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]]:[["Caisse",ShoppingCart],["Catalogue",Archive],["Stocks",Package],["Clients",Users],...(manager?[["Fournisseurs",Truck],["Rapports",BarChart3]] as any:[]),...(admin?[["Utilisateurs",UserCog],["Gestion avancée",Layers]] as any:[])];
- useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue()};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine)syncQueue();return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[]);
+ useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue(user)};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine&&user)syncQueue(user);return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[user?.id,user?.role,user?.tenant_id]);
  async function refresh(current:User|null=user){
   const [p,w,c,cu,sa]=await Promise.all([api("/api/products"),api("/api/warehouses"),api("/api/cash/current"),api("/api/customers"),api("/api/sales")]);
   setProducts(p);setWarehouses(w);setCash(c);setCustomers(cu);setSales(sa);
@@ -53,11 +53,15 @@ export default function App(){
   if(["ADMIN","GERANT"].includes(current?.role||"")){const d=await api("/api/dashboard");setDash(d);await offline.cache.put({key:"dashboard",value:d});}
   if(["ADMIN","GERANT"].includes(current?.role||"")){setSuppliers(await api("/api/suppliers"));}
  }
- async function syncQueue(){
-  if(!navigator.onLine||user?.role==="SUPER_ADMIN")return;
+ async function syncQueue(currentUser:User|null=user){
+  if(!navigator.onLine||!currentUser||currentUser.role==="SUPER_ADMIN"||currentUser.tenant_id===null)return;
   const rows=await offline.queue.where("status").equals("PENDING").toArray();
-  for(const row of rows){try{await api("/api/sales",row.payload);await offline.queue.update(row.id,{status:"SYNCED"});}catch{break;}}
-  if(rows.length&&user)try{await refresh(user)}catch{}
+  for(const row of rows){
+   if(row.tenant_id!==currentUser.tenant_id){if(row.tenant_id==null)await offline.queue.update(row.id,{status:"ERROR"});continue;}
+   try{await api("/api/sales",row.payload);await offline.queue.update(row.id,{status:"SYNCED"});}
+   catch(e:any){if(e.status>=400&&e.status<500&&e.status!==401&&e.status!==403){await offline.queue.update(row.id,{status:"ERROR"});continue;}break;}
+  }
+  if(rows.length)try{await refresh(currentUser)}catch{}
  }
  useEffect(()=>{if(!token)return;let active=true;(async()=>{try{const me=await api("/api/auth/me");if(!active)return;set(token,me);if(me.role==="SUPER_ADMIN"){setTab("Gestion avancée");return;}await refresh(me);}catch(e:any){if(active){clear();setMsg("Session expirée. Veuillez vous reconnecter.");}}})();return()=>{active=false};},[token]);
  const filtered=products.filter(p=>(p.name+p.sku+p.barcode).toLowerCase().includes(search.toLowerCase()));
@@ -66,7 +70,24 @@ export default function App(){
  function add(p:Product){if(p.kind==="COMPOSE"&&p.stock<=0){/* recette pilotée par ingrédients */}setCart(a=>{const x=a.find(i=>i.product.id===p.id);return x?a.map(i=>i.product.id===p.id?{...i,qty:i.qty+1}:i):[...a,{product:p,qty:1}]});}
  async function openCash(){try{await api("/api/cash/open",{opening:Number(opening)});await refresh();setMsg("Caisse ouverte");}catch(e:any){setMsg(e.message)}}
  async function closeCash(){try{const r=await api("/api/cash/"+cash.id+"/close",{counted:Number(counted||0)});setMsg("Caisse clôturée. Écart : "+fmt(r.variance));setCash(null);setCounted("");await refresh();}catch(e:any){setMsg(e.message)}}
- async function checkout(method:string){if(!cart.length||!warehouses[0]||!cash)return;const payload={warehouse_id:warehouses[0].id,channel:"COMMERCE",lines:cart.map(x=>({product_id:x.product.id,quantity:x.qty})),payments:[{method,amount:total}]};try{if(!navigator.onLine){await offline.queue.add({id:crypto.randomUUID(),payload,status:"PENDING",created:Date.now()});setMsg("Vente mise en attente hors ligne.");}else{const r=await api("/api/sales",payload);setMsg("Vente #"+r.id+" encaissée. Monnaie : "+fmt(r.change));}setCart([]);await refresh();}catch(e:any){setMsg(e.message)}}
+ async function checkout(method:string){
+  if(!cart.length||!warehouses[0]||!cash||!user||user.tenant_id===null||busy)return;
+  setBusy(true);
+  const clientSaleId=crypto.randomUUID();
+  const payload={client_sale_id:clientSaleId,warehouse_id:warehouses[0].id,channel:"COMMERCE",lines:cart.map(x=>({product_id:x.product.id,quantity:x.qty})),payments:[{method,amount:total}]};
+  const queued={id:clientSaleId,tenant_id:user.tenant_id,payload,status:"PENDING",created:Date.now()};
+  try{
+   if(!navigator.onLine){
+    await offline.queue.put(queued);setCart([]);setMsg("Vente enregistrée localement. Synchronisation à la reconnexion.");return;
+   }
+   try{
+    const r=await api("/api/sales",payload);setCart([]);setMsg("Vente #"+r.id+" encaissée. Monnaie : "+fmt(r.change));try{await refresh()}catch{}
+   }catch(e:any){
+    if(!e.status||e.status>=500){await offline.queue.put(queued);setCart([]);setMsg("Connexion interrompue. Vente conservée localement pour synchronisation.");}
+    else{setMsg(e.message);}
+   }
+  }catch(e:any){setMsg(e.message);}finally{setBusy(false);}
+ }
  async function saveUser(e:any){e.preventDefault();setBusy(true);try{await api("/api/users",{name:form.name,email:form.email,password:form.password,role:form.role||"CAISSIER"});setForm({});setMsg("Utilisateur créé");await refresh();}catch(e:any){setMsg(e.message)}finally{setBusy(false)}}
  async function toggleUser(u:User){try{await api("/api/users/"+u.id+"/update",{active:!u.active});setMsg("Compte mis à jour");await refresh();}catch(e:any){setMsg(e.message)}}
  async function saveProduct(e:any){e.preventDefault();try{await api("/api/products",{sku:form.sku,name:form.name,barcode:form.barcode||"",category:form.category||"Général",unit:form.unit||"Pièce",purchase_price:Number(form.purchase_price||0),sale_price:Number(form.sale_price||0),tax_rate:Number(form.tax_rate??18),min_stock:Number(form.min_stock||0),kind:"SIMPLE"});setForm({});setMsg("Article ajouté");await refresh();}catch(e:any){setMsg(e.message)}}
@@ -79,7 +100,7 @@ export default function App(){
  {msg&&<p className="message" onClick={()=>setMsg("")}>{msg}　×</p>}
  {tab==="Caisse"&&<div className="pos"><section><div className="search"><Search/><input placeholder="Rechercher ou scanner un code-barres puis Entrée" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){const p=filtered.find(x=>x.barcode===search||x.sku===search)||filtered[0];if(p)add(p);setSearch("");}}}/></div><div className="products">{filtered.map(p=><button className="product" onClick={()=>add(p)} key={p.id}><small>{p.category}</small><b>{p.name}</b><strong>{fmt(p.sale_price)}</strong><span>Stock : {p.stock}</span></button>)}</div></section>
  <section className="cart"><h3>Panier ({cart.length})</h3>{cart.map(l=><div className="line" key={l.product.id}><div><b>{l.product.name}</b><small>{fmt(l.product.sale_price)}</small></div><button onClick={()=>setCart(a=>a.filter(x=>x.product.id!==l.product.id))}><Minus/></button><b>{l.qty}</b><button onClick={()=>add(l.product)}><Plus/></button><strong>{fmt(l.qty*l.product.sale_price)}</strong></div>)}<div className="total"><span>Total TTC</span><b>{fmt(total)}</b></div>
- {!cash?<><label>Fond de caisse (facultatif)<input type="number" min="0" value={opening} onChange={e=>setOpening(e.target.value)}/></label><button className="primary" onClick={openCash}>Ouvrir la caisse</button></>:<><div className="payments"><button className="primary" disabled={!cart.length} onClick={()=>checkout("ESPECES")}>Encaisser espèces</button>{["WAVE","ORANGE_MONEY","FREE_MONEY","CARTE_BANCAIRE"].map(x=><button key={x} disabled={!cart.length} onClick={()=>checkout(x)}>{x.replace("_"," ")}</button>)}</div><label>Montant compté à la clôture<input type="number" min="0" value={counted} onChange={e=>setCounted(e.target.value)} placeholder="Saisir le montant réel"/></label><button onClick={closeCash}>Clôturer ma caisse</button></>}
+ {!cash?<><label>Fond de caisse (facultatif)<input type="number" min="0" value={opening} onChange={e=>setOpening(e.target.value)}/></label><button className="primary" onClick={openCash}>Ouvrir la caisse</button></>:<><div className="payments"><button className="primary" disabled={!cart.length||busy} onClick={()=>checkout("ESPECES")}>Encaisser espèces</button>{["WAVE","ORANGE_MONEY","FREE_MONEY","CARTE_BANCAIRE"].map(x=><button key={x} disabled={!cart.length||busy} onClick={()=>checkout(x)}>{x.replace("_"," ")}</button>)}</div><label>Montant compté à la clôture<input type="number" min="0" value={counted} onChange={e=>setCounted(e.target.value)} placeholder="Saisir le montant réel"/></label><button onClick={closeCash}>Clôturer ma caisse</button></>}
  <small><Wallet/> {cash?"Caisse ouverte · Fond : "+fmt(cash.opening):"Caisse fermée"}</small></section></div>}
  {tab==="Catalogue"&&<div className="table"><h3>Articles</h3>{manager&&<form className="inline-form" onSubmit={saveProduct}><input required placeholder="Référence" value={form.sku||""} onChange={e=>setForm({...form,sku:e.target.value})}/><input required placeholder="Nom article" value={form.name||""} onChange={e=>setForm({...form,name:e.target.value})}/><input type="number" required placeholder="Prix vente" value={form.sale_price||""} onChange={e=>setForm({...form,sale_price:e.target.value})}/><button className="primary">Ajouter</button></form>}{products.map(p=><div className="row" key={p.id}><b>{p.name}</b><span>{p.sku}</span><strong>{fmt(p.sale_price)}</strong><span>{p.stock} {p.unit}</span></div>)}</div>}
  {tab==="Stocks"&&<div className="table"><h3>État des stocks</h3>{stockRole&&<form className="inline-form" onSubmit={stockMove}><select required value={form.product_id||""} onChange={e=>setForm({...form,product_id:e.target.value})}><option value="">Article</option>{products.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select><select value={form.warehouse_id||warehouses[0]?.id||""} onChange={e=>setForm({...form,warehouse_id:e.target.value})}>{warehouses.map(w=><option value={w.id} key={w.id}>{w.name}</option>)}</select><input required type="number" min="0.01" step="0.01" placeholder="Quantité" value={form.quantity||""} onChange={e=>setForm({...form,quantity:e.target.value})}/><select value={form.kind||"ENTREE_ACHAT"} onChange={e=>setForm({...form,kind:e.target.value})}><option value="ENTREE_ACHAT">Entrée achat</option><option value="PERTE_CASSE">Perte / casse</option><option value="AJUSTEMENT">Ajustement positif</option></select><button className="primary">Enregistrer</button></form>}{products.map(p=><div className="row" key={p.id}><b>{p.name}</b><span>{p.stock} {p.unit}</span><strong>{p.stock<=p.min_stock?"À réapprovisionner":"Disponible"}</strong></div>)}</div>}
