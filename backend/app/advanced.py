@@ -425,10 +425,12 @@ async def sale_refund(sale_id: int, x: RefundIn, user: User = Depends(auth), db:
             raise HTTPException(409, "La quantité retournée dépasse la quantité vendue")
         amount = round(line.unit_price * item.counted, 2)
         refund_amount += amount
-        product = await db.scalar(select(Product).where(Product.id == item.product_id, Product.tenant_id == user.tenant_id))
+        # Serialize returns for the same product, including when its warehouse row
+        # does not exist yet; the unique stock key alone would only reject a race.
+        product = await db.scalar(select(Product).where(Product.id == item.product_id, Product.tenant_id == user.tenant_id).with_for_update())
         if not product:
             raise HTTPException(404, "Article introuvable")
-        stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == sale.warehouse_id, WarehouseStock.product_id == product.id))
+        stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == sale.warehouse_id, WarehouseStock.product_id == product.id).with_for_update())
         if stock:
             stock.quantity += item.counted
         else:
