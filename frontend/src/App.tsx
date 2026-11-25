@@ -42,7 +42,8 @@ export default function App(){
  const [products,setProducts]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<any[]>([]),[cash,setCash]=useState<any>(null);
  const [customers,setCustomers]=useState<Customer[]>([]),[suppliers,setSuppliers]=useState<Supplier[]>([]),[users,setUsers]=useState<User[]>([]),[sales,setSales]=useState<any[]>([]);
  const [cart,setCart]=useState<Line[]>([]),[tab,setTab]=useState("Caisse"),[search,setSearch]=useState(""),[opening,setOpening]=useState("0"),[counted,setCounted]=useState(""),[msg,setMsg]=useState(""),[dash,setDash]=useState<any>(null);
- const [form,setForm]=useState<any>({}),[busy,setBusy]=useState(false);\n const [editingProduct,setEditingProduct]=useState<Product|null>(null),[importRows,setImportRows]=useState<any[]>([]),[importMode,setImportMode]=useState("REPLACE"),[importWarehouse,setImportWarehouse]=useState("");
+ const [form,setForm]=useState<any>({}),[busy,setBusy]=useState(false);
+ const [editingProduct,setEditingProduct]=useState<Product|null>(null),[importRows,setImportRows]=useState<any[]>([]),[importMode,setImportMode]=useState("REPLACE"),[importWarehouse,setImportWarehouse]=useState("");
  const admin=user?.role==="ADMIN", manager=["ADMIN","GERANT"].includes(user?.role||""), stockRole=["ADMIN","GERANT","STOCK"].includes(user?.role||"");
  const tabs=user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]]:[["Caisse",ShoppingCart],["Catalogue",Archive],["Stocks",Package],["Clients",Users],...(manager?[["Fournisseurs",Truck],["Rapports",BarChart3]] as any:[]),...(admin?[["Utilisateurs",UserCog],["Gestion avancée",Layers]] as any:[])];
  useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue(user)};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine&&user)syncQueue(user);return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[user?.id,user?.role,user?.tenant_id]);
