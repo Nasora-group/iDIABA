@@ -577,8 +577,8 @@ async def sale_invoice(sale_id: int, user: User = Depends(tenant_auth), db: Asyn
     if not sale:
         raise HTTPException(404, "Vente introuvable")
     tenant = await db.get(Tenant, user.tenant_id)
-    lines = (await db.scalars(select(SaleLine).where(SaleLine.sale_id == sale.id))).all()
-    rows = "".join(f"<tr><td>{escape(l.label)}</td><td>{l.quantity:g}</td><td>{l.unit_price:,.0f}</td><td>{l.total:,.0f}</td></tr>" for l in lines)
+    lines = (await db.execute(select(SaleLine, Product.unit).join(Product, Product.id == SaleLine.product_id).where(SaleLine.sale_id == sale.id))).all()
+    rows = "".join(f"<tr><td>{escape(l.label)}</td><td>{l.quantity:g} {escape(str(unit or 'Pièce'))}</td><td>{l.unit_price:,.0f}</td><td>{l.total:,.0f}</td></tr>" for l, unit in lines)
     html = f"""<!doctype html><html lang="fr"><meta charset="utf-8"><title>Ticket {sale.id}</title>
     <style>body{{font:14px Arial;max-width:620px;margin:24px auto;color:#222}}table{{width:100%;border-collapse:collapse}}td,th{{padding:8px;border-bottom:1px solid #ddd;text-align:left}}.total{{text-align:right;font-size:20px;font-weight:bold}}@media print{{button{{display:none}}}}</style>
     <h1>{escape(tenant.name)}</h1><p>{escape(tenant.address or '')} · {escape(tenant.phone or '')}</p>
