@@ -5,7 +5,7 @@ import {create} from "zustand";
 import Dexie,{type Table} from "dexie";
 
 type Product={id:number;sku:string;barcode:string;name:string;category:string;unit:string;sale_price:number;purchase_price?:number;tax_rate:number;stock:number;min_stock:number;kind?:string};
-type User={id:number;name:string;email:string;role:string;tenant_id:number;active?:boolean};
+type User={id:number;name:string;email:string;role:string;tenant_id:number|null;active?:boolean};
 type Line={product:Product;qty:number};
 type Customer={id:number;name:string;phone:string;credit_limit:number;balance_due:number};
 type Supplier={id:number;name:string;phone:string;balance_due:number};
@@ -43,7 +43,7 @@ export default function App(){
  const [cart,setCart]=useState<Line[]>([]),[tab,setTab]=useState("Caisse"),[search,setSearch]=useState(""),[opening,setOpening]=useState("0"),[counted,setCounted]=useState(""),[msg,setMsg]=useState(""),[dash,setDash]=useState<any>(null);
  const [form,setForm]=useState<any>({}),[busy,setBusy]=useState(false);
  const admin=user?.role==="ADMIN", manager=["ADMIN","GERANT"].includes(user?.role||""), stockRole=["ADMIN","GERANT","STOCK"].includes(user?.role||"");
- const tabs=[["Caisse",ShoppingCart],["Catalogue",Archive],["Stocks",Package],["Clients",Users],...(manager?[["Fournisseurs",Truck],["Rapports",BarChart3]] as any:[]),...(admin?[["Utilisateurs",UserCog],["Gestion avancée",Layers]] as any:[]),...(user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]] as any:[])];
+ const tabs=user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]]:[["Caisse",ShoppingCart],["Catalogue",Archive],["Stocks",Package],["Clients",Users],...(manager?[["Fournisseurs",Truck],["Rapports",BarChart3]] as any:[]),...(admin?[["Utilisateurs",UserCog],["Gestion avancée",Layers]] as any:[])];
  useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue()};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine)syncQueue();return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[]);
  async function refresh(current:User|null=user){
   const [p,w,c,cu,sa]=await Promise.all([api("/api/products"),api("/api/warehouses"),api("/api/cash/current"),api("/api/customers"),api("/api/sales")]);
@@ -59,7 +59,7 @@ export default function App(){
   for(const row of rows){try{await api("/api/sales",row.payload);await offline.queue.update(row.id,{status:"SYNCED"});}catch{break;}}
   if(rows.length&&user)try{await refresh(user)}catch{}
  }
- useEffect(()=>{if(!token)return;let active=true;(async()=>{try{const me=await api("/api/auth/me");if(!active)return;set(token,me);await refresh(me);}catch(e:any){if(active){clear();setMsg("Session expirée. Veuillez vous reconnecter.");}}})();return()=>{active=false};},[token]);
+ useEffect(()=>{if(!token)return;let active=true;(async()=>{try{const me=await api("/api/auth/me");if(!active)return;set(token,me);if(me.role==="SUPER_ADMIN"){setTab("Gestion avancée");return;}await refresh(me);}catch(e:any){if(active){clear();setMsg("Session expirée. Veuillez vous reconnecter.");}}})();return()=>{active=false};},[token]);
  const filtered=products.filter(p=>(p.name+p.sku+p.barcode).toLowerCase().includes(search.toLowerCase()));
  const total=useMemo(()=>cart.reduce((s,l)=>s+l.qty*l.product.sale_price*(1+l.product.tax_rate/100),0),[cart]);
  async function login(e:any){e.preventDefault();try{const r=await api("/api/auth/login",{email,password});set(r.access_token,r.user);setMsg("Connexion réussie");}catch(e:any){setMsg(e.message)}}
