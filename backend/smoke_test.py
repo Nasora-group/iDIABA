@@ -59,6 +59,7 @@ assert {
 print("ADVANCED ROUTES OK: profils, achats, réceptions, inventaires, transferts, valorisation, retours, restaurant, factures, SaaS")
 
 # Catalogue : création, modification et import Excel tenant-scoped.
-product_paths={route.path for route in app.routes}\nassert {"/api/products","/api/products/{product_id}","/api/products/import"} <= product_paths
+product_paths={route.path for route in app.routes}
+assert {"/api/products","/api/products/{product_id}","/api/products/import"} <= product_paths
 assert {"products","warehouse_stocks","stock_movements"} <= set(Base.metadata.tables)
-print("PRODUCT CATALOG OK: create, edit, Excel import, stock ledger and unit conversion routes")\n
+print("PRODUCT CATALOG OK: create, edit, Excel import, stock ledger and unit conversion routes")
