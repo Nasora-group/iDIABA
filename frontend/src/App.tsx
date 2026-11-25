@@ -54,7 +54,7 @@ export default function App(){
   if(["ADMIN","GERANT"].includes(current?.role||"")){setSuppliers(await api("/api/suppliers"));}
  }
  async function syncQueue(){
-  if(!navigator.onLine)return;
+  if(!navigator.onLine||user?.role==="SUPER_ADMIN")return;
   const rows=await offline.queue.where("status").equals("PENDING").toArray();
   for(const row of rows){try{await api("/api/sales",row.payload);await offline.queue.update(row.id,{status:"SYNCED"});}catch{break;}}
   if(rows.length&&user)try{await refresh(user)}catch{}
@@ -62,7 +62,7 @@ export default function App(){
  useEffect(()=>{if(!token)return;let active=true;(async()=>{try{const me=await api("/api/auth/me");if(!active)return;set(token,me);if(me.role==="SUPER_ADMIN"){setTab("Gestion avancée");return;}await refresh(me);}catch(e:any){if(active){clear();setMsg("Session expirée. Veuillez vous reconnecter.");}}})();return()=>{active=false};},[token]);
  const filtered=products.filter(p=>(p.name+p.sku+p.barcode).toLowerCase().includes(search.toLowerCase()));
  const total=useMemo(()=>cart.reduce((s,l)=>s+l.qty*l.product.sale_price*(1+l.product.tax_rate/100),0),[cart]);
- async function login(e:any){e.preventDefault();try{const r=await api("/api/auth/login",{email,password});set(r.access_token,r.user);setMsg("Connexion réussie");}catch(e:any){setMsg(e.message)}}
+ async function login(e:any){e.preventDefault();try{const r=await api("/api/auth/login",{email,password});set(r.access_token,r.user);if(r.user.role==="SUPER_ADMIN")setTab("Gestion avancée");setMsg("Connexion réussie");}catch(e:any){setMsg(e.message)}}
  function add(p:Product){if(p.kind==="COMPOSE"&&p.stock<=0){/* recette pilotée par ingrédients */}setCart(a=>{const x=a.find(i=>i.product.id===p.id);return x?a.map(i=>i.product.id===p.id?{...i,qty:i.qty+1}:i):[...a,{product:p,qty:1}]});}
  async function openCash(){try{await api("/api/cash/open",{opening:Number(opening)});await refresh();setMsg("Caisse ouverte");}catch(e:any){setMsg(e.message)}}
  async function closeCash(){try{const r=await api("/api/cash/"+cash.id+"/close",{counted:Number(counted||0)});setMsg("Caisse clôturée. Écart : "+fmt(r.variance));setCash(null);setCounted("");await refresh();}catch(e:any){setMsg(e.message)}}
