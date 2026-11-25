@@ -107,6 +107,14 @@ async def startup():
    await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS change_amount DOUBLE PRECISION NOT NULL DEFAULT 0"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
   print("[startup] Isolation du compte Super Admin appliquée", flush=True)
+ elif engine.dialect.name == "sqlite":
+  async with engine.begin() as connection:
+   columns={row[1] for row in (await connection.execute(text("PRAGMA table_info(sales)"))).all()}
+   if "client_sale_id" not in columns:
+    await connection.execute(text("ALTER TABLE sales ADD COLUMN client_sale_id VARCHAR(64)"))
+   if "change_amount" not in columns:
+    await connection.execute(text("ALTER TABLE sales ADD COLUMN change_amount FLOAT NOT NULL DEFAULT 0"))
+   await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
  print("[startup] Initialisation des données de démonstration", flush=True)
  # Import différé : seed.py réutilise les modèles et la session de ce module.
  from seed import seed
