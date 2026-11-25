@@ -288,6 +288,9 @@ async def users_update(uid:int,x:UserUpdate,u:User=Depends(roles("ADMIN")),db:As
  await db.commit()
  return {"id":item.id,"name":item.name,"email":item.email,"role":item.role,"active":item.active}
 
+# Modules métier additionnels (modèles chargés avant create_all au démarrage).
+from app import advanced  # noqa: F401
+
 # En production, l'API sert aussi l'application React compilée.
 _frontend=os.path.abspath(os.path.join(os.path.dirname(__file__),"../../frontend/dist"))
 if os.path.isdir(_frontend):
