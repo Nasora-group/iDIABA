@@ -30,7 +30,7 @@ assert {"ADMIN","GERANT","CAISSIER","VENDEUR","STOCK"} <= USER_ROLES
 # Modules complémentaires : modèles et routes chargés avant le démarrage.
 from app.advanced import (
     RoleProfile, PurchaseOrder, PurchaseLine, Inventory, InventoryLine,
-    Refund, RefundLine, RestaurantTable, KitchenOrder, KitchenOrderLine, Subscription, StockTransfer, StockTransferLine,
+    Refund, RefundLine, RefundPayment, RestaurantTable, KitchenOrder, KitchenOrderLine, Subscription, StockTransfer, StockTransferLine,
 )
 advanced_paths={route.path for route in app.routes}
 assert {
@@ -42,7 +42,7 @@ assert {
 } <= advanced_paths
 assert {
     "role_profiles", "purchase_orders", "purchase_lines", "inventories",
-    "inventory_lines", "refunds", "refund_lines", "restaurant_tables", "kitchen_orders",
+    "inventory_lines", "refunds", "refund_lines", "refund_payments", "restaurant_tables", "kitchen_orders",
     "kitchen_order_lines", "subscriptions", "stock_transfers", "stock_transfer_lines",
 } <= set(Base.metadata.tables)
 print("ADVANCED ROUTES OK: profils, achats, réceptions, inventaires, transferts, valorisation, retours, restaurant, factures, SaaS")

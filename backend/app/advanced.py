@@ -109,6 +109,18 @@ class RefundLine(Base):
     quantity: Mapped[float] = mapped_column(Float)
     amount: Mapped[float] = mapped_column(Float)
 
+class RefundPayment(Base):
+    """Journal des décaissements réellement effectués pour les remboursements."""
+    __tablename__ = "refund_payments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    refund_id: Mapped[int] = mapped_column(ForeignKey("refunds.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    method: Mapped[str] = mapped_column(String(24))
+    amount: Mapped[float] = mapped_column(Float)
+    reference: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 class RestaurantTable(Base):
     __tablename__ = "restaurant_tables"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -348,11 +360,11 @@ async def stock_transfer_create(x: TransferIn, user: User = Depends(auth), db: A
         product = await db.scalar(select(Product).where(Product.id == product_id, Product.tenant_id == user.tenant_id, Product.active.is_(True)))
         if not product:
             raise HTTPException(404, "Article introuvable dans cette entreprise")
-        source_stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == source.id, WarehouseStock.product_id == product.id))
+        source_stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == source.id, WarehouseStock.product_id == product.id).with_for_update())
         available = source_stock.quantity if source_stock else 0
         if available < quantity:
             raise HTTPException(409, f"Stock insuffisant pour {product.name} : disponible {available:g}")
-        destination_stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == destination.id, WarehouseStock.product_id == product.id))
+        destination_stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == user.tenant_id, WarehouseStock.warehouse_id == destination.id, WarehouseStock.product_id == product.id).with_for_update())
         prepared.append((product, source_stock, destination_stock, quantity))
     for product, source_stock, destination_stock, quantity in prepared:
         source_stock.quantity -= quantity
@@ -382,14 +394,23 @@ async def stock_valuation(user: User = Depends(auth), db: AsyncSession = Depends
 
 class RefundIn(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
+    refund_method: str = Field(min_length=3, max_length=24)
+    reference: str = Field(default="", max_length=100)
     lines: list[CountLine] = Field(min_length=1)
 
 @router.post("/sales/{sale_id}/refund")
 async def sale_refund(sale_id: int, x: RefundIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "sales.refund", db)
-    sale = await db.scalar(select(Sale).where(Sale.id == sale_id, Sale.tenant_id == user.tenant_id, Sale.status == "PAYE"))
+    if x.refund_method not in {"ESPECES", "WAVE", "ORANGE_MONEY", "CARTE", "VIREMENT"}:
+        raise HTTPException(400, "Mode de remboursement invalide")
+    sale = await db.scalar(select(Sale).where(Sale.id == sale_id, Sale.tenant_id == user.tenant_id, Sale.status == "PAYE").with_for_update())
     if not sale:
         raise HTTPException(404, "Vente introuvable, annulée ou déjà remboursée")
+    refund_cash = None
+    if x.refund_method == "ESPECES":
+        refund_cash = await db.scalar(select(Cash).where(Cash.tenant_id == user.tenant_id, Cash.user_id == user.id, Cash.status == "OPEN").with_for_update())
+        if not refund_cash:
+            raise HTTPException(409, "Ouvrez votre caisse avant un remboursement en espèces")
     original = (await db.scalars(select(SaleLine).where(SaleLine.sale_id == sale.id))).all()
     refund_amount = 0
     requested = {}
@@ -416,16 +437,20 @@ async def sale_refund(sale_id: int, x: RefundIn, user: User = Depends(auth), db:
         product.stock += item.counted
         db.add(Movement(tenant_id=user.tenant_id, warehouse_id=sale.warehouse_id, product_id=product.id, kind="RETOUR_CLIENT", quantity=item.counted, unit_cost=product.purchase_price, reference=f"RET-{sale.id}"))
         prepared.append((item.product_id, item.counted, amount))
-    if refund_amount > sale.total:
-        raise HTTPException(409, "Montant de remboursement supérieur à la vente")
+    already_refunded = await db.scalar(select(func.coalesce(func.sum(Refund.amount), 0)).where(Refund.sale_id == sale.id, Refund.tenant_id == user.tenant_id, Refund.status == "VALIDE"))
+    if float(already_refunded or 0) + refund_amount > sale.total + 0.001:
+        raise HTTPException(409, "Le cumul des remboursements dépasserait le montant de la vente")
     refund = Refund(tenant_id=user.tenant_id, sale_id=sale.id, user_id=user.id, reason=x.reason, amount=refund_amount)
     db.add(refund)
     await db.flush()
+    db.add(RefundPayment(tenant_id=user.tenant_id, refund_id=refund.id, user_id=user.id, method=x.refund_method, amount=refund_amount, reference=x.reference.strip()))
+    if refund_cash is not None:
+        refund_cash.expected -= refund_amount
     for product_id, quantity, amount in prepared:
         db.add(RefundLine(refund_id=refund.id, product_id=product_id, quantity=quantity, amount=amount))
-    db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="REMBOURSEMENT", detail=f"Vente {sale.id} : {refund_amount:.0f}"))
+    db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="REMBOURSEMENT", detail=f"Vente {sale.id} : {refund_amount:.0f} FCFA par {x.refund_method}"))
     await db.commit()
-    return {"status": "VALIDE", "amount": refund_amount}
+    return {"status": "VALIDE", "amount": refund_amount, "refund_method": x.refund_method, "cash_adjusted": refund_cash is not None}
 
 class TableIn(BaseModel):
     name: str = Field(min_length=1, max_length=40)
