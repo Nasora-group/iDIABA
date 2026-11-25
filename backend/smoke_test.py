@@ -62,4 +62,7 @@ print("ADVANCED ROUTES OK: profils, achats, réceptions, inventaires, transferts
 product_paths={route.path for route in app.routes}
 assert {"/api/products","/api/products/{product_id}","/api/products/import"} <= product_paths
 assert {"products","warehouse_stocks","stock_movements"} <= set(Base.metadata.tables)
-assert abs(unit_conversion("g","kg")-0.001)<1e-12\nassert abs(unit_conversion("L","ml")-1000)<1e-12\nassert unit_conversion("Pièce","Unité")==1\nprint("PRODUCT CATALOG OK: create, edit, Excel import, stock ledger and unit conversion routes")
+assert abs(unit_conversion("g","kg")-0.001)<1e-12
+assert abs(unit_conversion("L","ml")-1000)<1e-12
+assert unit_conversion("Pièce","Unité")==1
+print("PRODUCT CATALOG OK: create, edit, Excel import, stock ledger and unit conversion routes")
