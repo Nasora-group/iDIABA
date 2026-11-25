@@ -10,7 +10,7 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     autoDeployTrigger: checksPass
-    preDeployCommand: cd backend && python seed.py
+    preDeployCommand: cd backend && python -u -X faulthandler seed.py
     envVars:
       - key: DATABASE_URL
         fromDatabase:
