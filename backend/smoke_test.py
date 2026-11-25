@@ -57,3 +57,4 @@ assert {
     "kitchen_order_lines", "subscriptions", "stock_transfers", "stock_transfer_lines",
 } <= set(Base.metadata.tables)
 print("ADVANCED ROUTES OK: profils, achats, réceptions, inventaires, transferts, valorisation, retours, restaurant, factures, SaaS")
+\n# Catalogue : création, modification et import Excel tenant-scoped.\nproduct_paths={route.path for route in app.routes}\nassert {"/api/products","/api/products/{product_id}","/api/products/import"} <= product_paths\nassert {"products","warehouse_stocks","stock_movements"} <= set(Base.metadata.tables)\nprint("PRODUCT CATALOG OK: create, edit, Excel import, stock ledger and unit conversion routes")\n
