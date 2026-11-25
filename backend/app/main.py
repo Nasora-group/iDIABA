@@ -104,9 +104,19 @@ async def add_product(x:ProductIn,u:User=Depends(roles("ADMIN","GERANT")),db:Asy
 @app.get("/api/customers")
 async def customers(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"phone":x.phone,"credit_limit":x.credit_limit,"balance_due":x.balance_due} for x in (await db.scalars(select(Customer).where(Customer.tenant_id==u.tenant_id))).all()]
+class CustomerIn(BaseModel):
+ name:str;phone:str="";credit_limit:float=Field(ge=0)
+@app.post("/api/customers")
+async def customer_create(x:CustomerIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+ c=Customer(tenant_id=u.tenant_id,**x.model_dump());db.add(c);await db.commit();await db.refresh(c);return {"id":c.id,"name":c.name}
 @app.get("/api/suppliers")
 async def suppliers(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"phone":x.phone,"balance_due":x.balance_due} for x in (await db.scalars(select(Supplier).where(Supplier.tenant_id==u.tenant_id))).all()]
+class SupplierIn(BaseModel):
+ name:str;phone:str=""
+@app.post("/api/suppliers")
+async def supplier_create(x:SupplierIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+ c=Supplier(tenant_id=u.tenant_id,**x.model_dump());db.add(c);await db.commit();await db.refresh(c);return {"id":c.id,"name":c.name}
 class OpenCash(BaseModel): opening:float=Field(ge=0)
 @app.get("/api/cash/current")
 async def cash_current(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
@@ -171,6 +181,10 @@ async def sale_create(x:SaleIn,u:User=Depends(auth),db:AsyncSession=Depends(dbde
  db.add(Audit(tenant_id=u.tenant_id,user_id=u.id,action="VENTE",detail=f"Vente {s.id} - {total:.0f} FCFA"))
  await db.commit();return {"id":s.id,"status":s.status,"total":total,"change":max(0,paid-total)}
 class StockIn(BaseModel): warehouse_id:int;product_id:int;quantity:float;unit_cost:float=0;kind:str="ENTREE_ACHAT"
+@app.get("/api/stock/movements")
+async def stock_movements(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+ rows=(await db.scalars(select(Movement).where(Movement.tenant_id==u.tenant_id).order_by(Movement.created_at.desc()).limit(200))).all()
+ return [{"id":x.id,"warehouse_id":x.warehouse_id,"product_id":x.product_id,"kind":x.kind,"quantity":x.quantity,"unit_cost":x.unit_cost,"reference":x.reference,"created_at":x.created_at} for x in rows]
 @app.post("/api/stock/movements")
 async def stock_move(x:StockIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
  p=await db.scalar(select(Product).where(Product.id==x.product_id,Product.tenant_id==u.tenant_id));w=await db.scalar(select(Warehouse).where(Warehouse.id==x.warehouse_id,Warehouse.tenant_id==u.tenant_id))
