@@ -94,7 +94,7 @@ print("PUBLIC PAYMENT INSTRUCTIONS OK: seuls les moyens activés et complets son
 # Contrôle des permissions personnalisées : le backend doit refuser tout droit absent.
 from types import SimpleNamespace
 from fastapi import HTTPException
-from app.main import roles
+from app.main import roles, effective_permissions
 from app.advanced import PERMISSION_KEYS
 
 required_permissions = {
@@ -125,5 +125,21 @@ async def permission_guard_tests():
     else:
         raise AssertionError("Un profil sans users.write a pu accéder à la gestion des utilisateurs")
 
+async def effective_permission_tests():
+    custom = SimpleNamespace(role="RESPONSABLE", tenant_id=42)
+    profile = SimpleNamespace(permissions='["sales.write","stock.read"]')
+    granted = await effective_permissions(custom, FakePermissionDB(profile))
+    assert "sales.write" in granted and "sales.read" in granted
+    assert "stock.read" in granted
+    assert "users.write" not in granted
+    admin = SimpleNamespace(role="ADMIN", tenant_id=42)
+    assert required_permissions <= set(await effective_permissions(admin, FakePermissionDB(None)))
+    super_admin = SimpleNamespace(role="SUPER_ADMIN", tenant_id=None)
+    assert await effective_permissions(super_admin, FakePermissionDB(None)) == []
+    manager = SimpleNamespace(role="GERANT", tenant_id=42)
+    manager_permissions = set(await effective_permissions(manager, FakePermissionDB(None)))
+    assert "reports.read" in manager_permissions and "users.write" not in manager_permissions
+
 asyncio.run(permission_guard_tests())
-print("PERMISSIONS OK: catalogue complet et refus API des droits non attribués")
+asyncio.run(effective_permission_tests())
+print("PERMISSIONS OK: droits API, héritage lecture/écriture et menus par profil")
