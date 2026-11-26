@@ -89,3 +89,41 @@ assert public_enabled["providers"][1]["link"] == "https://pay.example.test"
 assert "Compte privé" not in str(public_enabled)
 assert "/api/public/payment-instructions" in {route.path for route in app.routes}
 print("PUBLIC PAYMENT INSTRUCTIONS OK: seuls les moyens activés et complets sont publiés")
+
+
+# Contrôle des permissions personnalisées : le backend doit refuser tout droit absent.
+from types import SimpleNamespace
+from fastapi import HTTPException
+from app.main import roles
+from app.advanced import PERMISSION_KEYS
+
+required_permissions = {
+    "users.read", "users.write", "catalog.read", "catalog.write",
+    "customers.read", "customers.write", "suppliers.read", "suppliers.write",
+    "cash.read", "cash.open", "cash.close", "purchases.read", "purchases.write",
+    "stock.read", "stock.write", "inventory.write", "sales.read", "sales.write",
+    "sales.refund", "restaurant.read", "restaurant.write", "reports.read",
+}
+assert required_permissions <= PERMISSION_KEYS
+
+class FakePermissionDB:
+    def __init__(self, profile):
+        self.profile = profile
+    async def scalar(self, query):
+        return self.profile
+
+async def permission_guard_tests():
+    guard = roles("ADMIN", permission="users.write")
+    custom_user = SimpleNamespace(role="RESPONSABLE", tenant_id=42)
+    allowed_profile = SimpleNamespace(permissions='["users.write"]')
+    assert await guard(custom_user, FakePermissionDB(allowed_profile)) is custom_user
+    denied_profile = SimpleNamespace(permissions='["sales.read"]')
+    try:
+        await guard(custom_user, FakePermissionDB(denied_profile))
+    except HTTPException as exc:
+        assert exc.status_code == 403
+    else:
+        raise AssertionError("Un profil sans users.write a pu accéder à la gestion des utilisateurs")
+
+asyncio.run(permission_guard_tests())
+print("PERMISSIONS OK: catalogue complet et refus API des droits non attribués")
