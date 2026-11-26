@@ -15,7 +15,7 @@ export default function AdvancedPanel({role,permissions=[]}:{role:string;permiss
  const [section,setSection]=useState(role==="SUPER_ADMIN"?"Super Admin":"Profils"),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false);
  const [profiles,setProfiles]=useState<any[]>([]),[selectedPermissions,setSelectedPermissions]=useState<string[]>([]),[catalog,setCatalog]=useState<string[]>([]);
  const [suppliers,setSuppliers]=useState<any[]>([]),[warehouses,setWarehouses]=useState<any[]>([]),[products,setProducts]=useState<any[]>([]),[sales,setSales]=useState<any[]>([]);
- const [purchases,setPurchases]=useState<any[]>([]),[tables,setTables]=useState<any[]>([]),[orders,setOrders]=useState<any[]>([]),[overview,setOverview]=useState<any>(null),[platformPaymentSettings,setPlatformPaymentSettings]=useState<any>({wave_enabled:false,wave_name:"",wave_phone:"",wave_link:"",orange_enabled:false,orange_name:"",orange_phone:"",orange_link:"",instructions:""}),[companies,setCompanies]=useState<any[]>([]),[registrations,setRegistrations]=useState<any[]>([]),[transfers,setTransfers]=useState<any[]>([]),[valuation,setValuation]=useState<any>(null);
+ const [purchases,setPurchases]=useState<any[]>([]),[tables,setTables]=useState<any[]>([]),[orders,setOrders]=useState<any[]>([]),[overview,setOverview]=useState<any>(null),[platformPaymentSettings,setPlatformPaymentSettings]=useState<any>({wave_enabled:false,wave_name:"",wave_phone:"",wave_link:"",orange_enabled:false,orange_name:"",orange_phone:"",orange_link:"",instructions:""}),[companies,setCompanies]=useState<any[]>([]),[registrations,setRegistrations]=useState<any[]>([]),[transfers,setTransfers]=useState<any[]>([]),[valuation,setValuation]=useState<any>(null),[movements,setMovements]=useState<any[]>([]);
  const [form,setForm]=useState<any>({});
  const [purchaseLines,setPurchaseLines]=useState<any[]>([{product_id:"",quantity:"",unit_cost:""}]);
  const [receivingOrder,setReceivingOrder]=useState<any>(null);
@@ -38,12 +38,12 @@ export default function AdvancedPanel({role,permissions=[]}:{role:string;permiss
    const [platformOverview,platformCompanies,platformRegistrations,paymentSettings]=await Promise.all([api("/api/platform/overview"),api("/api/platform/companies"),api("/api/platform/registrations"),api("/api/platform/payment-settings")]);
    setOverview(platformOverview);setCompanies(platformCompanies);setRegistrations(platformRegistrations);setPlatformPaymentSettings(paymentSettings);return;
   }
-  const [pr,pc,su,wh,pro,sa,po,tb,od,tr,va]=await Promise.all([
+  const [pr,pc,su,wh,pro,sa,po,tb,od,tr,va,mv]=await Promise.all([
    api("/api/profiles").catch(()=>[]),api("/api/permissions").catch(()=>[]),api("/api/suppliers").catch(()=>[]),
    api("/api/warehouses").catch(()=>[]),api("/api/products").catch(()=>[]),api("/api/sales").catch(()=>[]),
-   api("/api/purchases").catch(()=>[]),api("/api/restaurant/tables").catch(()=>[]),api("/api/restaurant/orders").catch(()=>[]),api("/api/stock/transfers").catch(()=>[]),api("/api/stock/valuation").catch(()=>null)
+   api("/api/purchases").catch(()=>[]),api("/api/restaurant/tables").catch(()=>[]),api("/api/restaurant/orders").catch(()=>[]),api("/api/stock/transfers").catch(()=>[]),api("/api/stock/valuation").catch(()=>null),api("/api/stock/movements").catch(()=>[])
   ]);
-  setProfiles(pr);setCatalog(pc);setSuppliers(su);setWarehouses(wh);setProducts(pro);setSales(sa);setPurchases(po);setTables(tb);setOrders(od);setTransfers(tr);setValuation(va);
+  setProfiles(pr);setCatalog(pc);setSuppliers(su);setWarehouses(wh);setProducts(pro);setSales(sa);setPurchases(po);setTables(tb);setOrders(od);setTransfers(tr);setValuation(va);setMovements(mv);
  };
  useEffect(()=>{load().catch((e:any)=>setMsg(e.message));},[]);
  async function downloadCsv(){try{const token=localStorage.getItem("idiaba_token");const r=await fetch("/api/sales/export.csv",{headers:token?{Authorization:"Bearer "+token}:{}});if(!r.ok)throw new Error("Export impossible");const url=URL.createObjectURL(await r.blob());const a=document.createElement("a");a.href=url;a.download="idiaba-ventes.csv";a.click();URL.revokeObjectURL(url);}catch(e:any){setMsg(e.message)}}
@@ -57,7 +57,8 @@ export default function AdvancedPanel({role,permissions=[]}:{role:string;permiss
   ...(has("stock.read","stock.write")?["Transferts & valeur"]:[]),
   ...(has("sales.refund")?["Retours"]:[]),
   ...(has("restaurant.read","restaurant.write")?["Restaurant"]:[]),
-  ...(has("sales.read")?["Factures"]:[])
+  ...(has("sales.read")?["Factures"]:[]),
+  ...(has("finance.read","finance.write","payables.read","payables.write","receivables.read","receivables.write")?["Finance"]:[])
  ];
  useEffect(()=>{if(sections.length&&!sections.includes(section))setSection(sections[0]);},[sections.join("|"),section]);
  return <div style={{padding:16,maxWidth:1100,margin:"auto"}}>
@@ -105,10 +106,11 @@ export default function AdvancedPanel({role,permissions=[]}:{role:string;permiss
    </div>)}
   </section>}
   {section==="Inventaires"&&<InventorySection warehouses={warehouses} run={run} busy={busy}/>}
-  {section==="Transferts & valeur"&&<section style={box}><h3><Layers size={18}/> Transferts entre dépôts et valorisation</h3>{has("stock.write")&&<form onSubmit={e=>{e.preventDefault();run(()=>api("/api/stock/transfers",{source_warehouse_id:Number(form.source_warehouse_id),destination_warehouse_id:Number(form.destination_warehouse_id),reference:form.transfer_reference,lines:[{product_id:Number(form.transfer_product),quantity:Number(form.transfer_quantity)}]}),"Transfert de stock effectué");}} style={{display:"flex",gap:8,flexWrap:"wrap"}}><input required placeholder="Référence transfert" value={form.transfer_reference||""} onChange={e=>update("transfer_reference",e.target.value)} style={field}/><select required value={form.source_warehouse_id||""} onChange={e=>update("source_warehouse_id",e.target.value)} style={field}><option value="">Dépôt source</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select><select required value={form.destination_warehouse_id||""} onChange={e=>update("destination_warehouse_id",e.target.value)} style={field}><option value="">Dépôt destination</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select><select required value={form.transfer_product||""} onChange={e=>update("transfer_product",e.target.value)} style={field}><option value="">Article</option>{products.map(p=><option key={p.id} value={p.id}>{p.name} · stock global {p.stock}</option>)}</select><input required type="number" min="0.01" step="0.01" placeholder="Quantité" value={form.transfer_quantity||""} onChange={e=>update("transfer_quantity",e.target.value)} style={field}/><button style={btn} disabled={busy}>Valider le transfert</button></form>}<h4>Historique des transferts</h4>{transfers.map(t=><p key={t.id}>{t.reference} · dépôt {t.source_warehouse_id} → {t.destination_warehouse_id} · {t.status}</p>)}<h4>Valeur du stock au coût d'achat</h4><p><b>{Number(valuation?.total_value||0).toLocaleString("fr-FR")} FCFA</b></p><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr><th>Article</th><th>Quantité</th><th>Coût unitaire</th><th>Valeur</th></tr></thead><tbody>{(valuation?.items||[]).map((v:any)=><tr key={v.product_id}><td>{v.name}</td><td>{v.quantity}</td><td>{Number(v.unit_cost).toLocaleString("fr-FR")}</td><td>{Number(v.value).toLocaleString("fr-FR")}</td></tr>)}</tbody></table></div></section>}
+  {section==="Transferts & valeur"&&<section style={box}><h3><Layers size={18}/> Transferts entre dépôts et valorisation</h3>{has("stock.write")&&<form onSubmit={e=>{e.preventDefault();run(()=>api("/api/stock/transfers",{source_warehouse_id:Number(form.source_warehouse_id),destination_warehouse_id:Number(form.destination_warehouse_id),reference:form.transfer_reference,lines:[{product_id:Number(form.transfer_product),quantity:Number(form.transfer_quantity)}]}),"Transfert de stock effectué");}} style={{display:"flex",gap:8,flexWrap:"wrap"}}><input required placeholder="Référence transfert" value={form.transfer_reference||""} onChange={e=>update("transfer_reference",e.target.value)} style={field}/><select required value={form.source_warehouse_id||""} onChange={e=>update("source_warehouse_id",e.target.value)} style={field}><option value="">Dépôt source</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select><select required value={form.destination_warehouse_id||""} onChange={e=>update("destination_warehouse_id",e.target.value)} style={field}><option value="">Dépôt destination</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select><select required value={form.transfer_product||""} onChange={e=>update("transfer_product",e.target.value)} style={field}><option value="">Article</option>{products.map(p=><option key={p.id} value={p.id}>{p.name} · stock global {p.stock}</option>)}</select><input required type="number" min="0.01" step="0.01" placeholder="Quantité" value={form.transfer_quantity||""} onChange={e=>update("transfer_quantity",e.target.value)} style={field}/><button style={btn} disabled={busy}>Valider le transfert</button></form>}<h4>Historique des transferts</h4>{transfers.map(t=><p key={t.id}>{t.reference} · dépôt {warehouses.find(w=>w.id===t.source_warehouse_id)?.name||t.source_warehouse_id} → {warehouses.find(w=>w.id===t.destination_warehouse_id)?.name||t.destination_warehouse_id} · {t.status}</p>)}<h4>Journal des mouvements de stock</h4>{movements.length===0?<p>Aucun mouvement récent.</p>:movements.slice(0,30).map(m=><div key={m.id} style={{display:"flex",gap:10,justifyContent:"space-between",flexWrap:"wrap",padding:"6px 0",borderBottom:"1px solid #e5e7eb",fontSize:13}}><span>{new Date(m.created_at).toLocaleString("fr-FR")} · {products.find(p=>p.id===m.product_id)?.name||("Article #"+m.product_id)}</span><span>{warehouses.find(w=>w.id===m.warehouse_id)?.name||("Dépôt #"+m.warehouse_id)} · {m.kind}</span><b>{Number(m.quantity)>0?"+":""}{m.quantity}</b></div>)}<h4>Valeur du stock au coût d'achat</h4><p><b>{Number(valuation?.total_value||0).toLocaleString("fr-FR")} FCFA</b></p><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr><th>Article</th><th>Quantité</th><th>Coût unitaire</th><th>Valeur</th></tr></thead><tbody>{(valuation?.items||[]).map((v:any)=><tr key={v.product_id}><td>{v.name}</td><td>{v.quantity}</td><td>{Number(v.unit_cost).toLocaleString("fr-FR")}</td><td>{Number(v.value).toLocaleString("fr-FR")}</td></tr>)}</tbody></table></div></section>}
   {section==="Retours"&&<section style={box}><h3><RotateCcw size={18}/> Retours et remboursements</h3><form onSubmit={e=>{e.preventDefault();run(()=>api("/api/sales/"+Number(form.sale_id)+"/refund",{reason:form.reason,refund_method:form.refund_method,reference:form.refund_reference||"",lines:[{product_id:Number(form.product_id),counted:Number(form.quantity)}]}),"Remboursement enregistré");}} style={{display:"flex",gap:8,flexWrap:"wrap"}}><select required value={form.sale_id||""} onChange={e=>update("sale_id",e.target.value)} style={field}><option value="">Vente</option>{sales.map(s=><option key={s.id} value={s.id}>Vente #{s.id} · {s.total} FCFA</option>)}</select><select required value={form.product_id||""} onChange={e=>update("product_id",e.target.value)} style={field}><option value="">Article retourné</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><input required type="number" min="0.01" step="0.01" placeholder="Quantité" value={form.quantity||""} onChange={e=>update("quantity",e.target.value)} style={field}/><input required placeholder="Motif du retour" value={form.reason||""} onChange={e=>update("reason",e.target.value)} style={field}/><select required value={form.refund_method||""} onChange={e=>update("refund_method",e.target.value)} style={field}><option value="">Mode de remboursement</option><option value="ESPECES">Espèces (caisse ouverte)</option><option value="WAVE">Wave</option><option value="ORANGE_MONEY">Orange Money</option><option value="CARTE">Carte</option><option value="VIREMENT">Virement</option></select><input placeholder="Référence de paiement" value={form.refund_reference||""} onChange={e=>update("refund_reference",e.target.value)} style={field}/><button style={btn} disabled={busy}>Enregistrer retour et remboursement</button></form><small>Chaque retour est journalisé et remet l'article en stock. Le mode et la référence du remboursement sont journalisés. En espèces, la sortie est déduite de la caisse ouverte.</small></section>}
   {section==="Restaurant"&&<section style={box}><h3><Utensils size={18}/> Tables et commandes internes</h3>{has("restaurant.write")&&<form onSubmit={e=>{e.preventDefault();run(()=>api("/api/restaurant/tables",{name:form.table_name,seats:Number(form.seats||4)}),"Table créée");}} style={{display:"flex",gap:8,flexWrap:"wrap"}}><input required placeholder="Nom / numéro de table" value={form.table_name||""} onChange={e=>update("table_name",e.target.value)} style={field}/><input type="number" min="1" placeholder="Places" value={form.seats||4} onChange={e=>update("seats",e.target.value)} style={field}/><button style={btn}>Ajouter table</button></form>}<p>{tables.map(t=><span key={t.id} style={{marginRight:12}}>{t.name} ({t.seats} places)</span>)}</p>{has("restaurant.write")&&<form onSubmit={e=>{e.preventDefault();run(()=>api("/api/restaurant/orders",{table_id:form.table_id?Number(form.table_id):null,note:form.note||"",lines:[{product_id:Number(form.order_product),counted:Number(form.order_quantity)}]}),"Commande cuisine envoyée");}} style={{display:"flex",gap:8,flexWrap:"wrap"}}><select value={form.table_id||""} onChange={e=>update("table_id",e.target.value)} style={field}><option value="">À emporter / sans table</option>{tables.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select><select required value={form.order_product||""} onChange={e=>update("order_product",e.target.value)} style={field}><option value="">Plat / article</option>{products.filter(p=>p.kind==="COMPOSE"||p.category==="Restaurant").map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><input required type="number" min="1" value={form.order_quantity||1} onChange={e=>update("order_quantity",e.target.value)} style={field}/><input placeholder="Note cuisine" value={form.note||""} onChange={e=>update("note",e.target.value)} style={field}/><button style={btn}>Envoyer en cuisine</button></form>}{orders.map(o=><p key={o.id}>Commande #{o.id} · {o.status} {has("restaurant.write")&&<select value={o.status} onChange={e=>run(()=>api("/api/restaurant/orders/"+o.id+"/status?status="+e.target.value,undefined,"POST"),"Statut mis à jour")}><option>A_PREPARER</option><option>EN_PREPARATION</option><option>PRETE</option><option>SERVIE</option><option>ANNULEE</option></select>}</p>)}</section>}
   {section==="Factures"&&<section style={box}><h3><Printer size={18}/> Tickets, factures et exports</h3><button style={btn} onClick={downloadCsv}>Exporter les ventes CSV</button>{sales.map(s=><p key={s.id}>Vente #{s.id} · {Number(s.total).toLocaleString("fr-FR")} FCFA · <button style={btn} onClick={()=>openInvoice(s.id)}>Ouvrir / Imprimer</button></p>)}</section>}
+  {section==="Finance"&&<FinanceSection permissions={permissions}/>}
   {section==="Super Admin"&&<section style={box}><h3><Building2 size={18}/> Super Admin SaaS</h3>{overview?<><p>Entreprises : <b>{overview.companies}</b> · Utilisateurs : <b>{overview.users}</b></p><form onSubmit={e=>{e.preventDefault();run(()=>api("/api/platform/companies",{name:form.company_name,mode:form.mode||"HYBRIDE",address:form.address||"",phone:form.phone||"",currency:"FCFA",tax_rate:18,admin_name:form.admin_name,admin_email:form.admin_email,admin_password:form.admin_password}),"Entreprise créée");}} style={{display:"flex",gap:8,flexWrap:"wrap"}}><input required placeholder="Nom entreprise" value={form.company_name||""} onChange={e=>update("company_name",e.target.value)} style={field}/><input required placeholder="Nom administrateur" value={form.admin_name||""} onChange={e=>update("admin_name",e.target.value)} style={field}/><input required type="email" placeholder="E-mail admin" value={form.admin_email||""} onChange={e=>update("admin_email",e.target.value)} style={field}/><input required minLength={8} type="password" placeholder="Mot de passe admin" value={form.admin_password||""} onChange={e=>update("admin_password",e.target.value)} style={field}/><button style={btn}>Créer entreprise</button></form><h4 style={{marginTop:24}}>Demandes d'inscription ({registrations.filter((r:any)=>r.status==="EN_ATTENTE").length} en attente)</h4>
   {registrations.length===0?<p>Aucune demande reçue.</p>:registrations.map((r:any)=><div key={r.id} style={{padding:10,borderBottom:"1px solid #eee"}}>
    <b>{r.company_name}</b> · {r.mode} · <span style={{fontSize:13}}>{r.status}</span>
@@ -198,3 +200,101 @@ function InventorySection({warehouses,run,busy}:{warehouses:any[];run:any;busy:b
   </div>}
  </section>
 }
+
+
+function FinanceSection({permissions}:{permissions:string[]}){
+ const [summary,setSummary]=useState<any>(null),[invoices,setInvoices]=useState<any[]>([]),[receipts,setReceipts]=useState<any[]>([]),[expenses,setExpenses]=useState<any[]>([]),[sessions,setSessions]=useState<any[]>([]),[suppliers,setSuppliers]=useState<any[]>([]),[customers,setCustomers]=useState<any[]>([]);
+ const [start,setStart]=useState(()=>{const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10);});
+ const [end,setEnd]=useState(()=>new Date().toISOString().slice(0,10));
+ const [invoice,setInvoice]=useState<any>({reference:"",issue_date:new Date().toISOString().slice(0,10),due_date:"",total:""});
+ const [payment,setPayment]=useState<any>({amount:"",method:"VIREMENT",reference:""});
+ const [receipt,setReceipt]=useState<any>({customer_id:"",amount:"",method:"ESPECES",reference:""});
+ const [expense,setExpense]=useState<any>({category:"Frais généraux",label:"",amount:"",method:"ESPECES",reference:""});
+ const [msg,setMsg]=useState(""),[busy,setBusy]=useState(false);
+ const has=(...keys:string[])=>keys.some(k=>permissions.includes(k));
+ const load=async()=>{
+  const tasks:any[]=[
+   has("finance.read","reports.read")?api("/api/finance/summary?start="+start+"&end="+end).catch(()=>null):Promise.resolve(null),
+   has("payables.read")?api("/api/finance/supplier-invoices").catch(()=>[]):Promise.resolve([]),
+   has("receivables.read")?api("/api/finance/customer-receipts").catch(()=>[]):Promise.resolve([]),
+   has("finance.read")?api("/api/finance/expenses").catch(()=>[]):Promise.resolve([]),
+   has("cash.read")?api("/api/finance/cash-sessions").catch(()=>[]):Promise.resolve([]),
+   has("payables.write")?api("/api/suppliers").catch(()=>[]):Promise.resolve([]),
+   has("receivables.write")?api("/api/customers").catch(()=>[]):Promise.resolve([])
+  ];
+  const [s,i,r,e,c,su,cu]=await Promise.all(tasks);
+  setSummary(s);setInvoices(i);setReceipts(r);setExpenses(e);setSessions(c);setSuppliers(su);setCustomers(cu);
+ };
+ useEffect(()=>{load().catch((e:any)=>setMsg(e.message));},[permissions.join("|")]);
+ const act=async(fn:()=>Promise<any>,done:string)=>{
+  setBusy(true);setMsg("");
+  try{await fn();await load();setMsg(done);}
+  catch(e:any){setMsg(e.message);}
+  finally{setBusy(false);}
+ };
+ const money=(v:number)=>Number(v||0).toLocaleString("fr-FR",{maximumFractionDigits:0})+" FCFA";
+ return <section style={box}>
+  <h3><Building2 size={18}/> Finance et trésorerie</h3>
+  {msg&&<p role="status" style={{padding:9,background:"#fef2f2",borderRadius:8}}>{msg}</p>}
+  {has("finance.read","reports.read")&&<>
+   <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"end"}}>
+    <label>Période début<input type="date" value={start} onChange={e=>setStart(e.target.value)} style={field}/></label>
+    <label>Période fin<input type="date" value={end} onChange={e=>setEnd(e.target.value)} style={field}/></label>
+    <button type="button" style={btn} onClick={()=>act(load,"Rapport actualisé")} disabled={busy}>Actualiser</button>
+   </div>
+   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:8,marginTop:14}}>
+    {[[ "Chiffre d'affaires",summary?.sales_total ],["Dépenses",summary?.expenses_total],["Créances clients",summary?.receivables],["Dettes fournisseurs",summary?.payables],["Caisse ouverte",summary?.open_cash_expected],["Encaissements clients",summary?.customer_collections],["Règlements fournisseurs",summary?.supplier_payments]].map(([label,value]:any)=><div key={label} style={{padding:12,border:"1px solid #e5e7eb",borderRadius:9}}><small>{label}</small><b style={{display:"block",marginTop:4}}>{money(value||0)}</b></div>)}
+   </div>
+   <h4>Ventes par jour</h4>
+   {(summary?.daily_sales||[]).length===0?<p>Aucune vente sur cette période.</p>:(summary.daily_sales||[]).map((d:any)=><div key={d.date} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #e5e7eb"}}><span>{new Date(d.date+"T00:00:00").toLocaleDateString("fr-FR")} · {d.count} ventes</span><b>{money(d.total)}</b></div>)}
+   <h4>Meilleures ventes produits</h4>
+   {(summary?.top_products||[]).map((p:any)=><div key={p.product_id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0"}}><span>{p.name} · {p.quantity}</span><b>{money(p.total)}</b></div>)}
+   <h4>Répartition des paiements des ventes</h4>
+   {(summary?.payments_by_method||[]).map((p:any)=><div key={p.method} style={{display:"flex",justifyContent:"space-between",padding:"5px 0"}}><span>{p.method}</span><b>{money(p.amount)}</b></div>)}
+  </>}
+  {has("payables.write")&&<><h4>Enregistrer une facture fournisseur</h4>
+   <form onSubmit={e=>{e.preventDefault();act(async()=>{await api("/api/finance/supplier-invoices",{...invoice,supplier_id:Number(invoice.supplier_id),total:Number(invoice.total),due_date:invoice.due_date||null});setInvoice({reference:"",issue_date:new Date().toISOString().slice(0,10),due_date:"",total:""});},"Facture fournisseur enregistrée");}} style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+    <select required value={invoice.supplier_id||""} onChange={e=>setInvoice((v:any)=>({...v,supplier_id:e.target.value}))} style={field}><option value="">Fournisseur</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+    <input required placeholder="Référence facture" value={invoice.reference} onChange={e=>setInvoice((v:any)=>({...v,reference:e.target.value}))} style={field}/>
+    <input required type="date" value={invoice.issue_date} onChange={e=>setInvoice((v:any)=>({...v,issue_date:e.target.value}))} style={field}/>
+    <input type="date" value={invoice.due_date} onChange={e=>setInvoice((v:any)=>({...v,due_date:e.target.value}))} style={field}/>
+    <input required type="number" min="0.01" step="0.01" placeholder="Montant FCFA" value={invoice.total} onChange={e=>setInvoice((v:any)=>({...v,total:e.target.value}))} style={field}/>
+    <button style={btn} disabled={busy}>Enregistrer la dette</button>
+   </form>
+  </>}
+  {has("payables.read")&&<><h4>Dettes fournisseurs et règlements</h4>
+   {invoices.map(i=><div key={i.id} style={{padding:10,borderBottom:"1px solid #e5e7eb"}}>
+    <div style={{display:"flex",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}><span><b>{i.supplier_name}</b> · {i.reference} · {i.status}</span><b>Reste : {money(i.remaining)}</b></div>
+    {i.remaining>0&&has("payables.write")&&<form onSubmit={e=>{e.preventDefault();act(async()=>{await api("/api/finance/supplier-invoices/"+i.id+"/payments",{amount:Number(payment.amount),method:payment.method,reference:payment.reference});setPayment({amount:"",method:"VIREMENT",reference:""});},"Règlement fournisseur enregistré");}} style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+     <input required type="number" min="0.01" max={i.remaining} step="0.01" placeholder={"Montant (reste "+i.remaining+")"} value={payment.amount} onChange={e=>setPayment((v:any)=>({...v,amount:e.target.value}))} style={field}/>
+     <select value={payment.method} onChange={e=>setPayment((v:any)=>({...v,method:e.target.value}))} style={field}><option value="ESPECES">Espèces</option><option value="WAVE">Wave</option><option value="ORANGE_MONEY">Orange Money</option><option value="VIREMENT">Virement</option><option value="CARTE_BANCAIRE">Carte</option></select>
+     <input placeholder="Référence paiement" value={payment.reference} onChange={e=>setPayment((v:any)=>({...v,reference:e.target.value}))} style={field}/>
+     <button style={btn} disabled={busy}>Régler</button>
+    </form>}
+   </div>)}
+  </>}
+  {has("receivables.write")&&<><h4>Encaisser une créance client</h4>
+   <form onSubmit={e=>{e.preventDefault();act(async()=>{await api("/api/finance/customer-receipts",{customer_id:Number(receipt.customer_id),amount:Number(receipt.amount),method:receipt.method,reference:receipt.reference});setReceipt({customer_id:"",amount:"",method:"ESPECES",reference:""});},"Encaissement client enregistré");}} style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+    <select required value={receipt.customer_id} onChange={e=>setReceipt((v:any)=>({...v,customer_id:e.target.value}))} style={field}><option value="">Client</option>{customers.filter(c=>Number(c.balance_due)>0).map(c=><option key={c.id} value={c.id}>{c.name} · reste {money(c.balance_due)}</option>)}</select>
+    <input required type="number" min="0.01" step="0.01" placeholder="Montant encaissé" value={receipt.amount} onChange={e=>setReceipt((v:any)=>({...v,amount:e.target.value}))} style={field}/>
+    <select value={receipt.method} onChange={e=>setReceipt((v:any)=>({...v,method:e.target.value}))} style={field}><option value="ESPECES">Espèces</option><option value="WAVE">Wave</option><option value="ORANGE_MONEY">Orange Money</option><option value="FREE_MONEY">Free Money</option><option value="VIREMENT">Virement</option></select>
+    <input placeholder="Référence paiement" value={receipt.reference} onChange={e=>setReceipt((v:any)=>({...v,reference:e.target.value}))} style={field}/>
+    <button style={btn} disabled={busy}>Enregistrer l'encaissement</button>
+   </form>
+  </>}
+  {has("receivables.read")&&<><h4>Historique des encaissements clients</h4>{receipts.slice(0,30).map(r=><p key={r.id}>{r.customer_name} · {new Date(r.created_at).toLocaleDateString("fr-FR")} · {r.method} · <b>{money(r.amount)}</b> {r.reference}</p>)}</>}
+  {has("finance.write")&&<><h4>Enregistrer une dépense</h4>
+   <form onSubmit={e=>{e.preventDefault();act(async()=>{await api("/api/finance/expenses",{...expense,amount:Number(expense.amount)});setExpense({category:"Frais généraux",label:"",amount:"",method:"ESPECES",reference:""});},"Dépense enregistrée");}} style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+    <input required placeholder="Catégorie" value={expense.category} onChange={e=>setExpense((v:any)=>({...v,category:e.target.value}))} style={field}/>
+    <input required placeholder="Libellé de la dépense" value={expense.label} onChange={e=>setExpense((v:any)=>({...v,label:e.target.value}))} style={field}/>
+    <input required type="number" min="0.01" step="0.01" placeholder="Montant FCFA" value={expense.amount} onChange={e=>setExpense((v:any)=>({...v,amount:e.target.value}))} style={field}/>
+    <select value={expense.method} onChange={e=>setExpense((v:any)=>({...v,method:e.target.value}))} style={field}><option value="ESPECES">Espèces</option><option value="WAVE">Wave</option><option value="ORANGE_MONEY">Orange Money</option><option value="VIREMENT">Virement</option><option value="CARTE_BANCAIRE">Carte</option></select>
+    <input placeholder="Référence" value={expense.reference} onChange={e=>setExpense((v:any)=>({...v,reference:e.target.value}))} style={field}/>
+    <button style={btn} disabled={busy}>Enregistrer la dépense</button>
+   </form>
+  </>}
+  {has("finance.read")&&<><h4>Dernières dépenses</h4>{expenses.slice(0,30).map(e=><p key={e.id}>{new Date(e.created_at).toLocaleDateString("fr-FR")} · {e.category} · {e.label} · {e.method} · <b>{money(e.amount)}</b></p>)}</>}
+  {has("cash.read")&&<><h4>Historique des sessions de caisse</h4>{sessions.slice(0,30).map(s=><p key={s.id}>{s.user_name} · {new Date(s.opened_at).toLocaleString("fr-FR")} · {s.status} · Fond {money(s.opening)} · Attendu {money(s.expected)} · Compté {money(s.counted)} · Écart {money(s.variance)}<small style={{display:"block",color:"#64748b"}}>Dépenses {money(s.expenses)} · Paiements fournisseurs {money(s.supplier_payments)} · Encaissements clients {money(s.customer_receipts)}</small></p>)}</>}
+ </section>;
+}
+

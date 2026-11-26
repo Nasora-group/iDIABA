@@ -5,20 +5,20 @@ import secrets
 import calendar
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, date, time, timedelta
 from html import escape
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from pydantic import BaseModel, Field
-from sqlalchemy import String, Float, Integer, Boolean, DateTime, ForeignKey, select, func
+from sqlalchemy import String, Float, Integer, Boolean, DateTime, Date, ForeignKey, select, func, cast
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import (
     Base, app, dbdep, auth, roles, User, Tenant, Product, Warehouse,
     WarehouseStock, Movement, Supplier, Sale, SaleLine, Payment, Cash,
-    Audit, hasher, tenant_auth, effective_permissions
+    Audit, hasher, tenant_auth, effective_permissions, Customer
 )
 
 router = APIRouter(prefix="/api", tags=["modules métier"])
@@ -97,6 +97,60 @@ class PurchaseLine(Base):
     received: Mapped[float] = mapped_column(Float, default=0)
     unit_cost: Mapped[float] = mapped_column(Float)
     total: Mapped[float] = mapped_column(Float)
+
+class SupplierInvoice(Base):
+    __tablename__ = "supplier_invoices"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"), index=True)
+    purchase_order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("purchase_orders.id"), nullable=True)
+    reference: Mapped[str] = mapped_column(String(100))
+    issue_date: Mapped[date] = mapped_column(Date, default=date.today)
+    due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    total: Mapped[float] = mapped_column(Float)
+    amount_paid: Mapped[float] = mapped_column(Float, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="A_PAYER")
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class SupplierPayment(Base):
+    __tablename__ = "supplier_payments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("supplier_invoices.id"), index=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"), index=True)
+    method: Mapped[str] = mapped_column(String(24))
+    amount: Mapped[float] = mapped_column(Float)
+    reference: Mapped[str] = mapped_column(String(100), default="")
+    cash_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cash_sessions.id"), nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class CustomerReceipt(Base):
+    __tablename__ = "customer_receipts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    sale_id: Mapped[Optional[int]] = mapped_column(ForeignKey("sales.id"), nullable=True)
+    method: Mapped[str] = mapped_column(String(24))
+    amount: Mapped[float] = mapped_column(Float)
+    reference: Mapped[str] = mapped_column(String(100), default="")
+    cash_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cash_sessions.id"), nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class Expense(Base):
+    __tablename__ = "expenses"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    cash_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cash_sessions.id"), nullable=True)
+    category: Mapped[str] = mapped_column(String(60))
+    label: Mapped[str] = mapped_column(String(180))
+    amount: Mapped[float] = mapped_column(Float)
+    method: Mapped[str] = mapped_column(String(24))
+    reference: Mapped[str] = mapped_column(String(100), default="")
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class Inventory(Base):
     __tablename__ = "inventories"
@@ -211,7 +265,9 @@ PERMISSION_KEYS = {
     "purchases.read", "purchases.write",
     "stock.read", "stock.write", "inventory.write",
     "sales.read", "sales.write", "sales.refund",
-    "restaurant.read", "restaurant.write", "reports.read"
+    "restaurant.read", "restaurant.write", "reports.read",
+    "finance.read", "finance.write", "receivables.read", "receivables.write",
+    "payables.read", "payables.write"
 }
 
 async def permitted(user: User, permission: str, db: AsyncSession):
@@ -276,7 +332,7 @@ async def purchase_list(user: User = Depends(tenant_auth), db: AsyncSession = De
         select(Supplier.id, Supplier.name).where(Supplier.id.in_(supplier_ids))
     )).all()
     warehouse_rows = (await db.execute(
-        select(Warehouse.id, Warehouse.name).where(Warehouse.id.in_(warehouse_ids))
+        select(Warehouse.id, Warehouse.name).where(Warehouse.id.in_(warehouse_ids), Warehouse.tenant_id == user.tenant_id)
     )).all()
     supplier_names = {row.id: row.name for row in supplier_rows}
     warehouse_names = {row.id: row.name for row in warehouse_rows}
@@ -483,7 +539,7 @@ async def inventory_detail(inventory_id: int, user: User = Depends(tenant_auth),
     rows = (await db.execute(
         select(InventoryLine, Product.name, Product.sku, Product.unit)
         .join(Product, Product.id == InventoryLine.product_id)
-        .where(InventoryLine.inventory_id == inventory.id)
+        .where(InventoryLine.inventory_id == inventory.id, Product.tenant_id == user.tenant_id)
         .order_by(Product.name)
     )).all()
     return {
@@ -520,7 +576,11 @@ async def inventory_validate(inventory_id: int, x: InventoryPost, user: User = D
     inv = await db.scalar(select(Inventory).where(Inventory.id == inventory_id, Inventory.tenant_id == user.tenant_id, Inventory.status == "BROUILLON"))
     if not inv:
         raise HTTPException(404, "Inventaire introuvable ou déjà validé")
-    lines = (await db.scalars(select(InventoryLine).where(InventoryLine.inventory_id == inv.id))).all()
+    lines = (await db.scalars(select(InventoryLine).where(InventoryLine.inventory_id == inv.id).with_for_update())).all()
+    submitted_ids = [item.product_id for item in x.lines]
+    expected_ids = {line.product_id for line in lines}
+    if len(submitted_ids) != len(set(submitted_ids)) or set(submitted_ids) != expected_ids:
+        raise HTTPException(400, "L'inventaire doit contenir une seule quantité comptée pour chaque article.")
     for item in x.lines:
         line = next((l for l in lines if l.product_id == item.product_id), None)
         if not line:
@@ -1055,5 +1115,337 @@ async def platform_subscription(tenant_id: int, x: SubscriptionIn, user: User = 
     sub.plan, sub.status, sub.monthly_price, sub.ends_at = x.plan, x.status, x.monthly_price, x.ends_at
     await db.commit()
     return {"tenant_id": tenant_id, "plan": sub.plan, "status": sub.status}
+
+# ---------------------------------------------------------------------------
+# Trésorerie, dettes fournisseurs, encaissements clients et rapports.
+# Tables additives uniquement : aucune table métier historique n'est modifiée.
+# ---------------------------------------------------------------------------
+def _period_bounds(start: date | None, end: date | None):
+    today = date.today()
+    start = start or today.replace(day=1)
+    end = end or today
+    if end < start:
+        raise HTTPException(400, "La date de fin doit être postérieure ou égale à la date de début.")
+    return datetime.combine(start, time.min), datetime.combine(end + timedelta(days=1), time.min)
+
+async def _cash_for_user(db: AsyncSession, user: User):
+    return await db.scalar(select(Cash).where(
+        Cash.tenant_id == user.tenant_id, Cash.user_id == user.id, Cash.status == "OPEN"
+    ).with_for_update())
+
+class SupplierInvoiceIn(BaseModel):
+    supplier_id: int
+    reference: str = Field(min_length=1, max_length=100)
+    issue_date: date
+    due_date: Optional[date] = None
+    total: float = Field(gt=0)
+    purchase_order_id: Optional[int] = None
+
+class SupplierPaymentIn(BaseModel):
+    amount: float = Field(gt=0)
+    method: str = Field(pattern=r"^(ESPECES|WAVE|ORANGE_MONEY|FREE_MONEY|CARTE_BANCAIRE|VIREMENT)$")
+    reference: str = Field(default="", max_length=100)
+
+class CustomerReceiptIn(BaseModel):
+    customer_id: int
+    sale_id: Optional[int] = None
+    amount: float = Field(gt=0)
+    method: str = Field(pattern=r"^(ESPECES|WAVE|ORANGE_MONEY|FREE_MONEY|CARTE_BANCAIRE|VIREMENT)$")
+    reference: str = Field(default="", max_length=100)
+
+class ExpenseIn(BaseModel):
+    category: str = Field(min_length=2, max_length=60)
+    label: str = Field(min_length=2, max_length=180)
+    amount: float = Field(gt=0)
+    method: str = Field(pattern=r"^(ESPECES|WAVE|ORANGE_MONEY|FREE_MONEY|CARTE_BANCAIRE|VIREMENT)$")
+    reference: str = Field(default="", max_length=100)
+
+@router.get("/finance/supplier-invoices")
+async def supplier_invoice_list(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "payables.read", db)
+    rows = (await db.execute(
+        select(SupplierInvoice, Supplier.name)
+        .join(Supplier, Supplier.id == SupplierInvoice.supplier_id)
+        .where(SupplierInvoice.tenant_id == user.tenant_id)
+        .order_by(SupplierInvoice.issue_date.desc(), SupplierInvoice.id.desc()).limit(300)
+    )).all()
+    return [{
+        "id": invoice.id, "supplier_id": invoice.supplier_id, "supplier_name": supplier_name,
+        "reference": invoice.reference, "issue_date": invoice.issue_date, "due_date": invoice.due_date,
+        "total": invoice.total, "amount_paid": invoice.amount_paid,
+        "remaining": max(0.0, invoice.total - invoice.amount_paid), "status": invoice.status
+    } for invoice, supplier_name in rows]
+
+@router.post("/finance/supplier-invoices")
+async def supplier_invoice_create(x: SupplierInvoiceIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "payables.write", db)
+    supplier = await db.scalar(select(Supplier).where(
+        Supplier.id == x.supplier_id, Supplier.tenant_id == user.tenant_id
+    ).with_for_update())
+    if not supplier:
+        raise HTTPException(404, "Fournisseur introuvable dans cette entreprise")
+    if x.due_date and x.due_date < x.issue_date:
+        raise HTTPException(400, "L'échéance ne peut pas précéder la date de facture.")
+    reference = x.reference.strip()
+    if await db.scalar(select(SupplierInvoice).where(
+        SupplierInvoice.tenant_id == user.tenant_id, SupplierInvoice.reference == reference
+    )):
+        raise HTTPException(409, "Cette référence de facture fournisseur existe déjà.")
+    if x.purchase_order_id is not None:
+        order = await db.scalar(select(PurchaseOrder).where(
+            PurchaseOrder.id == x.purchase_order_id, PurchaseOrder.tenant_id == user.tenant_id,
+            PurchaseOrder.supplier_id == supplier.id
+        ))
+        if not order:
+            raise HTTPException(404, "Commande fournisseur introuvable")
+    invoice = SupplierInvoice(
+        tenant_id=user.tenant_id, supplier_id=supplier.id, purchase_order_id=x.purchase_order_id,
+        reference=reference, issue_date=x.issue_date, due_date=x.due_date,
+        total=x.total, created_by=user.id
+    )
+    supplier.balance_due += x.total
+    db.add(invoice)
+    db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="FACTURE_FOURNISSEUR",
+                 detail=f"Facture {invoice.reference} · {x.total:.0f} FCFA"))
+    await db.commit()
+    await db.refresh(invoice)
+    return {"id": invoice.id, "reference": invoice.reference, "remaining": invoice.total, "status": invoice.status}
+
+@router.post("/finance/supplier-invoices/{invoice_id}/payments")
+async def supplier_invoice_payment(invoice_id: int, x: SupplierPaymentIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "payables.write", db)
+    invoice = await db.scalar(select(SupplierInvoice).where(
+        SupplierInvoice.id == invoice_id, SupplierInvoice.tenant_id == user.tenant_id
+    ).with_for_update())
+    if not invoice:
+        raise HTTPException(404, "Facture fournisseur introuvable")
+    remaining = round(invoice.total - invoice.amount_paid, 2)
+    if x.amount > remaining + 0.009:
+        raise HTTPException(409, f"Le paiement dépasse le solde restant de {remaining:.2f} FCFA.")
+    reference = x.reference.strip()
+    if reference and await db.scalar(select(SupplierPayment).where(
+        SupplierPayment.tenant_id == user.tenant_id,
+        SupplierPayment.method == x.method, SupplierPayment.reference == reference
+    )):
+        raise HTTPException(409, "Cette référence de paiement a déjà été enregistrée.")
+    cash = None
+    if x.method == "ESPECES":
+        cash = await _cash_for_user(db, user)
+        if not cash:
+            raise HTTPException(409, "Ouvrez votre caisse avant un paiement fournisseur en espèces.")
+        if cash.expected + 0.009 < x.amount:
+            raise HTTPException(409, "Solde théorique de caisse insuffisant.")
+        cash.expected -= x.amount
+    supplier = await db.scalar(select(Supplier).where(
+        Supplier.id == invoice.supplier_id, Supplier.tenant_id == user.tenant_id
+    ).with_for_update())
+    invoice.amount_paid = round(invoice.amount_paid + x.amount, 2)
+    invoice.status = "PAYEE" if invoice.amount_paid >= invoice.total - 0.009 else "PARTIELLE"
+    if supplier:
+        supplier.balance_due = max(0.0, round(supplier.balance_due - x.amount, 2))
+    db.add(SupplierPayment(
+        tenant_id=user.tenant_id, invoice_id=invoice.id, supplier_id=invoice.supplier_id,
+        method=x.method, amount=x.amount, reference=reference, cash_id=cash.id if cash else None, created_by=user.id
+    ))
+    db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="PAIEMENT_FOURNISSEUR",
+                 detail=f"Facture {invoice.reference} · {x.amount:.0f} FCFA"))
+    await db.commit()
+    return {"invoice_id": invoice.id, "status": invoice.status, "remaining": round(invoice.total - invoice.amount_paid, 2)}
+
+@router.get("/finance/customer-receipts")
+async def customer_receipt_list(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "receivables.read", db)
+    rows = (await db.execute(
+        select(CustomerReceipt, Customer.name)
+        .join(Customer, Customer.id == CustomerReceipt.customer_id)
+        .where(CustomerReceipt.tenant_id == user.tenant_id)
+        .order_by(CustomerReceipt.created_at.desc()).limit(300)
+    )).all()
+    return [{
+        "id": receipt.id, "customer_id": receipt.customer_id, "customer_name": customer_name,
+        "sale_id": receipt.sale_id, "amount": receipt.amount, "method": receipt.method,
+        "reference": receipt.reference, "created_at": receipt.created_at
+    } for receipt, customer_name in rows]
+
+@router.post("/finance/customer-receipts")
+async def customer_receipt_create(x: CustomerReceiptIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "receivables.write", db)
+    customer = await db.scalar(select(Customer).where(
+        Customer.id == x.customer_id, Customer.tenant_id == user.tenant_id
+    ).with_for_update())
+    if not customer:
+        raise HTTPException(404, "Client introuvable dans cette entreprise")
+    if x.amount > customer.balance_due + 0.009:
+        raise HTTPException(409, "L'encaissement dépasse la dette actuelle du client.")
+    if x.sale_id is not None:
+        sale = await db.scalar(select(Sale).where(
+            Sale.id == x.sale_id, Sale.tenant_id == user.tenant_id, Sale.customer_id == customer.id
+        ))
+        if not sale:
+            raise HTTPException(404, "Vente introuvable pour ce client")
+    reference = x.reference.strip()
+    if reference and await db.scalar(select(CustomerReceipt).where(
+        CustomerReceipt.tenant_id == user.tenant_id,
+        CustomerReceipt.method == x.method, CustomerReceipt.reference == reference
+    )):
+        raise HTTPException(409, "Cette référence d'encaissement existe déjà.")
+    cash = None
+    if x.method == "ESPECES":
+        cash = await _cash_for_user(db, user)
+        if not cash:
+            raise HTTPException(409, "Ouvrez votre caisse avant un encaissement en espèces.")
+        cash.expected += x.amount
+    customer.balance_due = max(0.0, round(customer.balance_due - x.amount, 2))
+    receipt = CustomerReceipt(
+        tenant_id=user.tenant_id, customer_id=customer.id, sale_id=x.sale_id,
+        method=x.method, amount=x.amount, reference=reference, cash_id=cash.id if cash else None, created_by=user.id
+    )
+    db.add(receipt)
+    db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="ENCAISSEMENT_CLIENT",
+                 detail=f"Client {customer.name} · {x.amount:.0f} FCFA"))
+    await db.commit()
+    return {"id": receipt.id, "customer_balance_due": customer.balance_due}
+
+@router.get("/finance/expenses")
+async def expense_list(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "finance.read", db)
+    rows = (await db.scalars(
+        select(Expense).where(Expense.tenant_id == user.tenant_id)
+        .order_by(Expense.created_at.desc()).limit(300)
+    )).all()
+    return [{
+        "id": row.id, "category": row.category, "label": row.label,
+        "amount": row.amount, "method": row.method, "reference": row.reference,
+        "created_at": row.created_at
+    } for row in rows]
+
+@router.post("/finance/expenses")
+async def expense_create(x: ExpenseIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "finance.write", db)
+    cash = None
+    if x.method == "ESPECES":
+        cash = await _cash_for_user(db, user)
+        if not cash:
+            raise HTTPException(409, "Ouvrez votre caisse avant une dépense en espèces.")
+        if cash.expected + 0.009 < x.amount:
+            raise HTTPException(409, "Solde théorique de caisse insuffisant pour cette dépense.")
+        cash.expected -= x.amount
+    reference = x.reference.strip()
+    if reference and await db.scalar(select(Expense).where(
+        Expense.tenant_id == user.tenant_id, Expense.method == x.method, Expense.reference == reference
+    )):
+        raise HTTPException(409, "Cette référence de dépense existe déjà.")
+    expense = Expense(
+        tenant_id=user.tenant_id, cash_id=cash.id if cash else None,
+        category=x.category.strip(), label=x.label.strip(), amount=x.amount,
+        method=x.method, reference=reference, created_by=user.id
+    )
+    db.add(expense)
+    db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="DEPENSE",
+                 detail=f"{expense.category} · {expense.amount:.0f} FCFA"))
+    await db.commit()
+    await db.refresh(expense)
+    return {"id": expense.id, "amount": expense.amount, "method": expense.method}
+
+@router.get("/finance/cash-sessions")
+async def cash_session_list(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "cash.read", db)
+    rows = (await db.execute(
+        select(Cash, User.name).join(User, User.id == Cash.user_id)
+        .where(Cash.tenant_id == user.tenant_id)
+        .order_by(Cash.opened_at.desc()).limit(200)
+    )).all()
+    session_ids = [cash.id for cash, _ in rows]
+    if not session_ids:
+        return []
+    expense_rows = (await db.execute(
+        select(Expense.cash_id, func.coalesce(func.sum(Expense.amount), 0))
+        .where(Expense.tenant_id == user.tenant_id, Expense.cash_id.in_(session_ids))
+        .group_by(Expense.cash_id)
+    )).all()
+    supplier_rows = (await db.execute(
+        select(SupplierPayment.cash_id, func.coalesce(func.sum(SupplierPayment.amount), 0))
+        .where(SupplierPayment.tenant_id == user.tenant_id, SupplierPayment.cash_id.in_(session_ids))
+        .group_by(SupplierPayment.cash_id)
+    )).all()
+    receipt_rows = (await db.execute(
+        select(CustomerReceipt.cash_id, func.coalesce(func.sum(CustomerReceipt.amount), 0))
+        .where(CustomerReceipt.tenant_id == user.tenant_id, CustomerReceipt.cash_id.in_(session_ids))
+        .group_by(CustomerReceipt.cash_id)
+    )).all()
+    expense_by_cash = {row[0]: float(row[1] or 0) for row in expense_rows}
+    supplier_by_cash = {row[0]: float(row[1] or 0) for row in supplier_rows}
+    receipt_by_cash = {row[0]: float(row[1] or 0) for row in receipt_rows}
+    return [{
+        "id": cash.id, "user_id": cash.user_id, "user_name": user_name,
+        "opening": cash.opening, "expected": cash.expected, "counted": cash.counted,
+        "variance": cash.variance, "status": cash.status,
+        "expenses": expense_by_cash.get(cash.id, 0),
+        "supplier_payments": supplier_by_cash.get(cash.id, 0),
+        "customer_receipts": receipt_by_cash.get(cash.id, 0),
+        "opened_at": cash.opened_at, "closed_at": cash.closed_at
+    } for cash, user_name in rows]
+
+@router.get("/finance/summary")
+async def finance_summary(start: Optional[date] = None, end: Optional[date] = None,
+                          user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    permissions = set(await effective_permissions(user, db))
+    if not ({"finance.read", "reports.read"} & permissions):
+        raise HTTPException(403, "Droit insuffisant pour consulter les rapports financiers")
+    start_dt, end_dt = _period_bounds(start, end)
+    tenant_id = user.tenant_id
+    sales_total = await db.scalar(select(func.coalesce(func.sum(Sale.total), 0)).where(
+        Sale.tenant_id == tenant_id, Sale.created_at >= start_dt, Sale.created_at < end_dt
+    ))
+    sales_count = await db.scalar(select(func.count(Sale.id)).where(
+        Sale.tenant_id == tenant_id, Sale.created_at >= start_dt, Sale.created_at < end_dt
+    ))
+    expense_total = await db.scalar(select(func.coalesce(func.sum(Expense.amount), 0)).where(
+        Expense.tenant_id == tenant_id, Expense.created_at >= start_dt, Expense.created_at < end_dt
+    ))
+    collection_total = await db.scalar(select(func.coalesce(func.sum(CustomerReceipt.amount), 0)).where(
+        CustomerReceipt.tenant_id == tenant_id, CustomerReceipt.created_at >= start_dt, CustomerReceipt.created_at < end_dt
+    ))
+    supplier_payment_total = await db.scalar(select(func.coalesce(func.sum(SupplierPayment.amount), 0)).where(
+        SupplierPayment.tenant_id == tenant_id, SupplierPayment.created_at >= start_dt, SupplierPayment.created_at < end_dt
+    ))
+    receivables = await db.scalar(select(func.coalesce(func.sum(Customer.balance_due), 0)).where(Customer.tenant_id == tenant_id))
+    payables = await db.scalar(select(func.coalesce(func.sum(SupplierInvoice.total - SupplierInvoice.amount_paid), 0)).where(
+        SupplierInvoice.tenant_id == tenant_id
+    ))
+    open_cash = await db.scalar(select(func.coalesce(func.sum(Cash.expected), 0)).where(
+        Cash.tenant_id == tenant_id, Cash.status == "OPEN"
+    ))
+    payment_rows = (await db.execute(
+        select(Payment.method, func.coalesce(func.sum(Payment.amount), 0))
+        .join(Sale, Sale.id == Payment.sale_id)
+        .where(Sale.tenant_id == tenant_id, Sale.created_at >= start_dt, Sale.created_at < end_dt)
+        .group_by(Payment.method)
+    )).all()
+    daily_rows = (await db.execute(
+        select(cast(Sale.created_at, Date), func.coalesce(func.sum(Sale.total), 0), func.count(Sale.id))
+        .where(Sale.tenant_id == tenant_id, Sale.created_at >= start_dt, Sale.created_at < end_dt)
+        .group_by(cast(Sale.created_at, Date)).order_by(cast(Sale.created_at, Date))
+    )).all()
+    top_rows = (await db.execute(
+        select(SaleLine.product_id, SaleLine.label, func.coalesce(func.sum(SaleLine.quantity), 0),
+               func.coalesce(func.sum(SaleLine.total), 0))
+        .join(Sale, Sale.id == SaleLine.sale_id)
+        .where(Sale.tenant_id == tenant_id, Sale.created_at >= start_dt, Sale.created_at < end_dt)
+        .group_by(SaleLine.product_id, SaleLine.label)
+        .order_by(func.sum(SaleLine.total).desc()).limit(10)
+    )).all()
+    return {
+        "period": {"start": start, "end": end},
+        "sales_total": float(sales_total or 0), "sales_count": int(sales_count or 0),
+        "expenses_total": float(expense_total or 0),
+        "customer_collections": float(collection_total or 0),
+        "supplier_payments": float(supplier_payment_total or 0),
+        "receivables": float(receivables or 0), "payables": float(payables or 0),
+        "open_cash_expected": float(open_cash or 0),
+        "payments_by_method": [{"method": row[0], "amount": float(row[1] or 0)} for row in payment_rows],
+        "daily_sales": [{"date": row[0].isoformat(), "total": float(row[1] or 0), "count": int(row[2])} for row in daily_rows],
+        "top_products": [{"product_id": row[0], "name": row[1], "quantity": float(row[2] or 0), "total": float(row[3] or 0)} for row in top_rows]
+    }
 
 app.include_router(router)

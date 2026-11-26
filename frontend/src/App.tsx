@@ -54,7 +54,7 @@ export default function App(){
   ...(can("suppliers.read","suppliers.write")?[["Fournisseurs",Truck]] as any:[]),
   ...(can("reports.read")?[["Rapports",BarChart3]] as any:[]),
   ...(can("users.read","users.write")?[["Utilisateurs",UserCog]] as any:[]),
-  ...(can("purchases.read","purchases.write","inventory.write","stock.read","stock.write","sales.refund","restaurant.read","restaurant.write","sales.read","users.read","users.write")?[["Gestion avancée",Layers]] as any:[])
+  ...(can("purchases.read","purchases.write","inventory.write","stock.read","stock.write","sales.refund","restaurant.read","restaurant.write","sales.read","users.read","users.write","finance.read","finance.write","payables.read","payables.write","receivables.read","receivables.write")?[["Gestion avancée",Layers]] as any:[])
  ];
  useEffect(()=>{if(user&&tabs.length&&!tabs.some(([name]:any)=>name===tab))setTab(tabs[0][0]);},[user?.id,user?.permissions?.join(","),tab]);
  useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue(user)};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine&&user)syncQueue(user);return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[user?.id,user?.role,user?.tenant_id]);
