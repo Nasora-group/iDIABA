@@ -122,6 +122,7 @@ class SupplierPayment(Base):
     method: Mapped[str] = mapped_column(String(24))
     amount: Mapped[float] = mapped_column(Float)
     reference: Mapped[str] = mapped_column(String(100), default="")
+    cash_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cash_sessions.id"), nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -134,6 +135,7 @@ class CustomerReceipt(Base):
     method: Mapped[str] = mapped_column(String(24))
     amount: Mapped[float] = mapped_column(Float)
     reference: Mapped[str] = mapped_column(String(100), default="")
+    cash_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cash_sessions.id"), nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -1226,6 +1228,7 @@ async def supplier_invoice_payment(invoice_id: int, x: SupplierPaymentIn, user: 
         SupplierPayment.method == x.method, SupplierPayment.reference == reference
     )):
         raise HTTPException(409, "Cette référence de paiement a déjà été enregistrée.")
+    cash = None
     if x.method == "ESPECES":
         cash = await _cash_for_user(db, user)
         if not cash:
@@ -1242,7 +1245,7 @@ async def supplier_invoice_payment(invoice_id: int, x: SupplierPaymentIn, user: 
         supplier.balance_due = max(0.0, round(supplier.balance_due - x.amount, 2))
     db.add(SupplierPayment(
         tenant_id=user.tenant_id, invoice_id=invoice.id, supplier_id=invoice.supplier_id,
-        method=x.method, amount=x.amount, reference=reference, created_by=user.id
+        method=x.method, amount=x.amount, reference=reference, cash_id=cash.id if cash else None, created_by=user.id
     ))
     db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="PAIEMENT_FOURNISSEUR",
                  detail=f"Facture {invoice.reference} · {x.amount:.0f} FCFA"))
@@ -1286,6 +1289,7 @@ async def customer_receipt_create(x: CustomerReceiptIn, user: User = Depends(ten
         CustomerReceipt.method == x.method, CustomerReceipt.reference == reference
     )):
         raise HTTPException(409, "Cette référence d'encaissement existe déjà.")
+    cash = None
     if x.method == "ESPECES":
         cash = await _cash_for_user(db, user)
         if not cash:
@@ -1294,7 +1298,7 @@ async def customer_receipt_create(x: CustomerReceiptIn, user: User = Depends(ten
     customer.balance_due = max(0.0, round(customer.balance_due - x.amount, 2))
     receipt = CustomerReceipt(
         tenant_id=user.tenant_id, customer_id=customer.id, sale_id=x.sale_id,
-        method=x.method, amount=x.amount, reference=reference, created_by=user.id
+        method=x.method, amount=x.amount, reference=reference, cash_id=cash.id if cash else None, created_by=user.id
     )
     db.add(receipt)
     db.add(Audit(tenant_id=user.tenant_id, user_id=user.id, action="ENCAISSEMENT_CLIENT",
@@ -1351,10 +1355,35 @@ async def cash_session_list(user: User = Depends(tenant_auth), db: AsyncSession 
         .where(Cash.tenant_id == user.tenant_id)
         .order_by(Cash.opened_at.desc()).limit(200)
     )).all()
+    session_ids = [cash.id for cash, _ in rows]
+    if not session_ids:
+        return []
+    from sqlalchemy import case
+    expense_rows = (await db.execute(
+        select(Expense.cash_id, func.coalesce(func.sum(Expense.amount), 0))
+        .where(Expense.tenant_id == user.tenant_id, Expense.cash_id.in_(session_ids))
+        .group_by(Expense.cash_id)
+    )).all()
+    supplier_rows = (await db.execute(
+        select(SupplierPayment.cash_id, func.coalesce(func.sum(SupplierPayment.amount), 0))
+        .where(SupplierPayment.tenant_id == user.tenant_id, SupplierPayment.cash_id.in_(session_ids))
+        .group_by(SupplierPayment.cash_id)
+    )).all()
+    receipt_rows = (await db.execute(
+        select(CustomerReceipt.cash_id, func.coalesce(func.sum(CustomerReceipt.amount), 0))
+        .where(CustomerReceipt.tenant_id == user.tenant_id, CustomerReceipt.cash_id.in_(session_ids))
+        .group_by(CustomerReceipt.cash_id)
+    )).all()
+    expense_by_cash = {row[0]: float(row[1] or 0) for row in expense_rows}
+    supplier_by_cash = {row[0]: float(row[1] or 0) for row in supplier_rows}
+    receipt_by_cash = {row[0]: float(row[1] or 0) for row in receipt_rows}
     return [{
         "id": cash.id, "user_id": cash.user_id, "user_name": user_name,
         "opening": cash.opening, "expected": cash.expected, "counted": cash.counted,
         "variance": cash.variance, "status": cash.status,
+        "expenses": expense_by_cash.get(cash.id, 0),
+        "supplier_payments": supplier_by_cash.get(cash.id, 0),
+        "customer_receipts": receipt_by_cash.get(cash.id, 0),
         "opened_at": cash.opened_at, "closed_at": cash.closed_at
     } for cash, user_name in rows]
 
