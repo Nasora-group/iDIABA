@@ -42,6 +42,7 @@ assert {"ADMIN","GERANT","CAISSIER","VENDEUR","STOCK"} <= USER_ROLES
 from app.advanced import (
     RoleProfile, PurchaseOrder, PurchaseLine, Inventory, InventoryLine,
     Refund, RefundLine, RefundPayment, RestaurantTable, KitchenOrder, KitchenOrderLine, Subscription, StockTransfer, StockTransferLine,
+    SupplierInvoice, SupplierPayment, CustomerReceipt, Expense
 )
 advanced_paths={route.path for route in app.routes}
 assert {
@@ -49,12 +50,16 @@ assert {
     "/api/inventories", "/api/inventories/{inventory_id}", "/api/inventories/{inventory_id}/validate",
     "/api/sales/{sale_id}/refund", "/api/restaurant/tables",
     "/api/restaurant/orders", "/api/sales/{sale_id}/invoice",
-    "/api/stock/transfers", "/api/stock/valuation", "/api/platform/overview", "/api/platform/companies", "/api/platform/bootstrap", "/api/platform/companies/{tenant_id}/subscription", "/api/sales/export.csv",
+    "/api/stock/transfers", "/api/stock/valuation",
+    "/api/finance/supplier-invoices", "/api/finance/supplier-invoices/{invoice_id}/payments",
+    "/api/finance/customer-receipts", "/api/finance/expenses", "/api/finance/summary",
+    "/api/finance/cash-sessions", "/api/platform/overview", "/api/platform/companies", "/api/platform/bootstrap", "/api/platform/companies/{tenant_id}/subscription", "/api/sales/export.csv",
 } <= advanced_paths
 assert {
     "role_profiles", "purchase_orders", "purchase_lines", "inventories",
     "inventory_lines", "refunds", "refund_lines", "refund_payments", "restaurant_tables", "kitchen_orders",
     "kitchen_order_lines", "subscriptions", "stock_transfers", "stock_transfer_lines",
+    "supplier_invoices", "supplier_payments", "customer_receipts", "expenses",
 } <= set(Base.metadata.tables)
 print("ADVANCED ROUTES OK: profils, achats, réceptions, inventaires, transferts, valorisation, retours, restaurant, factures, SaaS")
 # Le circuit achats expose le détail des lignes et conserve les quantités reçues.
@@ -109,6 +114,8 @@ required_permissions = {
     "cash.read", "cash.open", "cash.close", "purchases.read", "purchases.write",
     "stock.read", "stock.write", "inventory.write", "sales.read", "sales.write",
     "sales.refund", "restaurant.read", "restaurant.write", "reports.read",
+    "finance.read", "finance.write", "receivables.read", "receivables.write",
+    "payables.read", "payables.write",
 }
 assert required_permissions <= PERMISSION_KEYS
 
@@ -149,3 +156,14 @@ async def effective_permission_tests():
 asyncio.run(permission_guard_tests())
 asyncio.run(effective_permission_tests())
 print("PERMISSIONS OK: droits API, héritage lecture/écriture et menus par profil")
+
+# Finance : modèles et permissions tenant-scoped.
+assert {"finance.read", "finance.write", "receivables.read", "receivables.write", "payables.read", "payables.write"} <= PERMISSION_KEYS
+assert all("tenant_id" in model.__table__.columns for model in (SupplierInvoice, SupplierPayment, CustomerReceipt, Expense))
+async def finance_permission_tests():
+    finance_user = SimpleNamespace(role="COMPTABLE", tenant_id=42)
+    finance_profile = SimpleNamespace(permissions='["finance.write","payables.write","receivables.write"]')
+    finance_permissions = set(await effective_permissions(finance_user, FakePermissionDB(finance_profile)))
+    assert {"finance.read", "finance.write", "payables.read", "payables.write", "receivables.read", "receivables.write", "suppliers.read", "customers.read"} <= finance_permissions
+asyncio.run(finance_permission_tests())
+print("FINANCE OK: factures fournisseurs, règlements, créances clients, dépenses, trésorerie et rapports tenant-scoped")
