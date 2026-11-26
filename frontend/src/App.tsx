@@ -38,7 +38,7 @@ const roleLabels:Record<string,string>={ADMIN:"Administrateur",GERANT:"Gérant",
 const roleOptions=["GERANT","CAISSIER","VENDEUR","STOCK"];
 export default function App(){
  const {token,user,set,clear}=useAuth();
- const [online,setOnline]=useState(navigator.onLine),[email,setEmail]=useState(""),[password,setPassword]=useState("");
+ const [online,setOnline]=useState(navigator.onLine),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[registerMode,setRegisterMode]=useState(false),[signup,setSignup]=useState<any>({mode:"HYBRIDE",terms_accepted:false});
  const [products,setProducts]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<any[]>([]),[cash,setCash]=useState<any>(null);
  const [customers,setCustomers]=useState<Customer[]>([]),[suppliers,setSuppliers]=useState<Supplier[]>([]),[users,setUsers]=useState<User[]>([]),[sales,setSales]=useState<any[]>([]);
  const [cart,setCart]=useState<Line[]>([]),[tab,setTab]=useState("Caisse"),[search,setSearch]=useState(""),[opening,setOpening]=useState("0"),[counted,setCounted]=useState(""),[msg,setMsg]=useState(""),[dash,setDash]=useState<any>(null);
@@ -69,6 +69,7 @@ export default function App(){
  const filtered=products.filter(p=>(p.name+p.sku+p.barcode).toLowerCase().includes(search.toLowerCase()));
  const total=useMemo(()=>cart.reduce((s,l)=>s+l.qty*l.product.sale_price*(1+l.product.tax_rate/100),0),[cart]);
  async function login(e:any){e.preventDefault();try{const r=await api("/api/auth/login",{email,password});set(r.access_token,r.user);if(r.user.role==="SUPER_ADMIN")setTab("Gestion avancée");setMsg("Connexion réussie");}catch(e:any){setMsg(e.message)}}
+ async function register(e:any){e.preventDefault();setBusy(true);setMsg("");try{const r=await api("/api/public/registrations",signup);setMsg(r.message||"Demande envoyée.");setSignup({mode:"HYBRIDE",terms_accepted:false});setRegisterMode(false);setEmail(signup.admin_email||"");}catch(e:any){setMsg(e.message)}finally{setBusy(false)}}
  function add(p:Product){if(p.kind==="COMPOSE"&&p.stock<=0){/* recette pilotée par ingrédients */}setCart(a=>{const x=a.find(i=>i.product.id===p.id);return x?a.map(i=>i.product.id===p.id?{...i,qty:i.qty+1}:i):[...a,{product:p,qty:1}]});}
  async function openCash(){try{await api("/api/cash/open",{opening:Number(opening)});await refresh();setMsg("Caisse ouverte");}catch(e:any){setMsg(e.message)}}
  async function closeCash(){try{const r=await api("/api/cash/"+cash.id+"/close",{counted:Number(counted||0)});setMsg("Caisse clôturée. Écart : "+fmt(r.variance));setCash(null);setCounted("");await refresh();}catch(e:any){setMsg(e.message)}}
@@ -102,7 +103,22 @@ export default function App(){
  async function saveCustomer(e:any){e.preventDefault();try{await api("/api/customers",{name:form.name,phone:form.phone||"",credit_limit:Number(form.credit_limit||0)});setForm({});setMsg("Client ajouté");await refresh();}catch(e:any){setMsg(e.message)}}
  async function saveSupplier(e:any){e.preventDefault();try{await api("/api/suppliers",{name:form.name,phone:form.phone||""});setForm({});setMsg("Fournisseur ajouté");await refresh();}catch(e:any){setMsg(e.message)}}
  async function stockMove(e:any){e.preventDefault();try{await api("/api/stock/movements",{warehouse_id:Number(form.warehouse_id||warehouses[0]?.id),product_id:Number(form.product_id),quantity:Number(form.quantity),unit_cost:Number(form.unit_cost||0),kind:form.kind||"ENTREE_ACHAT"});setForm({});setMsg("Mouvement de stock enregistré");await refresh();}catch(e:any){setMsg(e.message)}}
- if(!token)return <main className="login"><form onSubmit={login}><div className="logo">i</div><h1>iDIABA</h1><p>Gestion commerciale & caisse</p><label>Email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Mot de passe<input type="password" required value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="primary">Se connecter</button></form></main>;
+ if(!token)return <main className="login"><form onSubmit={registerMode?register:login}><div className="logo">i</div><h1>iDIABA</h1><p>Gestion commerciale & caisse</p>
+ {msg&&<p className="message" role="status">{msg}</p>}
+ {!registerMode?<><label>Email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Mot de passe<input type="password" required value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="primary">Se connecter</button><button type="button" onClick={()=>{setRegisterMode(true);setMsg("");}}>Créer mon entreprise</button></>:<>
+ <h3>Demander l'ouverture d'un compte entreprise</h3>
+ <label>Nom de l'entreprise<input required minLength={2} maxLength={160} value={signup.company_name||""} onChange={e=>setSignup((x:any)=>({...x,company_name:e.target.value}))}/></label>
+ <label>Activité<select value={signup.mode} onChange={e=>setSignup((x:any)=>({...x,mode:e.target.value}))}><option value="COMMERCE">Commerce / Boutique</option><option value="RESTAURANT">Restaurant</option><option value="HYBRIDE">Commerce et restauration</option></select></label>
+ <label>Nom du responsable<input required minLength={2} value={signup.admin_name||""} onChange={e=>setSignup((x:any)=>({...x,admin_name:e.target.value}))}/></label>
+ <label>Email professionnel<input type="email" required value={signup.admin_email||""} onChange={e=>setSignup((x:any)=>({...x,admin_email:e.target.value}))}/></label>
+ <label>Téléphone<input type="tel" required minLength={6} value={signup.phone||""} onChange={e=>setSignup((x:any)=>({...x,phone:e.target.value}))}/></label>
+ <label>Adresse de l'entreprise<input value={signup.address||""} onChange={e=>setSignup((x:any)=>({...x,address:e.target.value}))}/></label>
+ <label>Mot de passe (10 caractères minimum)<input type="password" required minLength={10} maxLength={128} value={signup.admin_password||""} onChange={e=>setSignup((x:any)=>({...x,admin_password:e.target.value}))}/></label>
+ <label style={{display:"flex",alignItems:"flex-start",gap:8}}><input type="checkbox" required checked={!!signup.terms_accepted} onChange={e=>setSignup((x:any)=>({...x,terms_accepted:e.target.checked}))}/> J'accepte que mes informations soient utilisées pour traiter cette demande de création de compte.</label>
+ <button className="primary" disabled={busy}>{busy?"Envoi...":"Envoyer la demande"}</button><button type="button" onClick={()=>{setRegisterMode(false);setMsg("");}}>Retour à la connexion</button>
+ <small>La demande doit être validée par l'équipe iDIABA. L'accès sera activé après configuration de l'abonnement.</small>
+ </>}
+ </form></main>;
  return <div className="app"><aside><div className="brand"><span className="logo">i</span><b>iDIABA</b></div>{tabs.map(([x,Icon]:any)=><button className={tab===x?"active":""} onClick={()=>{setTab(x);setForm({});}} key={x}><Icon/>{x}</button>)}<button className="logout" onClick={clear}><LogOut/>Déconnexion</button></aside><main>
  <header><div><h2>{tab}</h2><small>{user?.name} · {roleLabels[user?.role||""]||user?.role}</small></div><span className={online?"online":"offline"}>{online?<Wifi/>:<WifiOff/>}{online?"En ligne":"Hors-ligne"}</span></header>
  {msg&&<p className="message" onClick={()=>setMsg("")}>{msg}　×</p>}

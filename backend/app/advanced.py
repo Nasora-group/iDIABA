@@ -23,6 +23,21 @@ from app.main import (
 router = APIRouter(prefix="/api", tags=["modules métier"])
 
 # Tables additives : create_all les crée sans modifier ni supprimer les tables historiques.
+class RegistrationRequest(Base):
+    __tablename__ = "registration_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_name: Mapped[str] = mapped_column(String(160))
+    mode: Mapped[str] = mapped_column(String(20), default="HYBRIDE")
+    address: Mapped[str] = mapped_column(String(200), default="")
+    phone: Mapped[str] = mapped_column(String(40), default="")
+    admin_name: Mapped[str] = mapped_column(String(120))
+    admin_email: Mapped[str] = mapped_column(String(160), index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20), default="EN_ATTENTE", index=True)
+    review_note: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
 class RoleProfile(Base):
     __tablename__ = "role_profiles"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -657,6 +672,87 @@ async def platform_overview(user: User = Depends(auth), db: AsyncSession = Depen
     users = await db.scalar(select(func.count(User.id)))
     subscriptions = (await db.scalars(select(Subscription))).all()
     return {"companies": tenants or 0, "users": users or 0, "subscriptions": [{"tenant_id": s.tenant_id, "plan": s.plan, "status": s.status, "monthly_price": s.monthly_price, "ends_at": s.ends_at} for s in subscriptions]}
+
+class PublicRegistrationIn(BaseModel):
+    company_name: str = Field(min_length=2, max_length=160)
+    mode: str = Field(default="HYBRIDE", pattern=r"^(COMMERCE|RESTAURANT|HYBRIDE)$")
+    address: str = Field(default="", max_length=200)
+    phone: str = Field(min_length=6, max_length=40)
+    admin_name: str = Field(min_length=2, max_length=120)
+    admin_email: str = Field(min_length=5, max_length=160, pattern=r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+    admin_password: str = Field(min_length=10, max_length=128)
+    terms_accepted: bool
+
+class RegistrationReviewIn(BaseModel):
+    decision: str = Field(pattern=r"^(APPROUVER|REFUSER)$")
+    note: str = Field(default="", max_length=500)
+
+@router.post("/public/registrations")
+async def public_registration(x: PublicRegistrationIn, db: AsyncSession = Depends(dbdep)):
+    if not x.terms_accepted:
+        raise HTTPException(400, "Veuillez accepter les conditions d'utilisation.")
+    email = x.admin_email.strip().lower()
+    if await db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(409, "Cette adresse e-mail possède déjà un compte.")
+    pending = await db.scalar(select(RegistrationRequest).where(
+        RegistrationRequest.admin_email == email,
+        RegistrationRequest.status == "EN_ATTENTE"
+    ))
+    if pending:
+        raise HTTPException(409, "Une demande avec cette adresse e-mail est déjà en attente.")
+    request = RegistrationRequest(
+        company_name=x.company_name.strip(), mode=x.mode, address=x.address.strip(),
+        phone=x.phone.strip(), admin_name=x.admin_name.strip(), admin_email=email,
+        password_hash=hasher.hash(x.admin_password), status="EN_ATTENTE"
+    )
+    db.add(request)
+    await db.commit()
+    await db.refresh(request)
+    return {"id": request.id, "status": request.status, "message": "Demande envoyée. Elle sera examinée par l'équipe iDIABA."}
+
+@router.get("/platform/registrations")
+async def platform_registrations(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    if user.role != "SUPER_ADMIN":
+        raise HTTPException(403, "Réservé au Super Admin plateforme")
+    rows = (await db.scalars(select(RegistrationRequest).order_by(RegistrationRequest.created_at.desc()).limit(200))).all()
+    return [{
+        "id": row.id, "company_name": row.company_name, "mode": row.mode,
+        "address": row.address, "phone": row.phone, "admin_name": row.admin_name,
+        "admin_email": row.admin_email, "status": row.status, "review_note": row.review_note,
+        "created_at": row.created_at
+    } for row in rows]
+
+@router.post("/platform/registrations/{registration_id}/review")
+async def review_registration(registration_id: int, x: RegistrationReviewIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    if user.role != "SUPER_ADMIN":
+        raise HTTPException(403, "Réservé au Super Admin plateforme")
+    request = await db.scalar(select(RegistrationRequest).where(RegistrationRequest.id == registration_id).with_for_update())
+    if not request:
+        raise HTTPException(404, "Demande introuvable")
+    if request.status != "EN_ATTENTE":
+        raise HTTPException(409, "Cette demande a déjà été traitée.")
+    if x.decision == "REFUSER":
+        request.status = "REFUSEE"
+        request.review_note = x.note.strip()
+        request.reviewed_at = datetime.utcnow()
+        await db.commit()
+        return {"id": request.id, "status": request.status}
+    if await db.scalar(select(User).where(User.email == request.admin_email)):
+        raise HTTPException(409, "Cette adresse e-mail est déjà utilisée par un compte.")
+    tenant = Tenant(name=request.company_name, mode=request.mode, address=request.address, phone=request.phone, currency="FCFA", tax_rate=18)
+    db.add(tenant)
+    await db.flush()
+    admin = User(tenant_id=tenant.id, email=request.admin_email, name=request.admin_name,
+                 password_hash=request.password_hash, role="ADMIN", active=True)
+    db.add(admin)
+    # L'entreprise est créée sans accès opérationnel tant que le Super Admin
+    # n'a pas choisi une formule, un tarif et une échéance.
+    db.add(Subscription(tenant_id=tenant.id, plan="ESSENTIEL", status="SUSPENDU", monthly_price=0))
+    request.status = "APPROUVEE"
+    request.review_note = x.note.strip()
+    request.reviewed_at = datetime.utcnow()
+    await db.commit()
+    return {"id": request.id, "status": request.status, "tenant_id": tenant.id, "admin_email": request.admin_email}
 
 class SubscriptionIn(BaseModel):
     plan: str = Field(pattern=r"^(ESSENTIEL|PRO|RESTAURANT|ENTREPRISE)$")
