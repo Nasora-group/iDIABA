@@ -294,7 +294,7 @@ function FinanceSection({permissions}:{permissions:string[]}){
    </form>
   </>}
   {has("finance.read")&&<><h4>Dernières dépenses</h4>{expenses.slice(0,30).map(e=><p key={e.id}>{new Date(e.created_at).toLocaleDateString("fr-FR")} · {e.category} · {e.label} · {e.method} · <b>{money(e.amount)}</b></p>)}</>}
-  {has("cash.read")&&<><h4>Historique des sessions de caisse</h4>{sessions.slice(0,30).map(s=><p key={s.id}>{s.user_name} · {new Date(s.opened_at).toLocaleString("fr-FR")} · {s.status} · Attendu {money(s.expected)} · Compté {money(s.counted)} · Écart {money(s.variance)}</p>)}</>}
+  {has("cash.read")&&<><h4>Historique des sessions de caisse</h4>{sessions.slice(0,30).map(s=><p key={s.id}>{s.user_name} · {new Date(s.opened_at).toLocaleString("fr-FR")} · {s.status} · Fond {money(s.opening)} · Attendu {money(s.expected)} · Compté {money(s.counted)} · Écart {money(s.variance)}<small style={{display:"block",color:"#64748b"}}>Dépenses {money(s.expenses)} · Paiements fournisseurs {money(s.supplier_payments)} · Encaissements clients {money(s.customer_receipts)}</small></p>)}</>}
  </section>;
 }
 
