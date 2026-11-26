@@ -66,3 +66,26 @@ assert abs(unit_conversion("g","kg")-0.001)<1e-12
 assert abs(unit_conversion("L","ml")-1000)<1e-12
 assert unit_conversion("Pièce","Unité")==1
 print("PRODUCT CATALOG OK: create, edit, Excel import, stock ledger and unit conversion routes")
+
+
+# Instructions publiques de paiement : aucun moyen désactivé ou incomplet ne doit être publié.
+from app.advanced import PlatformPaymentSettings, _public_payment_instructions_payload
+public_empty = _public_payment_instructions_payload()
+assert public_empty == {"providers": [], "instructions": "", "available": False}
+public_disabled = _public_payment_instructions_payload(PlatformPaymentSettings(
+    wave_enabled=False, wave_phone="+221770000000", wave_name="Compte privé",
+    orange_enabled=True, orange_phone="", orange_link="", instructions="Paiement manuel"
+))
+assert public_disabled == {"providers": [], "instructions": "Paiement manuel", "available": False}
+public_enabled = _public_payment_instructions_payload(PlatformPaymentSettings(
+    wave_enabled=True, wave_phone="+221770000001", wave_name="iDIABA",
+    wave_link="", orange_enabled=True, orange_phone="", orange_link="https://pay.example.test",
+    orange_name="iDIABA Orange", instructions="Indiquez la référence après le transfert"
+))
+assert public_enabled["available"] is True
+assert [provider["key"] for provider in public_enabled["providers"]] == ["WAVE", "ORANGE_MONEY"]
+assert public_enabled["providers"][0]["phone"] == "+221770000001"
+assert public_enabled["providers"][1]["link"] == "https://pay.example.test"
+assert "Compte privé" not in str(public_enabled)
+assert "/api/public/payment-instructions" in {route.path for route in app.routes}
+print("PUBLIC PAYMENT INSTRUCTIONS OK: seuls les moyens activés et complets sont publiés")
