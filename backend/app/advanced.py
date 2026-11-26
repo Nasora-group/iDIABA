@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.main import (
     Base, app, dbdep, auth, roles, User, Tenant, Product, Warehouse,
     WarehouseStock, Movement, Supplier, Sale, SaleLine, Payment, Cash,
-    Audit, hasher, tenant_auth
+    Audit, hasher, tenant_auth, effective_permissions
 )
 
 router = APIRouter(prefix="/api", tags=["modules métier"])
@@ -215,16 +215,7 @@ PERMISSION_KEYS = {
 }
 
 async def permitted(user: User, permission: str, db: AsyncSession):
-    if user.role == "ADMIN":
-        return
-    profile = await db.scalar(select(RoleProfile).where(
-        RoleProfile.tenant_id == user.tenant_id,
-        RoleProfile.role_key == user.role,
-        RoleProfile.active.is_(True)
-    ))
-    granted = set(json.loads(profile.permissions or "[]")) if profile else set()
-    if permission.endswith(".read") and permission[:-5] + ".write" in granted:
-        granted.add(permission)
+    granted = set(await effective_permissions(user, db))
     if permission not in granted:
         raise HTTPException(403, "Droit insuffisant pour cette opération")
 
