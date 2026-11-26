@@ -112,7 +112,10 @@ async def effective_permissions(u:User,db:AsyncSession):
  if u.role in builtin:
   return sorted(builtin[u.role])
  profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
- permissions=set(json.loads(profile.permissions or "[]")) & PERMISSION_KEYS if profile else set()\n for key in list(permissions):\n  if key.endswith(".write") and key[:-5]+".read" not in permissions: permissions.add(key[:-5]+".read")\n return sorted(permissions)
+ permissions=set(json.loads(profile.permissions or "[]")) & PERMISSION_KEYS if profile else set()
+ for key in list(permissions):
+  if key.endswith(".write") and key[:-6]+".read" not in permissions: permissions.add(key[:-6]+".read")
+ return sorted(permissions)
 def roles(*allowed, permission=None):
  async def check(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
   if u.role in allowed: return u
@@ -120,7 +123,7 @@ def roles(*allowed, permission=None):
   profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
   permissions=set(json.loads(profile.permissions or "[]")) if profile else set()
   for key in list(permissions):
-   if key.endswith(".write"): permissions.add(key[:-5]+".read")
+   if key.endswith(".write"): permissions.add(key[:-6]+".read")
   required=permission or ("users.write" if allowed==("ADMIN",) else ("stock.write" if "STOCK" in allowed else "reports.read"))
   required_set={required} if isinstance(required,str) else set(required)
   if not (required_set & permissions): raise HTTPException(403,"Droit insuffisant pour cette opération")
