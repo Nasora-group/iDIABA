@@ -47,7 +47,7 @@ export default function App(){
  const can=(...keys:string[])=>keys.some(k=>(user?.permissions||[]).includes(k));
  const admin=user?.role==="ADMIN"||can("users.write"), catalogWrite=can("catalog.write"), stockRole=can("stock.write","inventory.write");
  const tabs=user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]]:[
-  ...(can("sales.write")?[["Caisse",ShoppingCart]] as any:[]),
+  ...(can("sales.write")&&can("cash.read")?[["Caisse",ShoppingCart]] as any:[]),
   ...(can("catalog.read")?[["Catalogue",Archive]] as any:[]),
   ...(can("stock.read","stock.write","inventory.write")?[["Stocks",Package]] as any:[]),
   ...(can("customers.read","customers.write")?[["Clients",Users]] as any:[]),
@@ -56,6 +56,7 @@ export default function App(){
   ...(can("users.read","users.write")?[["Utilisateurs",UserCog]] as any:[]),
   ...(can("purchases.read","purchases.write","inventory.write","stock.read","stock.write","sales.refund","restaurant.read","restaurant.write","sales.read","users.read","users.write")?[["Gestion avancée",Layers]] as any:[])
  ];
+ useEffect(()=>{if(user&&tabs.length&&!tabs.some(([name]:any)=>name===tab))setTab(tabs[0][0]);},[user?.id,user?.permissions?.join(","),tab]);
  useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue(user)};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine&&user)syncQueue(user);return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[user?.id,user?.role,user?.tenant_id]);
  async function refresh(current:User|null=user){
   const has=(key:string)=>current?.role==="ADMIN"||(current?.permissions||[]).includes(key);
@@ -87,7 +88,7 @@ export default function App(){
  useEffect(()=>{if(!token)return;let active=true;(async()=>{try{const me=await api("/api/auth/me");if(!active)return;set(token,me);if(me.role==="SUPER_ADMIN"){setTab("Gestion avancée");return;}await refresh(me);}catch(e:any){if(active){clear();setMsg("Session expirée. Veuillez vous reconnecter.");}}})();return()=>{active=false};},[token]);
  const filtered=products.filter(p=>(p.name+p.sku+p.barcode).toLowerCase().includes(search.toLowerCase()));
  const total=useMemo(()=>cart.reduce((s,l)=>s+l.qty*l.product.sale_price*(1+l.product.tax_rate/100),0),[cart]);
- async function login(e:any){e.preventDefault();try{const r=await api("/api/auth/login",{email,password});set(r.access_token,r.user);setTab(r.user.role==="SUPER_ADMIN"?"Gestion avancée":r.user.permissions?.includes("sales.write")?"Caisse":r.user.permissions?.includes("catalog.read")?"Catalogue":r.user.permissions?.includes("stock.read")?"Stocks":r.user.permissions?.includes("customers.read")?"Clients":r.user.permissions?.includes("users.read")?"Utilisateurs":"Gestion avancée");setMsg("Connexion réussie");}catch(e:any){setMsg(e.message)}}
+ async function login(e:any){e.preventDefault();try{const r=await api("/api/auth/login",{email,password});set(r.access_token,r.user);setTab(r.user.role==="SUPER_ADMIN"?"Gestion avancée":r.user.permissions?.includes("sales.write")&&r.user.permissions?.includes("cash.read")?"Caisse":r.user.permissions?.includes("catalog.read")?"Catalogue":r.user.permissions?.includes("stock.read")?"Stocks":r.user.permissions?.includes("customers.read")?"Clients":r.user.permissions?.includes("users.read")?"Utilisateurs":"Gestion avancée");setMsg("Connexion réussie");}catch(e:any){setMsg(e.message)}}
  async function register(e:any){e.preventDefault();setBusy(true);setMsg("");try{const r=await api("/api/public/registrations",signup);setMsg(r.message||"Demande envoyée.");setSignup({mode:"HYBRIDE",terms_accepted:false});setRegisterMode(false);setEmail(signup.admin_email||"");}catch(e:any){setMsg(e.message)}finally{setBusy(false)}}
  function add(p:Product){if(p.kind==="COMPOSE"&&p.stock<=0){/* recette pilotée par ingrédients */}setCart(a=>{const x=a.find(i=>i.product.id===p.id);return x?a.map(i=>i.product.id===p.id?{...i,qty:i.qty+1}:i):[...a,{product:p,qty:1}]});}
  async function openCash(){try{await api("/api/cash/open",{opening:Number(opening)});await refresh();setMsg("Caisse ouverte");}catch(e:any){setMsg(e.message)}}
