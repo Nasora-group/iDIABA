@@ -6,7 +6,7 @@ import {create} from "zustand";
 import Dexie,{type Table} from "dexie";
 
 type Product={id:number;sku:string;barcode:string;name:string;category:string;unit:string;sale_price:number;purchase_price?:number;tax_rate:number;stock:number;min_stock:number;kind?:string};
-type User={id:number;name:string;email:string;role:string;tenant_id:number|null;active?:boolean};
+type User={id:number;name:string;email:string;role:string;tenant_id:number|null;active?:boolean;permissions?:string[]};
 type Line={product:Product;qty:number};
 type Customer={id:number;name:string;phone:string;credit_limit:number;balance_due:number};
 type Supplier={id:number;name:string;phone:string;balance_due:number};
@@ -44,16 +44,34 @@ export default function App(){
  const [cart,setCart]=useState<Line[]>([]),[tab,setTab]=useState("Caisse"),[search,setSearch]=useState(""),[opening,setOpening]=useState("0"),[counted,setCounted]=useState(""),[msg,setMsg]=useState(""),[dash,setDash]=useState<any>(null);
  const [form,setForm]=useState<any>({}),[busy,setBusy]=useState(false);
  const [editingProduct,setEditingProduct]=useState<Product|null>(null),[importRows,setImportRows]=useState<any[]>([]),[importMode,setImportMode]=useState("REPLACE"),[importWarehouse,setImportWarehouse]=useState("");
- const admin=user?.role==="ADMIN", manager=["ADMIN","GERANT"].includes(user?.role||""), stockRole=["ADMIN","GERANT","STOCK"].includes(user?.role||"");
- const tabs=user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]]:[["Caisse",ShoppingCart],["Catalogue",Archive],["Stocks",Package],["Clients",Users],...(manager?[["Fournisseurs",Truck],["Rapports",BarChart3]] as any:[]),...(admin?[["Utilisateurs",UserCog],["Gestion avancée",Layers]] as any:[])];
+ const can=(...keys:string[])=>keys.some(k=>(user?.permissions||[]).includes(k));
+ const admin=user?.role==="ADMIN"||can("users.write"), manager=can("reports.read"), stockRole=can("catalog.write","stock.write","inventory.write");
+ const tabs=user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]]:[
+  ...(can("sales.write")?[["Caisse",ShoppingCart]] as any:[]),
+  ...(can("catalog.read")?[["Catalogue",Archive]] as any:[]),
+  ...(can("stock.read","stock.write","inventory.write")?[["Stocks",Package]] as any:[]),
+  ...(can("customers.read","customers.write")?[["Clients",Users]] as any:[]),
+  ...(can("suppliers.read","suppliers.write")?[["Fournisseurs",Truck]] as any:[]),
+  ...(can("reports.read")?[["Rapports",BarChart3]] as any:[]),
+  ...(can("users.read","users.write")?[["Utilisateurs",UserCog]] as any:[]),
+  ...(can("purchases.read","purchases.write","inventory.write","stock.read","stock.write","sales.refund","restaurant.read","restaurant.write","sales.read","users.read","users.write")?[["Gestion avancée",Layers]] as any:[])
+ ];
  useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue(user)};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine&&user)syncQueue(user);return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[user?.id,user?.role,user?.tenant_id]);
  async function refresh(current:User|null=user){
-  const [p,w,c,cu,sa]=await Promise.all([api("/api/products"),api("/api/warehouses"),api("/api/cash/current"),api("/api/customers"),api("/api/sales")]);
+  const has=(key:string)=>current?.role==="ADMIN"||(current?.permissions||[]).includes(key);
+  const [p,w,c,cu,sa]=await Promise.all([
+   has("catalog.read")?api("/api/products").catch(()=>[]):Promise.resolve([]),
+   (has("stock.read")||has("sales.write")||has("purchases.read"))?api("/api/warehouses").catch(()=>[]):Promise.resolve([]),
+   has("cash.read")?api("/api/cash/current").catch(()=>null):Promise.resolve(null),
+   has("customers.read")?api("/api/customers").catch(()=>[]):Promise.resolve([]),
+   has("sales.read")?api("/api/sales").catch(()=>[]):Promise.resolve([])
+  ]);
   setProducts(p);setWarehouses(w);setCash(c);setCustomers(cu);setSales(sa);
-  await offline.products.bulkPut(p);await offline.cache.bulkPut([{key:"warehouses",value:w},{key:"cash",value:c}]);
-  if(current?.role==="ADMIN"){const [accountRows,profileRows]=await Promise.all([api("/api/users"),api("/api/profiles")]);setUsers(accountRows);setCustomProfiles(profileRows.filter((p:any)=>p.active));}
-  if(["ADMIN","GERANT"].includes(current?.role||"")){const d=await api("/api/dashboard");setDash(d);await offline.cache.put({key:"dashboard",value:d});}
-  if(["ADMIN","GERANT"].includes(current?.role||"")){setSuppliers(await api("/api/suppliers"));}
+  if(p.length)await offline.products.bulkPut(p);
+  await offline.cache.bulkPut([{key:"warehouses",value:w},{key:"cash",value:c}]);
+  if(has("users.read")){const [accountRows,profileRows]=await Promise.all([api("/api/users").catch(()=>[]),api("/api/profiles").catch(()=>[])]);setUsers(accountRows);setCustomProfiles(profileRows.filter((p:any)=>p.active));}
+  if(has("reports.read")){const d=await api("/api/dashboard").catch(()=>null);if(d){setDash(d);await offline.cache.put({key:"dashboard",value:d});}}
+  if(has("suppliers.read"))setSuppliers(await api("/api/suppliers").catch(()=>[]));
  }
  async function syncQueue(currentUser:User|null=user){
   if(!navigator.onLine||!currentUser||currentUser.role==="SUPER_ADMIN"||currentUser.tenant_id===null)return;
@@ -69,7 +87,7 @@ export default function App(){
  useEffect(()=>{if(!token)return;let active=true;(async()=>{try{const me=await api("/api/auth/me");if(!active)return;set(token,me);if(me.role==="SUPER_ADMIN"){setTab("Gestion avancée");return;}await refresh(me);}catch(e:any){if(active){clear();setMsg("Session expirée. Veuillez vous reconnecter.");}}})();return()=>{active=false};},[token]);
  const filtered=products.filter(p=>(p.name+p.sku+p.barcode).toLowerCase().includes(search.toLowerCase()));
  const total=useMemo(()=>cart.reduce((s,l)=>s+l.qty*l.product.sale_price*(1+l.product.tax_rate/100),0),[cart]);
- async function login(e:any){e.preventDefault();try{const r=await api("/api/auth/login",{email,password});set(r.access_token,r.user);if(r.user.role==="SUPER_ADMIN")setTab("Gestion avancée");setMsg("Connexion réussie");}catch(e:any){setMsg(e.message)}}
+ async function login(e:any){e.preventDefault();try{const r=await api("/api/auth/login",{email,password});set(r.access_token,r.user);setTab(r.user.role==="SUPER_ADMIN"?"Gestion avancée":r.user.permissions?.includes("sales.write")?"Caisse":r.user.permissions?.includes("catalog.read")?"Catalogue":r.user.permissions?.includes("stock.read")?"Stocks":r.user.permissions?.includes("customers.read")?"Clients":r.user.permissions?.includes("users.read")?"Utilisateurs":"Gestion avancée");setMsg("Connexion réussie");}catch(e:any){setMsg(e.message)}}
  async function register(e:any){e.preventDefault();setBusy(true);setMsg("");try{const r=await api("/api/public/registrations",signup);setMsg(r.message||"Demande envoyée.");setSignup({mode:"HYBRIDE",terms_accepted:false});setRegisterMode(false);setEmail(signup.admin_email||"");}catch(e:any){setMsg(e.message)}finally{setBusy(false)}}
  function add(p:Product){if(p.kind==="COMPOSE"&&p.stock<=0){/* recette pilotée par ingrédients */}setCart(a=>{const x=a.find(i=>i.product.id===p.id);return x?a.map(i=>i.product.id===p.id?{...i,qty:i.qty+1}:i):[...a,{product:p,qty:1}]});}
  async function openCash(){try{await api("/api/cash/open",{opening:Number(opening)});await refresh();setMsg("Caisse ouverte");}catch(e:any){setMsg(e.message)}}
@@ -144,7 +162,7 @@ export default function App(){
  {tab==="Clients"&&<div className="table"><h3>Clients et encours</h3><form className="inline-form" onSubmit={saveCustomer}><input required placeholder="Nom du client" value={form.name||""} onChange={e=>setForm({...form,name:e.target.value})}/><input placeholder="Téléphone" value={form.phone||""} onChange={e=>setForm({...form,phone:e.target.value})}/><input type="number" min="0" placeholder="Plafond crédit" value={form.credit_limit||""} onChange={e=>setForm({...form,credit_limit:e.target.value})}/><button className="primary">Ajouter client</button></form>{customers.map(c=><div className="row" key={c.id}><b>{c.name}</b><span>{c.phone}</span><span>Plafond : {fmt(c.credit_limit)}</span><strong>Dette : {fmt(c.balance_due)}</strong></div>)}</div>}
  {tab==="Fournisseurs"&&<div className="table"><h3>Fournisseurs</h3><form className="inline-form" onSubmit={saveSupplier}><input required placeholder="Nom fournisseur" value={form.name||""} onChange={e=>setForm({...form,name:e.target.value})}/><input placeholder="Téléphone" value={form.phone||""} onChange={e=>setForm({...form,phone:e.target.value})}/><button className="primary">Ajouter fournisseur</button></form>{suppliers.map(s=><div className="row" key={s.id}><b>{s.name}</b><span>{s.phone}</span><strong>Dette : {fmt(s.balance_due)}</strong></div>)}</div>}
  {tab==="Utilisateurs"&&<div className="table"><h3>Comptes de l'entreprise</h3><form className="inline-form" onSubmit={saveUser}><input required placeholder="Nom complet" value={form.name||""} onChange={e=>setForm({...form,name:e.target.value})}/><input required type="email" placeholder="E-mail" value={form.email||""} onChange={e=>setForm({...form,email:e.target.value})}/><input required minLength={8} type="password" placeholder="Mot de passe (8 caractères min.)" value={form.password||""} onChange={e=>setForm({...form,password:e.target.value})}/><select value={form.role||"CAISSIER"} onChange={e=>setForm({...form,role:e.target.value})}>{[...roleOptions,...customProfiles.map(p=>p.role_key)].map(r=><option value={r} key={r}>{customProfiles.find(p=>p.role_key===r)?.name||roleLabels[r]||r}</option>)}</select><button className="primary" disabled={busy}>Créer le compte</button></form>{users.map(u=><div className="row" key={u.id}><b>{u.name}</b><span>{u.email}</span><span>{customProfiles.find(p=>p.role_key===u.role)?.name||roleLabels[u.role]||u.role}</span><strong>{u.active?"Actif":"Désactivé"}</strong>{u.id!==user?.id&&<button onClick={()=>toggleUser(u)}>{u.active?"Désactiver":"Réactiver"}</button>}</div>)}</div>}
- {tab==="Gestion avancée"&&<AdvancedPanel role={user?.role||""}/>}
+ {tab==="Gestion avancée"&&<AdvancedPanel role={user?.role||""} permissions={user?.permissions||[]}/>}
  {tab==="Rapports"&&<><div className="metrics">{[["CA du jour",fmt(dash?.revenue_today||0)],["Ventes",dash?.sales_today||0],["Alertes stock",dash?.low_stock?.length||0],["Créances",dash?.receivables?.length||0]].map(([k,v]:any)=><div key={k}><small>{k}</small><b>{v}</b></div>)}</div><div className="table"><h3>Dernières ventes</h3>{sales.map(s=><div className="row" key={s.id}><b>Vente #{s.id}</b><span>{new Date(s.created_at).toLocaleString("fr-FR")}</span><strong>{fmt(s.total)}</strong><span>{s.status}</span></div>)}</div></>}
  <footer>iDIABA · FCFA · Sénégal</footer></main></div>;
 }
