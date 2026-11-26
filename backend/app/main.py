@@ -112,15 +112,18 @@ async def effective_permissions(u:User,db:AsyncSession):
  if u.role in builtin:
   return sorted(builtin[u.role])
  profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
- return sorted(set(json.loads(profile.permissions or "[]")) & PERMISSION_KEYS) if profile else []
+ permissions=set(json.loads(profile.permissions or "[]")) & PERMISSION_KEYS if profile else set()\n for key in list(permissions):\n  if key.endswith(".write") and key[:-5]+".read" not in permissions: permissions.add(key[:-5]+".read")\n return sorted(permissions)
 def roles(*allowed, permission=None):
  async def check(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
   if u.role in allowed: return u
   from app.advanced import RoleProfile
   profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
   permissions=set(json.loads(profile.permissions or "[]")) if profile else set()
+  for key in list(permissions):
+   if key.endswith(".write"): permissions.add(key[:-5]+".read")
   required=permission or ("users.write" if allowed==("ADMIN",) else ("stock.write" if "STOCK" in allowed else "reports.read"))
-  if required not in permissions: raise HTTPException(403,"Droit insuffisant pour cette opération")
+  required_set={required} if isinstance(required,str) else set(required)
+  if not (required_set & permissions): raise HTTPException(403,"Droit insuffisant pour cette opération")
   return u
  return check
 app=FastAPI(title="iDIABA API",version="2.0")
@@ -184,7 +187,7 @@ async def me(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
  permissions=await effective_permissions(u,db)
  return {"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id,"permissions":permissions}
 @app.get("/api/warehouses")
-async def warehouses(u:User=Depends(roles("ADMIN","GERANT","STOCK","CAISSIER","VENDEUR",permission="sales.write")),db:AsyncSession=Depends(dbdep)):
+async def warehouses(u:User=Depends(roles("ADMIN","GERANT","STOCK","CAISSIER","VENDEUR",permission=("sales.write","stock.read","purchases.read"))),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"code":x.code} for x in (await db.scalars(select(Warehouse).where(Warehouse.tenant_id==u.tenant_id))).all()]
 @app.get("/api/products")
 async def products(u:User=Depends(roles("ADMIN","GERANT","STOCK","CAISSIER","VENDEUR",permission="catalog.read")),db:AsyncSession=Depends(dbdep)):
