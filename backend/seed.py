@@ -1,4 +1,5 @@
 import asyncio
+import os
 import traceback
 
 from sqlalchemy import select
@@ -31,6 +32,12 @@ async def wait_for_database(attempts: int = 12) -> None:
 async def seed() -> None:
     print("[seed] Démarrage de l'initialisation", flush=True)
     print(f"[seed] Dialecte SQLAlchemy : {engine.url.drivername}", flush=True)
+    # Les comptes et données de démonstration sont réservés au développement/CI.
+    # En production, ne jamais créer de comptes avec des mots de passe publics.
+    demo_seed_enabled = os.getenv("ENABLE_DEMO_SEED", "").strip().lower() in {"1", "true", "yes"}
+    if os.getenv("RENDER") and not demo_seed_enabled:
+        print("[seed] Seed de démonstration désactivé en production", flush=True)
+        return
     await wait_for_database()
 
     print("[seed] Création/vérification des tables", flush=True)

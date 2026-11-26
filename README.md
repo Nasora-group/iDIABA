@@ -11,6 +11,6 @@ Gestion commerciale et caisse universelle pour commerces, négoce, retail et res
 Terminal backend : `cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && python seed.py && uvicorn app.main:app --reload`
 Terminal frontend : `cd frontend && npm install && npm run dev`
 
-Démo : admin@demo.sn / admin123 · caisse@demo.sn / caisse123 · PIN gérant 1234.
+Comptes de démonstration : créés uniquement en environnement local/CI. Le seed de démonstration est désactivé sur Render ; pour l'activer explicitement en environnement de test, définir ENABLE_DEMO_SEED=true.
 
-La base Supabase de production reste intacte. Un instantané des données a été créé dans le schéma privé idiaba_backup_20261125. Les données Supabase ne sont pas encore importées dans SQLite : effectuer la migration avant bascule opérationnelle. En production, prévoir un disque persistant, un secret JWT fort, CORS restreint et des sauvegardes externes.
+En local et en CI, l'application utilise SQLite. La production iDIABA V2 utilise PostgreSQL managé sur Render (défini par DATABASE_URL). Le projet Supabase historique est distinct et n'est pas la base runtime de cette version ; son schéma de sauvegarde doit être conservé jusqu'à validation séparée d'une éventuelle reprise de données. Ne pas effectuer de bascule ni de suppression de données sans sauvegarde restaurable et rapprochement des stocks, ventes et soldes.
