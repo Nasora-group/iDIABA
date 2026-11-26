@@ -32,7 +32,7 @@ class RegistrationRequest(Base):
     phone: Mapped[str] = mapped_column(String(40), default="")
     admin_name: Mapped[str] = mapped_column(String(120))
     admin_email: Mapped[str] = mapped_column(String(160), index=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="EN_ATTENTE", index=True)
     review_note: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -679,7 +679,7 @@ class PublicRegistrationIn(BaseModel):
     address: str = Field(default="", max_length=200)
     phone: str = Field(min_length=6, max_length=40)
     admin_name: str = Field(min_length=2, max_length=120)
-    admin_email: str = Field(min_length=5, max_length=160, pattern=r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+    admin_email: str = Field(min_length=5, max_length=160, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     admin_password: str = Field(min_length=10, max_length=128)
     terms_accepted: bool
 
@@ -733,6 +733,7 @@ async def review_registration(registration_id: int, x: RegistrationReviewIn, use
         raise HTTPException(409, "Cette demande a déjà été traitée.")
     if x.decision == "REFUSER":
         request.status = "REFUSEE"
+        request.password_hash = None
         request.review_note = x.note.strip()
         request.reviewed_at = datetime.utcnow()
         await db.commit()
@@ -749,6 +750,7 @@ async def review_registration(registration_id: int, x: RegistrationReviewIn, use
     # n'a pas choisi une formule, un tarif et une échéance.
     db.add(Subscription(tenant_id=tenant.id, plan="ESSENTIEL", status="SUSPENDU", monthly_price=0))
     request.status = "APPROUVEE"
+    request.password_hash = None
     request.review_note = x.note.strip()
     request.reviewed_at = datetime.utcnow()
     await db.commit()
