@@ -53,6 +53,21 @@ class SubscriptionPayment(Base):
     verified_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     verified_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class PlatformPaymentSettings(Base):
+    """Coordonnées publiques de paiement des abonnements SaaS, configurées par le Super Admin."""
+    __tablename__ = "platform_payment_settings"
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    wave_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    wave_name: Mapped[str] = mapped_column(String(120), default="")
+    wave_phone: Mapped[str] = mapped_column(String(40), default="")
+    wave_link: Mapped[str] = mapped_column(String(500), default="")
+    orange_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    orange_name: Mapped[str] = mapped_column(String(120), default="")
+    orange_phone: Mapped[str] = mapped_column(String(40), default="")
+    orange_link: Mapped[str] = mapped_column(String(500), default="")
+    instructions: Mapped[str] = mapped_column(String(500), default="")
+
 class RoleProfile(Base):
     __tablename__ = "role_profiles"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -692,6 +707,59 @@ async def platform_overview(user: User = Depends(auth), db: AsyncSession = Depen
     users = await db.scalar(select(func.count(User.id)))
     subscriptions = (await db.scalars(select(Subscription))).all()
     return {"companies": tenants or 0, "users": users or 0, "subscriptions": [{"tenant_id": s.tenant_id, "plan": s.plan, "status": s.status, "monthly_price": s.monthly_price, "ends_at": s.ends_at} for s in subscriptions]}
+
+class PlatformPaymentSettingsIn(BaseModel):
+    wave_enabled: bool = False
+    wave_name: str = Field(default="", max_length=120)
+    wave_phone: str = Field(default="", max_length=40)
+    wave_link: str = Field(default="", max_length=500)
+    orange_enabled: bool = False
+    orange_name: str = Field(default="", max_length=120)
+    orange_phone: str = Field(default="", max_length=40)
+    orange_link: str = Field(default="", max_length=500)
+    instructions: str = Field(default="", max_length=500)
+
+def _payment_settings_payload(row: Optional[PlatformPaymentSettings] = None):
+    return {
+        "wave_enabled": bool(row.wave_enabled) if row else False,
+        "wave_name": row.wave_name if row else "",
+        "wave_phone": row.wave_phone if row else "",
+        "wave_link": row.wave_link if row else "",
+        "orange_enabled": bool(row.orange_enabled) if row else False,
+        "orange_name": row.orange_name if row else "",
+        "orange_phone": row.orange_phone if row else "",
+        "orange_link": row.orange_link if row else "",
+        "instructions": row.instructions if row else "",
+    }
+
+@router.get("/platform/payment-settings")
+async def platform_payment_settings_get(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    if user.role != "SUPER_ADMIN":
+        raise HTTPException(403, "Réservé au Super Admin plateforme")
+    row = await db.get(PlatformPaymentSettings, 1)
+    return _payment_settings_payload(row)
+
+@router.put("/platform/payment-settings")
+async def platform_payment_settings_save(x: PlatformPaymentSettingsIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    if user.role != "SUPER_ADMIN":
+        raise HTTPException(403, "Réservé au Super Admin plateforme")
+    for label, enabled, phone, link in (
+        ("Wave", x.wave_enabled, x.wave_phone.strip(), x.wave_link.strip()),
+        ("Orange Money", x.orange_enabled, x.orange_phone.strip(), x.orange_link.strip()),
+    ):
+        if enabled and not (phone or link):
+            raise HTTPException(400, f"Renseignez un numéro ou un lien de paiement {label} avant de l'activer.")
+        if link and not (link.startswith("https://") or link.startswith("http://")):
+            raise HTTPException(400, f"Le lien {label} doit commencer par https:// ou http://.")
+    row = await db.get(PlatformPaymentSettings, 1)
+    if row is None:
+        row = PlatformPaymentSettings(id=1)
+        db.add(row)
+    for key, value in x.model_dump().items():
+        setattr(row, key, value.strip() if isinstance(value, str) else value)
+    await db.commit()
+    await db.refresh(row)
+    return _payment_settings_payload(row)
 
 class ManualSubscriptionPaymentIn(BaseModel):
     provider: str = Field(pattern=r"^(WAVE|ORANGE_MONEY)$")

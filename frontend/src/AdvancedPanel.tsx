@@ -15,13 +15,13 @@ export default function AdvancedPanel({role}:{role:string}){
  const [section,setSection]=useState(role==="SUPER_ADMIN"?"Super Admin":"Profils"),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false);
  const [profiles,setProfiles]=useState<any[]>([]),[permissions,setPermissions]=useState<string[]>([]),[catalog,setCatalog]=useState<string[]>([]);
  const [suppliers,setSuppliers]=useState<any[]>([]),[warehouses,setWarehouses]=useState<any[]>([]),[products,setProducts]=useState<any[]>([]),[sales,setSales]=useState<any[]>([]);
- const [purchases,setPurchases]=useState<any[]>([]),[tables,setTables]=useState<any[]>([]),[orders,setOrders]=useState<any[]>([]),[overview,setOverview]=useState<any>(null),[companies,setCompanies]=useState<any[]>([]),[registrations,setRegistrations]=useState<any[]>([]),[transfers,setTransfers]=useState<any[]>([]),[valuation,setValuation]=useState<any>(null);
+ const [purchases,setPurchases]=useState<any[]>([]),[tables,setTables]=useState<any[]>([]),[orders,setOrders]=useState<any[]>([]),[overview,setOverview]=useState<any>(null),[platformPaymentSettings,setPlatformPaymentSettings]=useState<any>({wave_enabled:false,wave_name:"",wave_phone:"",wave_link:"",orange_enabled:false,orange_name:"",orange_phone:"",orange_link:"",instructions:""}),[companies,setCompanies]=useState<any[]>([]),[registrations,setRegistrations]=useState<any[]>([]),[transfers,setTransfers]=useState<any[]>([]),[valuation,setValuation]=useState<any>(null);
  const [form,setForm]=useState<any>({});
  const update=(k:string,v:any)=>setForm((x:any)=>({...x,[k]:v}));
  const load=async()=>{
   if(role==="SUPER_ADMIN"){
-   const [platformOverview,platformCompanies,platformRegistrations]=await Promise.all([api("/api/platform/overview"),api("/api/platform/companies"),api("/api/platform/registrations")]);
-   setOverview(platformOverview);setCompanies(platformCompanies);setRegistrations(platformRegistrations);return;
+   const [platformOverview,platformCompanies,platformRegistrations,paymentSettings]=await Promise.all([api("/api/platform/overview"),api("/api/platform/companies"),api("/api/platform/registrations"),api("/api/platform/payment-settings")]);
+   setOverview(platformOverview);setCompanies(platformCompanies);setRegistrations(platformRegistrations);setPlatformPaymentSettings(paymentSettings);return;
   }
   const [pr,pc,su,wh,pro,sa,po,tb,od,tr,va]=await Promise.all([
    api("/api/profiles").catch(()=>[]),api("/api/permissions").catch(()=>[]),api("/api/suppliers").catch(()=>[]),
@@ -56,6 +56,30 @@ export default function AdvancedPanel({role}:{role:string}){
     <button style={{...btn,background:"#991b1b"}} disabled={busy} onClick={()=>{const note=window.prompt("Motif du refus (facultatif)","Informations à compléter");if(note!==null)run(()=>api("/api/platform/registrations/"+r.id+"/review",{decision:"REFUSER",note}),"Demande refusée");}}>Refuser</button>
    </div>}
   </div>)}
+  <section style={{...box,marginTop:20}}>
+   <h4 style={{marginTop:0}}>Coordonnées de paiement iDIABA</h4>
+   <p style={{fontSize:13,color:"#475569"}}>Ces informations sont facultatives. Laissez les moyens désactivés tant que vous ne disposez pas de vos coordonnées ou liens marchands. Aucun numéro n'est prérempli.</p>
+   <form onSubmit={e=>{e.preventDefault();run(()=>api("/api/platform/payment-settings",platformPaymentSettings,"PUT"),"Coordonnées de paiement enregistrées");}} style={{display:"grid",gap:12}}>
+    <div style={{border:"1px solid #e5e7eb",borderRadius:10,padding:12}}>
+     <label style={{display:"flex",alignItems:"center",gap:8,fontWeight:600}}><input type="checkbox" checked={!!platformPaymentSettings.wave_enabled} onChange={e=>setPlatformPaymentSettings((v:any)=>({...v,wave_enabled:e.target.checked}))}/> Activer Wave</label>
+     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+      <input placeholder="Nom du bénéficiaire Wave" value={platformPaymentSettings.wave_name||""} onChange={e=>setPlatformPaymentSettings((v:any)=>({...v,wave_name:e.target.value}))} style={field}/>
+      <input placeholder="Numéro Wave marchand" value={platformPaymentSettings.wave_phone||""} onChange={e=>setPlatformPaymentSettings((v:any)=>({...v,wave_phone:e.target.value}))} style={field}/>
+      <input type="url" placeholder="Lien de paiement Wave (facultatif)" value={platformPaymentSettings.wave_link||""} onChange={e=>setPlatformPaymentSettings((v:any)=>({...v,wave_link:e.target.value}))} style={{...field,flex:1}}/>
+     </div>
+    </div>
+    <div style={{border:"1px solid #e5e7eb",borderRadius:10,padding:12}}>
+     <label style={{display:"flex",alignItems:"center",gap:8,fontWeight:600}}><input type="checkbox" checked={!!platformPaymentSettings.orange_enabled} onChange={e=>setPlatformPaymentSettings((v:any)=>({...v,orange_enabled:e.target.checked}))}/> Activer Orange Money</label>
+     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+      <input placeholder="Nom du bénéficiaire Orange Money" value={platformPaymentSettings.orange_name||""} onChange={e=>setPlatformPaymentSettings((v:any)=>({...v,orange_name:e.target.value}))} style={field}/>
+      <input placeholder="Numéro Orange Money marchand" value={platformPaymentSettings.orange_phone||""} onChange={e=>setPlatformPaymentSettings((v:any)=>({...v,orange_phone:e.target.value}))} style={field}/>
+      <input type="url" placeholder="Lien de paiement Orange Money (facultatif)" value={platformPaymentSettings.orange_link||""} onChange={e=>setPlatformPaymentSettings((v:any)=>({...v,orange_link:e.target.value}))} style={{...field,flex:1}}/>
+     </div>
+    </div>
+    <label style={{display:"grid",gap:6}}>Instructions à communiquer aux entreprises<textarea maxLength={500} rows={3} placeholder="Ex. Indiquez le nom de votre entreprise dans le motif du transfert." value={platformPaymentSettings.instructions||""} onChange={e=>setPlatformPaymentSettings((v:any)=>({...v,instructions:e.target.value}))} style={{...field,resize:"vertical"}}/></label>
+    <div><button style={btn} disabled={busy}>Enregistrer les coordonnées</button></div>
+   </form>
+  </section>
   <h4 style={{marginTop:24}}>Entreprises enregistrées</h4>
   {companies.map((co:any)=><div key={co.id} style={{padding:8,borderBottom:"1px solid #eee"}}><b>{co.name}</b> · {co.mode} · {co.currency} · ID {co.id}<p style={{margin:"6px 0",fontSize:13,color:"#475569"}}>Abonnement actuel : <b>{co.subscription?.plan||"Non défini"}</b> · {co.subscription?.status||"À initialiser"} · {Number(co.subscription?.monthly_price||0).toLocaleString("fr-FR")} FCFA/mois · Échéance : {co.subscription?.ends_at?new Date(co.subscription.ends_at).toLocaleDateString("fr-FR"):"Sans échéance"}</p><form onSubmit={e=>{e.preventDefault();const expiry=form["ends_at_"+co.id]||"";run(()=>api("/api/platform/companies/"+co.id+"/subscription",{plan:form["plan_"+co.id]||co.subscription?.plan||"ESSENTIEL",status:form["status_"+co.id]||co.subscription?.status||"ESSAI",monthly_price:Number(form["price_"+co.id]??co.subscription?.monthly_price??0),ends_at:expiry?new Date(expiry+"T23:59:59Z").toISOString():null},"PUT"),"Abonnement mis à jour");}} style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}><select value={form["plan_"+co.id]||co.subscription?.plan||"ESSENTIEL"} onChange={e=>update("plan_"+co.id,e.target.value)} style={field}><option>ESSENTIEL</option><option>PRO</option><option>RESTAURANT</option><option>ENTREPRISE</option></select><select value={form["status_"+co.id]||co.subscription?.status||"ESSAI"} onChange={e=>update("status_"+co.id,e.target.value)} style={field}><option>ESSAI</option><option>ACTIF</option><option>SUSPENDU</option><option>RESILIE</option></select><input type="number" min="0" placeholder="Prix mensuel" value={form["price_"+co.id]??co.subscription?.monthly_price??0} onChange={e=>update("price_"+co.id,e.target.value)} style={field}/><label style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>Date d'échéance <input type="date" value={form["ends_at_"+co.id]??(co.subscription?.ends_at?new Date(co.subscription.ends_at).toISOString().slice(0,10):"")} onChange={e=>update("ends_at_"+co.id,e.target.value)} style={field}/></label><button style={btn}>Enregistrer abonnement</button></form>
  <h5 style={{margin:"12px 0 6px"}}>Paiement reçu par Wave ou Orange Money</h5><small>Le client paie directement. Après vérification du reçu dans le compte marchand, saisissez la référence et confirmez le paiement.</small>
