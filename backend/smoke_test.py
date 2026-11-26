@@ -57,6 +57,12 @@ assert {
     "kitchen_order_lines", "subscriptions", "stock_transfers", "stock_transfer_lines",
 } <= set(Base.metadata.tables)
 print("ADVANCED ROUTES OK: profils, achats, réceptions, inventaires, transferts, valorisation, retours, restaurant, factures, SaaS")
+# Le circuit achats expose le détail des lignes et conserve les quantités reçues.
+from app.advanced import PurchaseLine
+assert {"purchase_orders", "purchase_lines"} <= set(Base.metadata.tables)
+assert hasattr(PurchaseLine, "received") and hasattr(PurchaseLine, "unit_cost")
+assert {"/api/purchases", "/api/purchases/{order_id}/receive"} <= {route.path for route in app.routes}
+print("PURCHASE WORKFLOW OK: commandes multi-lignes et réception partielle")
 
 # Catalogue : création, modification et import Excel tenant-scoped.
 product_paths={route.path for route in app.routes}
