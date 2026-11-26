@@ -38,7 +38,7 @@ export default function AdvancedPanel({role,permissions=[]}:{role:string;permiss
    const [platformOverview,platformCompanies,platformRegistrations,paymentSettings]=await Promise.all([api("/api/platform/overview"),api("/api/platform/companies"),api("/api/platform/registrations"),api("/api/platform/payment-settings")]);
    setOverview(platformOverview);setCompanies(platformCompanies);setRegistrations(platformRegistrations);setPlatformPaymentSettings(paymentSettings);return;
   }
-  const [pr,pc,su,wh,pro,sa,po,tb,od,tr,va]=await Promise.all([
+  const [pr,pc,su,wh,pro,sa,po,tb,od,tr,va,mv]=await Promise.all([
    api("/api/profiles").catch(()=>[]),api("/api/permissions").catch(()=>[]),api("/api/suppliers").catch(()=>[]),
    api("/api/warehouses").catch(()=>[]),api("/api/products").catch(()=>[]),api("/api/sales").catch(()=>[]),
    api("/api/purchases").catch(()=>[]),api("/api/restaurant/tables").catch(()=>[]),api("/api/restaurant/orders").catch(()=>[]),api("/api/stock/transfers").catch(()=>[]),api("/api/stock/valuation").catch(()=>null),api("/api/stock/movements").catch(()=>[])
