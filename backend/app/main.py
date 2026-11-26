@@ -118,6 +118,9 @@ async def effective_permissions(u:User,db:AsyncSession):
  if permissions & {"sales.write","sales.refund"}: permissions.update({"catalog.read","sales.read"})
  if permissions & {"stock.read","stock.write","inventory.write","purchases.read","purchases.write","restaurant.read","restaurant.write"}: permissions.add("catalog.read")
  if permissions & {"purchases.read","purchases.write"}: permissions.update({"suppliers.read","stock.read"})
+ if permissions & {"payables.read","payables.write"}: permissions.add("suppliers.read")
+ if permissions & {"receivables.read","receivables.write"}: permissions.add("customers.read")
+ if "finance.write" in permissions: permissions.add("finance.read")
  return sorted(permissions)
 def roles(*allowed, permission=None):
  async def check(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
@@ -409,7 +412,12 @@ async def sale_create(x:SaleIn,u:User=Depends(roles("ADMIN","GERANT","CAISSIER",
  except IntegrityError:
   return await duplicate_result()
  return {"id":s.id,"status":s.status,"total":total,"change":change}
-class StockIn(BaseModel): warehouse_id:int;product_id:int;quantity:float;unit_cost:float=0;kind:str="ENTREE_ACHAT"
+class StockIn(BaseModel):
+ warehouse_id:int
+ product_id:int
+ quantity:float=Field(gt=0)
+ unit_cost:float=Field(default=0,ge=0)
+ kind:str=Field(default="ENTREE_ACHAT",pattern=r"^(ENTREE_ACHAT|PERTE_CASSE|AJUSTEMENT|RETOUR_CLIENT|SORTIE_DIVERSE)$")
 @app.get("/api/stock/movements")
 async def stock_movements(u:User=Depends(roles("ADMIN","GERANT","STOCK",permission="stock.read")),db:AsyncSession=Depends(dbdep)):
  rows=(await db.scalars(select(Movement).where(Movement.tenant_id==u.tenant_id).order_by(Movement.created_at.desc()).limit(200))).all()
