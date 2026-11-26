@@ -246,7 +246,7 @@ async def profile_create(x: ProfileIn, user: User = Depends(tenant_auth), db: As
     await permitted(user, "users.write", db)
     if set(x.permissions) - PERMISSION_KEYS:
         raise HTTPException(400, "Droit inconnu")
-    if x.role_key in {"ADMIN", "SUPER_ADMIN"} or await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id == user.tenant_id, RoleProfile.role_key == x.role_key)):
+    if x.role_key in {"ADMIN", "SUPER_ADMIN", "GERANT", "CAISSIER", "VENDEUR", "STOCK"} or await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id == user.tenant_id, RoleProfile.role_key == x.role_key)):
         raise HTTPException(409, "Ce profil existe déjà ou est réservé")
     row = RoleProfile(tenant_id=user.tenant_id, role_key=x.role_key, name=x.name, permissions=json.dumps(sorted(set(x.permissions))))
     db.add(row)
