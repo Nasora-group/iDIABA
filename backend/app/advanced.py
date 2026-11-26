@@ -203,9 +203,15 @@ class Subscription(Base):
     ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 PERMISSION_KEYS = {
-    "users.read", "users.write", "purchases.read", "purchases.write",
-    "stock.read", "stock.write", "inventory.write", "sales.read",
-    "sales.refund", "restaurant.read", "restaurant.write", "reports.read"
+    "users.read", "users.write",
+    "catalog.read", "catalog.write",
+    "customers.read", "customers.write",
+    "suppliers.read", "suppliers.write",
+    "cash.read", "cash.open", "cash.close",
+    "purchases.read", "purchases.write",
+    "stock.read", "stock.write", "inventory.write",
+    "sales.read", "sales.write", "sales.refund",
+    "restaurant.read", "restaurant.write", "reports.read"
 }
 
 async def permitted(user: User, permission: str, db: AsyncSession):
@@ -225,7 +231,8 @@ class ProfileIn(BaseModel):
     permissions: list[str] = []
 
 @router.get("/permissions")
-async def permission_catalog(user: User = Depends(tenant_auth)):
+async def permission_catalog(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "users.write", db)
     return sorted(PERMISSION_KEYS)
 
 @router.get("/profiles")
@@ -239,7 +246,7 @@ async def profile_create(x: ProfileIn, user: User = Depends(tenant_auth), db: As
     await permitted(user, "users.write", db)
     if set(x.permissions) - PERMISSION_KEYS:
         raise HTTPException(400, "Droit inconnu")
-    if x.role_key in {"ADMIN", "SUPER_ADMIN"} or await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id == user.tenant_id, RoleProfile.role_key == x.role_key)):
+    if x.role_key in {"ADMIN", "SUPER_ADMIN", "GERANT", "CAISSIER", "VENDEUR", "STOCK"} or await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id == user.tenant_id, RoleProfile.role_key == x.role_key)):
         raise HTTPException(409, "Ce profil existe déjà ou est réservé")
     row = RoleProfile(tenant_id=user.tenant_id, role_key=x.role_key, name=x.name, permissions=json.dumps(sorted(set(x.permissions))))
     db.add(row)
@@ -618,6 +625,7 @@ async def kitchen_order_status(order_id: int, status: str, user: User = Depends(
 
 @router.get("/sales/{sale_id}/invoice")
 async def sale_invoice(sale_id: int, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "sales.read", db)
     sale = await db.scalar(select(Sale).where(Sale.id == sale_id, Sale.tenant_id == user.tenant_id))
     if not sale:
         raise HTTPException(404, "Vente introuvable")
@@ -691,6 +699,7 @@ async def platform_company_create(x: CompanyIn, user: User = Depends(auth), db: 
 
 @router.get("/sales/export.csv")
 async def sales_export(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "sales.read", db)
     rows = (await db.scalars(select(Sale).where(Sale.tenant_id == user.tenant_id).order_by(Sale.created_at.desc()))).all()
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
