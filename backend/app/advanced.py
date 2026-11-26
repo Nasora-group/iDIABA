@@ -222,7 +222,10 @@ async def permitted(user: User, permission: str, db: AsyncSession):
         RoleProfile.role_key == user.role,
         RoleProfile.active.is_(True)
     ))
-    if not profile or permission not in json.loads(profile.permissions or "[]"):
+    granted = set(json.loads(profile.permissions or "[]")) if profile else set()
+    if permission.endswith(".read") and permission[:-5] + ".write" in granted:
+        granted.add(permission)
+    if permission not in granted:
         raise HTTPException(403, "Droit insuffisant pour cette opération")
 
 class ProfileIn(BaseModel):
