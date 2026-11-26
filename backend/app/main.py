@@ -314,7 +314,13 @@ class CloseCash(BaseModel): counted:float=Field(ge=0)
 async def cash_close(cid:int,x:CloseCash,u:User=Depends(roles("ADMIN","GERANT","CAISSIER",permission="cash.close")),db:AsyncSession=Depends(dbdep)):
  c=await db.scalar(select(Cash).where(Cash.id==cid,Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN"))
  if not c: raise HTTPException(404,"Session introuvable")
- c.counted=x.counted;c.variance=x.counted-c.expected;c.status="CLOSED";c.closed_at=datetime.utcnow();await db.commit();return {"expected":c.expected,"counted":c.counted,"variance":c.variance}
+ from app.advanced import Expense, SupplierPayment, CustomerReceipt
+ cash_sales=await db.scalar(select(func.coalesce(func.sum(Payment.amount),0)).join(Sale,Sale.id==Payment.sale_id).where(Sale.cash_id==c.id,Sale.tenant_id==u.tenant_id,Payment.method=="ESPECES"))
+ cash_expenses=await db.scalar(select(func.coalesce(func.sum(Expense.amount),0)).where(Expense.tenant_id==u.tenant_id,Expense.cash_id==c.id))
+ supplier_cash=await db.scalar(select(func.coalesce(func.sum(SupplierPayment.amount),0)).where(SupplierPayment.tenant_id==u.tenant_id,SupplierPayment.cash_id==c.id))
+ customer_cash=await db.scalar(select(func.coalesce(func.sum(CustomerReceipt.amount),0)).where(CustomerReceipt.tenant_id==u.tenant_id,CustomerReceipt.cash_id==c.id))
+ c.counted=x.counted;c.variance=x.counted-c.expected;c.status="CLOSED";c.closed_at=datetime.utcnow();await db.commit()
+ return {"expected":c.expected,"counted":c.counted,"variance":c.variance,"cash_sales":float(cash_sales or 0),"cash_expenses":float(cash_expenses or 0),"supplier_payments":float(supplier_cash or 0),"customer_receipts":float(customer_cash or 0),"opening":c.opening}
 class LineIn(BaseModel): product_id:int;quantity:float=Field(gt=0)
 class PayIn(BaseModel): method:str;amount:float=Field(gt=0);reference:str=""
 class SaleIn(BaseModel):
@@ -417,7 +423,7 @@ class StockIn(BaseModel):
  product_id:int
  quantity:float=Field(gt=0)
  unit_cost:float=Field(default=0,ge=0)
- kind:str=Field(default="ENTREE_ACHAT",pattern=r"^(ENTREE_ACHAT|PERTE_CASSE|AJUSTEMENT|RETOUR_CLIENT|SORTIE_DIVERSE)$")
+ kind:str=Field(default="ENTREE_ACHAT",pattern=r"^(ENTREE_ACHAT|PERTE_CASSE|AJUSTEMENT)$")
 @app.get("/api/stock/movements")
 async def stock_movements(u:User=Depends(roles("ADMIN","GERANT","STOCK",permission="stock.read")),db:AsyncSession=Depends(dbdep)):
  rows=(await db.scalars(select(Movement).where(Movement.tenant_id==u.tenant_id).order_by(Movement.created_at.desc()).limit(200))).all()
