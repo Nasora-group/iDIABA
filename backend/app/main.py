@@ -148,6 +148,15 @@ class Login(BaseModel): email:str;password:str
 async def login(x:Login,db:AsyncSession=Depends(dbdep)):
  u=await db.scalar(select(User).where(User.email==x.email.lower(),User.active.is_(True)))
  if not u or not hasher.verify(x.password,u.password_hash): raise HTTPException(401,"Identifiants incorrects")
+ if u.tenant_id is not None:
+  subscription=(await db.execute(text("SELECT status, ends_at FROM subscriptions WHERE tenant_id = :tenant_id"),{"tenant_id":u.tenant_id})).mappings().first()
+  if not subscription: raise HTTPException(402,"Compte en attente de validation par la plateforme.")
+  status=str(subscription["status"] or "").upper()
+  if status not in {"ESSAI","ACTIF"}: raise HTTPException(402,"Entreprise enregistree. Acces disponible apres activation de l abonnement par iDIABA.")
+  ends_at=subscription["ends_at"]
+  if ends_at is not None:
+   if ends_at.tzinfo is None: ends_at=ends_at.replace(tzinfo=timezone.utc)
+   if ends_at <= datetime.now(timezone.utc): raise HTTPException(402,"Abonnement arrive a echeance. Contactez iDIABA.")
  exp=datetime.now(timezone.utc)+timedelta(hours=12)
  t=await db.get(Tenant,u.tenant_id) if u.tenant_id is not None else None
  tenant_data=None if t is None else {"name":t.name,"mode":t.mode,"currency":t.currency}
