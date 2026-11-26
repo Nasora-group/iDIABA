@@ -79,9 +79,23 @@ async def auth(token:str=Depends(oauth),db:AsyncSession=Depends(dbdep)):
  u=await db.get(User,uid)
  if not u or not u.active: raise HTTPException(401,"Compte inactif")
  return u
-async def tenant_auth(u:User=Depends(auth)):
+async def tenant_auth(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
  if u.role == "SUPER_ADMIN" or u.tenant_id is None:
   raise HTTPException(403,"Le Super Admin doit utiliser exclusivement le portail de gestion des entreprises")
+ subscription=(await db.execute(text("SELECT status, ends_at FROM subscriptions WHERE tenant_id = :tenant_id"),{"tenant_id":u.tenant_id})).mappings().first()
+ if not subscription:
+  raise HTTPException(402,"Abonnement introuvable. Contactez l'administrateur de la plateforme.")
+ status=str(subscription["status"] or "").upper()
+ if status in {"SUSPENDU","RESILIE"}:
+  raise HTTPException(402,"Abonnement suspendu ou résilié. Contactez l'administrateur de la plateforme.")
+ if status not in {"ESSAI","ACTIF"}:
+  raise HTTPException(402,"Statut d'abonnement non valide. Contactez l'administrateur de la plateforme.")
+ ends_at=subscription["ends_at"]
+ if ends_at is not None:
+  if ends_at.tzinfo is None:
+   ends_at=ends_at.replace(tzinfo=timezone.utc)
+  if ends_at <= datetime.now(timezone.utc):
+   raise HTTPException(402,"Abonnement arrivé à échéance. Renouvelez votre abonnement.")
  return u
 def roles(*allowed):
  async def check(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
@@ -107,7 +121,12 @@ async def startup():
    await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS change_amount DOUBLE PRECISION NOT NULL DEFAULT 0"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
    await connection.execute(text("INSERT INTO subscriptions (tenant_id, plan, status, monthly_price, starts_at) SELECT id, 'ESSENTIEL', 'ESSAI', 0, CURRENT_TIMESTAMP FROM tenants ON CONFLICT (tenant_id) DO NOTHING"))
-  print("[startup] Isolation du compte Super Admin appliquée", flush=True)
+   # Neutralise uniquement les deux comptes de démonstration publics historiques.
+   # Les entreprises, ventes et autres données associées sont conservées.
+   demo_result=await connection.execute(text("UPDATE users SET active = FALSE WHERE lower(email) IN ('admin@demo.sn','caisse@demo.sn') AND active = TRUE"))
+   if demo_result.rowcount:
+    print(f"[startup] {demo_result.rowcount} compte(s) de démonstration désactivé(s)", flush=True)
+  print("[startup] Isolation du compte Super Admin et contrôle des abonnements appliqués", flush=True)
  elif engine.dialect.name == "sqlite":
   async with engine.begin() as connection:
    columns={row[1] for row in (await connection.execute(text("PRAGMA table_info(sales)"))).all()}
