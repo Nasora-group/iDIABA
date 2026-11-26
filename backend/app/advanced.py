@@ -436,6 +436,68 @@ class CountLine(BaseModel):
 class InventoryPost(BaseModel):
     lines: list[CountLine] = Field(min_length=1)
 
+@router.get("/inventories")
+async def inventory_list(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "inventory.write", db)
+    rows = (await db.scalars(
+        select(Inventory).where(Inventory.tenant_id == user.tenant_id)
+        .order_by(Inventory.id.desc()).limit(100)
+    )).all()
+    if not rows:
+        return []
+    warehouse_ids = {row.warehouse_id for row in rows}
+    warehouse_rows = (await db.execute(
+        select(Warehouse.id, Warehouse.name).where(Warehouse.id.in_(warehouse_ids))
+    )).all()
+    warehouse_names = {row.id: row.name for row in warehouse_rows}
+    inventory_ids = [row.id for row in rows]
+    stats = (await db.execute(
+        select(
+            InventoryLine.inventory_id,
+            func.count(InventoryLine.id),
+            func.coalesce(func.sum(func.abs(InventoryLine.difference)), 0)
+        ).where(InventoryLine.inventory_id.in_(inventory_ids))
+        .group_by(InventoryLine.inventory_id)
+    )).all()
+    stats_by_id = {row[0]: {"line_count": row[1], "adjustment_units": float(row[2] or 0)} for row in stats}
+    return [{
+        "id": row.id, "warehouse_id": row.warehouse_id,
+        "warehouse_name": warehouse_names.get(row.warehouse_id, ""),
+        "status": row.status, "created_at": row.created_at,
+        "line_count": stats_by_id.get(row.id, {}).get("line_count", 0),
+        "adjustment_units": stats_by_id.get(row.id, {}).get("adjustment_units", 0)
+    } for row in rows]
+
+
+@router.get("/inventories/{inventory_id}")
+async def inventory_detail(inventory_id: int, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    await permitted(user, "inventory.write", db)
+    inventory = await db.scalar(select(Inventory).where(
+        Inventory.id == inventory_id, Inventory.tenant_id == user.tenant_id
+    ))
+    if not inventory:
+        raise HTTPException(404, "Inventaire introuvable")
+    warehouse = await db.scalar(select(Warehouse).where(
+        Warehouse.id == inventory.warehouse_id, Warehouse.tenant_id == user.tenant_id
+    ))
+    rows = (await db.execute(
+        select(InventoryLine, Product.name, Product.sku, Product.unit)
+        .join(Product, Product.id == InventoryLine.product_id)
+        .where(InventoryLine.inventory_id == inventory.id)
+        .order_by(Product.name)
+    )).all()
+    return {
+        "id": inventory.id, "warehouse_id": inventory.warehouse_id,
+        "warehouse_name": warehouse.name if warehouse else "",
+        "status": inventory.status, "created_at": inventory.created_at,
+        "lines": [{
+            "product_id": line.product_id, "product_name": name, "sku": sku,
+            "unit": unit, "theoretical": line.theoretical,
+            "counted": line.counted, "difference": line.difference
+        } for line, name, sku, unit in rows]
+    }
+
+
 @router.post("/inventories")
 async def inventory_start(x: InventoryStart, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "inventory.write", db)
