@@ -670,7 +670,7 @@ async def platform_company_create(x: CompanyIn, user: User = Depends(auth), db: 
     await db.flush()
     admin = User(tenant_id=tenant.id, email=email, name=x.admin_name, password_hash=hasher.hash(x.admin_password), role="ADMIN", active=True)
     db.add(admin)
-    db.add(Subscription(tenant_id=tenant.id, plan="ESSENTIEL", status="ESSAI", monthly_price=0))
+    db.add(Subscription(tenant_id=tenant.id, plan="ESSENTIEL", status="SUSPENDU", monthly_price=0))
     await db.commit()
     return {"id": tenant.id, "name": tenant.name, "admin_email": email}
 
