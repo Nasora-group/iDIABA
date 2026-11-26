@@ -165,7 +165,7 @@ async def login(x:Login,db:AsyncSession=Depends(dbdep)):
 @app.get("/api/auth/me")
 async def me(u:User=Depends(auth)): return {"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id}
 @app.get("/api/warehouses")
-async def warehouses(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+async def warehouses(u:User=Depends(roles("ADMIN","GERANT","STOCK","CAISSIER","VENDEUR",permission="sales.write")),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"code":x.code} for x in (await db.scalars(select(Warehouse).where(Warehouse.tenant_id==u.tenant_id))).all()]
 @app.get("/api/products")
 async def products(u:User=Depends(roles("ADMIN","GERANT","STOCK","CAISSIER","VENDEUR",permission="catalog.read")),db:AsyncSession=Depends(dbdep)):
@@ -221,7 +221,7 @@ class ProductImportLine(BaseModel):
 class ProductImport(BaseModel):
  warehouse_id:int;mode:str="REPLACE";items:list[ProductImportLine]=Field(min_length=1,max_length=2000)
 @app.post("/api/products/import")
-async def import_products(x:ProductImport,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
+async def import_products(x:ProductImport,u:User=Depends(roles("ADMIN","GERANT","STOCK",permission="catalog.write")),db:AsyncSession=Depends(dbdep)):
  if x.mode not in {"REPLACE","ADD"}: raise HTTPException(400,"Mode d'importation invalide")
  warehouse=await db.scalar(select(Warehouse).where(Warehouse.id==x.warehouse_id,Warehouse.tenant_id==u.tenant_id))
  if not warehouse: raise HTTPException(404,"Dépôt introuvable")
