@@ -119,6 +119,7 @@ async def startup():
    await connection.execute(text("UPDATE users SET tenant_id = NULL WHERE role = 'SUPER_ADMIN' AND tenant_id IS NOT NULL"))
    await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS client_sale_id VARCHAR(64)"))
    await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS change_amount DOUBLE PRECISION NOT NULL DEFAULT 0"))
+   await connection.execute(text("ALTER TABLE registration_requests ALTER COLUMN password_hash DROP NOT NULL"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
    await connection.execute(text("INSERT INTO subscriptions (tenant_id, plan, status, monthly_price, starts_at) SELECT id, 'ESSENTIEL', 'ESSAI', 0, CURRENT_TIMESTAMP FROM tenants ON CONFLICT (tenant_id) DO NOTHING"))
    # Neutralise uniquement les deux comptes de démonstration publics historiques.
