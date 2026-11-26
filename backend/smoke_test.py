@@ -46,7 +46,7 @@ from app.advanced import (
 advanced_paths={route.path for route in app.routes}
 assert {
     "/api/profiles", "/api/purchases", "/api/purchases/{order_id}/receive",
-    "/api/inventories", "/api/inventories/{inventory_id}/validate",
+    "/api/inventories", "/api/inventories/{inventory_id}", "/api/inventories/{inventory_id}/validate",
     "/api/sales/{sale_id}/refund", "/api/restaurant/tables",
     "/api/restaurant/orders", "/api/sales/{sale_id}/invoice",
     "/api/stock/transfers", "/api/stock/valuation", "/api/platform/overview", "/api/platform/companies", "/api/platform/bootstrap", "/api/platform/companies/{tenant_id}/subscription", "/api/sales/export.csv",
