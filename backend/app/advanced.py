@@ -695,7 +695,7 @@ async def platform_overview(user: User = Depends(auth), db: AsyncSession = Depen
 
 class ManualSubscriptionPaymentIn(BaseModel):
     provider: str = Field(pattern=r"^(WAVE|ORANGE_MONEY)$")
-    amount: float = Field(gt=0)
+    amount: int = Field(gt=0)
     reference: str = Field(min_length=3, max_length=120)
     period_months: int = Field(default=1, ge=1, le=12)
     note: str = Field(default="", max_length=500)
@@ -721,7 +721,7 @@ async def record_subscription_payment(tenant_id: int, x: ManualSubscriptionPayme
     expected_amount = monthly_price * x.period_months
     if monthly_price <= 0:
         raise HTTPException(409, "Définissez dabord le tarif mensuel de labonnement.")
-    if round(x.amount) != expected_amount:
+    if x.amount != expected_amount:
         raise HTTPException(400, f"Montant attendu : {expected_amount} FCFA pour {x.period_months} mois.")
     now = datetime.utcnow()
     base = subscription.ends_at.replace(tzinfo=None) if subscription.ends_at and subscription.ends_at.tzinfo else subscription.ends_at
