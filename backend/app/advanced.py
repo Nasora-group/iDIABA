@@ -11,14 +11,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from pydantic import BaseModel, Field
-from sqlalchemy import String, Float, Integer, Boolean, DateTime, Date, ForeignKey, select, func
+from sqlalchemy import String, Float, Integer, Boolean, DateTime, Date, ForeignKey, select, func, cast
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import (
     Base, app, dbdep, auth, roles, User, Tenant, Product, Warehouse,
     WarehouseStock, Movement, Supplier, Sale, SaleLine, Payment, Cash,
-    Audit, hasher, tenant_auth, effective_permissions, Customer, SaleLine
+    Audit, hasher, tenant_auth, effective_permissions, Customer
 )
 
 router = APIRouter(prefix="/api", tags=["modules métier"])
@@ -1358,7 +1358,6 @@ async def cash_session_list(user: User = Depends(tenant_auth), db: AsyncSession 
     session_ids = [cash.id for cash, _ in rows]
     if not session_ids:
         return []
-    from sqlalchemy import case
     expense_rows = (await db.execute(
         select(Expense.cash_id, func.coalesce(func.sum(Expense.amount), 0))
         .where(Expense.tenant_id == user.tenant_id, Expense.cash_id.in_(session_ids))
