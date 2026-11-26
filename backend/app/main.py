@@ -97,14 +97,14 @@ async def tenant_auth(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
   if ends_at <= datetime.now(timezone.utc):
    raise HTTPException(402,"Abonnement arrivé à échéance. Renouvelez votre abonnement.")
  return u
-def roles(*allowed):
+def roles(*allowed, permission=None):
  async def check(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
   if u.role in allowed: return u
   from app.advanced import RoleProfile
   profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
   permissions=set(json.loads(profile.permissions or "[]")) if profile else set()
-  required="users.write" if allowed==("ADMIN",) else ("stock.write" if "STOCK" in allowed else "reports.read")
-  if required not in permissions: raise HTTPException(403,"Accès refusé")
+  required=permission or ("users.write" if allowed==("ADMIN",) else ("stock.write" if "STOCK" in allowed else "reports.read"))
+  if required not in permissions: raise HTTPException(403,"Droit insuffisant pour cette opération")
   return u
  return check
 app=FastAPI(title="iDIABA API",version="2.0")
@@ -168,12 +168,12 @@ async def me(u:User=Depends(auth)): return {"id":u.id,"name":u.name,"email":u.em
 async def warehouses(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"code":x.code} for x in (await db.scalars(select(Warehouse).where(Warehouse.tenant_id==u.tenant_id))).all()]
 @app.get("/api/products")
-async def products(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+async def products(u:User=Depends(roles("ADMIN","GERANT","STOCK","CAISSIER","VENDEUR",permission="catalog.read")),db:AsyncSession=Depends(dbdep)):
  return [{"id":p.id,"sku":p.sku,"barcode":p.barcode,"name":p.name,"category":p.category,"unit":p.unit,"purchase_price":p.purchase_price,"sale_price":p.sale_price,"tax_rate":p.tax_rate,"stock":p.stock,"min_stock":p.min_stock,"kind":p.kind} for p in (await db.scalars(select(Product).where(Product.tenant_id==u.tenant_id,Product.active.is_(True)).order_by(Product.name))).all()]
 class ProductIn(BaseModel):
  sku:str=Field(min_length=1,max_length=50);name:str=Field(min_length=1,max_length=150);barcode:str="";category:str="Général";unit:str=Field(default="Pièce",min_length=1,max_length=20);purchase_price:float=Field(default=0,ge=0);sale_price:float=Field(ge=0);tax_rate:float=Field(default=18,ge=0,le=100);min_stock:float=Field(default=0,ge=0);kind:str="SIMPLE"
 @app.post("/api/products")
-async def add_product(x:ProductIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
+async def add_product(x:ProductIn,u:User=Depends(roles("ADMIN","GERANT","STOCK",permission="catalog.write")),db:AsyncSession=Depends(dbdep)):
  p=Product(tenant_id=u.tenant_id,**x.model_dump());db.add(p)
  try:
   await db.commit()
@@ -187,7 +187,7 @@ def unit_conversion(old_unit:str,new_unit:str):
  if not old or not new or old[0]!=new[0]: raise HTTPException(409,"Changement d'unité impossible : choisissez une unité de la même famille. Les unités de stock ne sont pas interchangeables.")
  return old[1]/new[1]
 @app.put("/api/products/{product_id}")
-async def update_product(product_id:int,x:ProductIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
+async def update_product(product_id:int,x:ProductIn,u:User=Depends(roles("ADMIN","GERANT","STOCK",permission="catalog.write")),db:AsyncSession=Depends(dbdep)):
  p=await db.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==u.tenant_id).with_for_update())
  if not p: raise HTTPException(404,"Produit introuvable")
  factor=unit_conversion(p.unit,x.unit)
@@ -258,33 +258,33 @@ async def import_products(x:ProductImport,u:User=Depends(roles("ADMIN","GERANT",
   await db.rollback();raise
  return {"imported":len(x.items),"created":created,"updated":updated,"stock_changes":stock_changes,"mode":x.mode}
 @app.get("/api/customers")
-async def customers(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+async def customers(u:User=Depends(roles("ADMIN","GERANT","CAISSIER","VENDEUR",permission="customers.read")),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"phone":x.phone,"credit_limit":x.credit_limit,"balance_due":x.balance_due} for x in (await db.scalars(select(Customer).where(Customer.tenant_id==u.tenant_id))).all()]
 class CustomerIn(BaseModel):
  name:str;phone:str="";credit_limit:float=Field(ge=0)
 @app.post("/api/customers")
-async def customer_create(x:CustomerIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+async def customer_create(x:CustomerIn,u:User=Depends(roles("ADMIN","GERANT",permission="customers.write")),db:AsyncSession=Depends(dbdep)):
  c=Customer(tenant_id=u.tenant_id,**x.model_dump());db.add(c);await db.commit();await db.refresh(c);return {"id":c.id,"name":c.name}
 @app.get("/api/suppliers")
-async def suppliers(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+async def suppliers(u:User=Depends(roles("ADMIN","GERANT",permission="suppliers.read")),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"phone":x.phone,"balance_due":x.balance_due} for x in (await db.scalars(select(Supplier).where(Supplier.tenant_id==u.tenant_id))).all()]
 class SupplierIn(BaseModel):
  name:str;phone:str=""
 @app.post("/api/suppliers")
-async def supplier_create(x:SupplierIn,u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+async def supplier_create(x:SupplierIn,u:User=Depends(roles("ADMIN","GERANT",permission="suppliers.write")),db:AsyncSession=Depends(dbdep)):
  c=Supplier(tenant_id=u.tenant_id,**x.model_dump());db.add(c);await db.commit();await db.refresh(c);return {"id":c.id,"name":c.name}
 class OpenCash(BaseModel): opening:float=Field(ge=0)
 @app.get("/api/cash/current")
-async def cash_current(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+async def cash_current(u:User=Depends(roles("ADMIN","GERANT","CAISSIER",permission="cash.read")),db:AsyncSession=Depends(dbdep)):
  c=await db.scalar(select(Cash).where(Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN"))
  return None if not c else {"id":c.id,"opening":c.opening,"expected":c.expected}
 @app.post("/api/cash/open")
-async def cash_open(x:OpenCash,u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+async def cash_open(x:OpenCash,u:User=Depends(roles("ADMIN","GERANT","CAISSIER",permission="cash.open")),db:AsyncSession=Depends(dbdep)):
  if await db.scalar(select(Cash).where(Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN")): raise HTTPException(409,"Caisse déjà ouverte")
  c=Cash(tenant_id=u.tenant_id,user_id=u.id,opening=x.opening,expected=x.opening);db.add(c);await db.commit();await db.refresh(c);return {"id":c.id,"status":c.status}
 class CloseCash(BaseModel): counted:float=Field(ge=0)
 @app.post("/api/cash/{cid}/close")
-async def cash_close(cid:int,x:CloseCash,u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+async def cash_close(cid:int,x:CloseCash,u:User=Depends(roles("ADMIN","GERANT","CAISSIER",permission="cash.close")),db:AsyncSession=Depends(dbdep)):
  c=await db.scalar(select(Cash).where(Cash.id==cid,Cash.tenant_id==u.tenant_id,Cash.user_id==u.id,Cash.status=="OPEN"))
  if not c: raise HTTPException(404,"Session introuvable")
  c.counted=x.counted;c.variance=x.counted-c.expected;c.status="CLOSED";c.closed_at=datetime.utcnow();await db.commit();return {"expected":c.expected,"counted":c.counted,"variance":c.variance}
@@ -308,7 +308,7 @@ def payment_settlement(total:float,payments:list[PayIn]):
  if change>cash_tendered: raise HTTPException(400,"La monnaie doit être rendue sur le paiement en espèces")
  return credit,change
 @app.post("/api/sales")
-async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+async def sale_create(x:SaleIn,u:User=Depends(roles("ADMIN","GERANT","CAISSIER","VENDEUR",permission="sales.write")),db:AsyncSession=Depends(dbdep)):
  tenant_id=u.tenant_id
  if x.client_sale_id:
   existing=await db.scalar(select(Sale).where(Sale.tenant_id==tenant_id,Sale.client_sale_id==x.client_sale_id))
@@ -387,11 +387,11 @@ async def sale_create(x:SaleIn,u:User=Depends(tenant_auth),db:AsyncSession=Depen
  return {"id":s.id,"status":s.status,"total":total,"change":change}
 class StockIn(BaseModel): warehouse_id:int;product_id:int;quantity:float;unit_cost:float=0;kind:str="ENTREE_ACHAT"
 @app.get("/api/stock/movements")
-async def stock_movements(u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
+async def stock_movements(u:User=Depends(roles("ADMIN","GERANT","STOCK",permission="stock.read")),db:AsyncSession=Depends(dbdep)):
  rows=(await db.scalars(select(Movement).where(Movement.tenant_id==u.tenant_id).order_by(Movement.created_at.desc()).limit(200))).all()
  return [{"id":x.id,"warehouse_id":x.warehouse_id,"product_id":x.product_id,"kind":x.kind,"quantity":x.quantity,"unit_cost":x.unit_cost,"reference":x.reference,"created_at":x.created_at} for x in rows]
 @app.post("/api/stock/movements")
-async def stock_move(x:StockIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
+async def stock_move(x:StockIn,u:User=Depends(roles("ADMIN","GERANT","STOCK",permission="stock.write")),db:AsyncSession=Depends(dbdep)):
  p=await db.scalar(select(Product).where(Product.id==x.product_id,Product.tenant_id==u.tenant_id));w=await db.scalar(select(Warehouse).where(Warehouse.id==x.warehouse_id,Warehouse.tenant_id==u.tenant_id))
  if not p or not w: raise HTTPException(404,"Article ou dépôt introuvable")
  ws=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==w.id,WarehouseStock.product_id==p.id))
@@ -402,7 +402,7 @@ async def stock_move(x:StockIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),d
  db.add(Movement(tenant_id=u.tenant_id,**x.model_dump()));await db.commit();return {"stock":p.stock}
 class TransferIn(BaseModel): from_warehouse_id:int;to_warehouse_id:int;product_id:int;quantity:float=Field(gt=0)
 @app.post("/api/stock/transfers")
-async def transfer(x:TransferIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),db:AsyncSession=Depends(dbdep)):
+async def transfer(x:TransferIn,u:User=Depends(roles("ADMIN","GERANT","STOCK",permission="stock.write")),db:AsyncSession=Depends(dbdep)):
  p=await db.scalar(select(Product).where(Product.id==x.product_id,Product.tenant_id==u.tenant_id))
  wh=(await db.scalars(select(Warehouse).where(Warehouse.tenant_id==u.tenant_id,Warehouse.id.in_([x.from_warehouse_id,x.to_warehouse_id])))).all()
  if not p or len(wh)!=2 or x.from_warehouse_id==x.to_warehouse_id: raise HTTPException(409,"Transfert impossible")
@@ -415,7 +415,7 @@ async def transfer(x:TransferIn,u:User=Depends(roles("ADMIN","GERANT","STOCK")),
  for wid,k,q in [(x.from_warehouse_id,"TRANSFERT_SORTIE",-x.quantity),(x.to_warehouse_id,"TRANSFERT_ENTREE",x.quantity)]: db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wid,product_id=p.id,kind=k,quantity=q,unit_cost=p.purchase_price,reference="Transfert"))
  await db.commit();return {"status":"OK"}
 @app.get("/api/dashboard")
-async def dashboard(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depends(dbdep)):
+async def dashboard(u:User=Depends(roles("ADMIN","GERANT",permission="reports.read")),db:AsyncSession=Depends(dbdep)):
  today=date.today()
  # Comparaison DATE/DATE explicite : PostgreSQL refuse DATE = VARCHAR.
  today_filter=cast(Sale.created_at,Date)==today
@@ -425,7 +425,7 @@ async def dashboard(u:User=Depends(roles("ADMIN","GERANT")),db:AsyncSession=Depe
  debts=(await db.scalars(select(Customer).where(Customer.tenant_id==u.tenant_id,Customer.balance_due>0))).all()
  return {"revenue_today":rev or 0,"sales_today":sales or 0,"low_stock":[{"name":p.name,"stock":p.stock} for p in low],"receivables":[{"name":c.name,"balance_due":c.balance_due} for c in debts]}
 @app.get("/api/sales")
-async def sales(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
+async def sales(u:User=Depends(roles("ADMIN","GERANT","CAISSIER","VENDEUR",permission="sales.read")),db:AsyncSession=Depends(dbdep)):
  return [{"id":s.id,"total":s.total,"status":s.status,"created_at":s.created_at} for s in (await db.scalars(select(Sale).where(Sale.tenant_id==u.tenant_id).order_by(Sale.created_at.desc()).limit(100))).all()]
 
 
@@ -443,11 +443,11 @@ class UserUpdate(BaseModel):
  active:Optional[bool]=None
  password:Optional[str]=Field(default=None,min_length=8,max_length=128)
 @app.get("/api/users")
-async def users_list(u:User=Depends(roles("ADMIN")),db:AsyncSession=Depends(dbdep)):
+async def users_list(u:User=Depends(roles("ADMIN",permission="users.read")),db:AsyncSession=Depends(dbdep)):
  rows=(await db.scalars(select(User).where(User.tenant_id==u.tenant_id).order_by(User.name))).all()
  return [{"id":x.id,"name":x.name,"email":x.email,"role":x.role,"active":x.active} for x in rows]
 @app.post("/api/users")
-async def users_create(x:UserCreate,u:User=Depends(roles("ADMIN")),db:AsyncSession=Depends(dbdep)):
+async def users_create(x:UserCreate,u:User=Depends(roles("ADMIN",permission="users.write")),db:AsyncSession=Depends(dbdep)):
  email=x.email.strip().lower()
  if x.role not in USER_ROLES:
   from app.advanced import RoleProfile
@@ -459,7 +459,7 @@ async def users_create(x:UserCreate,u:User=Depends(roles("ADMIN")),db:AsyncSessi
  await db.commit();await db.refresh(item)
  return {"id":item.id,"name":item.name,"email":item.email,"role":item.role,"active":item.active}
 @app.post("/api/users/{uid}/update")
-async def users_update(uid:int,x:UserUpdate,u:User=Depends(roles("ADMIN")),db:AsyncSession=Depends(dbdep)):
+async def users_update(uid:int,x:UserUpdate,u:User=Depends(roles("ADMIN",permission="users.write")),db:AsyncSession=Depends(dbdep)):
  item=await db.scalar(select(User).where(User.id==uid,User.tenant_id==u.tenant_id))
  if not item: raise HTTPException(404,"Utilisateur introuvable")
  changes=x.model_dump(exclude_unset=True)
