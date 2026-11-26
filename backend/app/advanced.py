@@ -2,6 +2,7 @@
 import json
 import os
 import secrets
+import calendar
 import csv
 import io
 from datetime import datetime
@@ -38,6 +39,20 @@ class RegistrationRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+class SubscriptionPayment(Base):
+    __tablename__ = "subscription_payments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(20))
+    amount: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(8), default="FCFA")
+    reference: Mapped[str] = mapped_column(String(120), index=True)
+    period_months: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="VERIFIE")
+    note: Mapped[str] = mapped_column(String(500), default="")
+    verified_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    verified_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 class RoleProfile(Base):
     __tablename__ = "role_profiles"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -636,7 +651,12 @@ async def platform_companies(user: User = Depends(auth), db: AsyncSession = Depe
     if user.role != "SUPER_ADMIN":
         raise HTTPException(403, "Réservé au Super Admin plateforme")
     rows = (await db.execute(select(Tenant, Subscription).outerjoin(Subscription, Subscription.tenant_id == Tenant.id).order_by(Tenant.id))).all()
-    return [{"id": t.id, "name": t.name, "mode": t.mode, "phone": t.phone, "currency": t.currency, "subscription": ({"plan": sub.plan, "status": sub.status, "monthly_price": sub.monthly_price, "starts_at": sub.starts_at, "ends_at": sub.ends_at} if sub else None)} for t, sub in rows]
+    tenant_ids = [t.id for t, _ in rows]
+    payment_rows = (await db.scalars(select(SubscriptionPayment).where(SubscriptionPayment.tenant_id.in_(tenant_ids)).order_by(SubscriptionPayment.created_at.desc()))).all() if tenant_ids else []
+    payments_by_tenant: dict[int, list[dict]] = {}
+    for payment in payment_rows:
+        payments_by_tenant.setdefault(payment.tenant_id, []).append({"id": payment.id, "provider": payment.provider, "amount": payment.amount, "currency": payment.currency, "reference": payment.reference, "period_months": payment.period_months, "status": payment.status, "note": payment.note, "verified_at": payment.verified_at})
+    return [{"id": t.id, "name": t.name, "mode": t.mode, "phone": t.phone, "currency": t.currency, "subscription": ({"plan": sub.plan, "status": sub.status, "monthly_price": sub.monthly_price, "starts_at": sub.starts_at, "ends_at": sub.ends_at} if sub else None), "payments": payments_by_tenant.get(t.id, [])[:10]} for t, sub in rows]
 
 @router.post("/platform/companies")
 async def platform_company_create(x: CompanyIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
@@ -673,6 +693,52 @@ async def platform_overview(user: User = Depends(auth), db: AsyncSession = Depen
     subscriptions = (await db.scalars(select(Subscription))).all()
     return {"companies": tenants or 0, "users": users or 0, "subscriptions": [{"tenant_id": s.tenant_id, "plan": s.plan, "status": s.status, "monthly_price": s.monthly_price, "ends_at": s.ends_at} for s in subscriptions]}
 
+class ManualSubscriptionPaymentIn(BaseModel):
+    provider: str = Field(pattern=r"^(WAVE|ORANGE_MONEY)$")
+    amount: int = Field(gt=0)
+    reference: str = Field(min_length=3, max_length=120)
+    period_months: int = Field(default=1, ge=1, le=12)
+    note: str = Field(default="", max_length=500)
+    confirm_receipt: bool
+
+@router.post("/platform/companies/{tenant_id}/payments")
+async def record_subscription_payment(tenant_id: int, x: ManualSubscriptionPaymentIn, user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
+    if user.role != "SUPER_ADMIN":
+        raise HTTPException(403, "Réservé au Super Admin plateforme")
+    if not x.confirm_receipt:
+        raise HTTPException(400, "Confirmez la vérification du reçu avant validation.")
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(404, "Entreprise introuvable")
+    subscription = await db.scalar(select(Subscription).where(Subscription.tenant_id == tenant_id).with_for_update())
+    if not subscription:
+        raise HTTPException(409, "Configurez dabord un abonnement pour cette entreprise.")
+    reference = x.reference.strip()
+    duplicate = await db.scalar(select(SubscriptionPayment).where(SubscriptionPayment.provider == x.provider, SubscriptionPayment.reference == reference))
+    if duplicate:
+        raise HTTPException(409, "Cette référence de paiement a déjà été enregistrée.")
+    monthly_price = round(float(subscription.monthly_price or 0))
+    expected_amount = monthly_price * x.period_months
+    if monthly_price <= 0:
+        raise HTTPException(409, "Définissez dabord le tarif mensuel de labonnement.")
+    if x.amount != expected_amount:
+        raise HTTPException(400, f"Montant attendu : {expected_amount} FCFA pour {x.period_months} mois.")
+    now = datetime.utcnow()
+    base = subscription.ends_at.replace(tzinfo=None) if subscription.ends_at and subscription.ends_at.tzinfo else subscription.ends_at
+    if base is None or base < now:
+        base = now
+    month_index = base.year * 12 + (base.month - 1) + x.period_months
+    year, month_zero = divmod(month_index, 12)
+    month = month_zero + 1
+    day = min(base.day, calendar.monthrange(year, month)[1])
+    ends_at = base.replace(year=year, month=month, day=day, hour=23, minute=59, second=59, microsecond=0)
+    payment = SubscriptionPayment(tenant_id=tenant_id, provider=x.provider, amount=expected_amount, currency="FCFA", reference=reference, period_months=x.period_months, status="VERIFIE", note=x.note.strip(), verified_by=user.id, created_at=now, verified_at=now)
+    db.add(payment)
+    subscription.status = "ACTIF"
+    subscription.starts_at = subscription.starts_at or now
+    subscription.ends_at = ends_at
+    await db.commit()
+    return {"id": payment.id, "status": payment.status, "provider": payment.provider, "amount": payment.amount, "reference": payment.reference, "period_months": payment.period_months, "subscription_status": subscription.status, "ends_at": ends_at}
 class PublicRegistrationIn(BaseModel):
     company_name: str = Field(min_length=2, max_length=160)
     mode: str = Field(default="HYBRIDE", pattern=r"^(COMMERCE|RESTAURANT|HYBRIDE)$")
