@@ -45,7 +45,7 @@ export default function App(){
  const [form,setForm]=useState<any>({}),[busy,setBusy]=useState(false);
  const [editingProduct,setEditingProduct]=useState<Product|null>(null),[importRows,setImportRows]=useState<any[]>([]),[importMode,setImportMode]=useState("REPLACE"),[importWarehouse,setImportWarehouse]=useState("");
  const can=(...keys:string[])=>keys.some(k=>(user?.permissions||[]).includes(k));
- const admin=user?.role==="ADMIN"||can("users.write"), manager=can("reports.read"), stockRole=can("catalog.write","stock.write","inventory.write");
+ const admin=user?.role==="ADMIN"||can("users.write"), stockRole=can("catalog.write","stock.write","inventory.write");
  const tabs=user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]]:[
   ...(can("sales.write")?[["Caisse",ShoppingCart]] as any:[]),
   ...(can("catalog.read")?[["Catalogue",Archive]] as any:[]),
