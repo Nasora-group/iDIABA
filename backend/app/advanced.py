@@ -732,10 +732,8 @@ def _payment_settings_payload(row: Optional[PlatformPaymentSettings] = None):
         "instructions": row.instructions if row else "",
     }
 
-@router.get("/public/payment-instructions")
-async def public_payment_instructions(db: AsyncSession = Depends(dbdep)):
-    """Ne publie que les moyens de paiement explicitement activés par le Super Admin."""
-    row = await db.get(PlatformPaymentSettings, 1)
+def _public_payment_instructions_payload(row: Optional[PlatformPaymentSettings] = None):
+    """Construit une réponse publique sans exposer les moyens désactivés ou incomplets."""
     providers = []
     if row and row.wave_enabled and (row.wave_phone or row.wave_link):
         providers.append({
@@ -758,6 +756,13 @@ async def public_payment_instructions(db: AsyncSession = Depends(dbdep)):
         "instructions": row.instructions if row else "",
         "available": bool(providers),
     }
+
+
+@router.get("/public/payment-instructions")
+async def public_payment_instructions(db: AsyncSession = Depends(dbdep)):
+    """Ne publie que les moyens de paiement explicitement activés par le Super Admin."""
+    row = await db.get(PlatformPaymentSettings, 1)
+    return _public_payment_instructions_payload(row)
 
 @router.get("/platform/payment-settings")
 async def platform_payment_settings_get(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
