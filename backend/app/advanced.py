@@ -262,8 +262,57 @@ class PurchaseIn(BaseModel):
 @router.get("/purchases")
 async def purchase_list(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "purchases.read", db)
-    rows = (await db.scalars(select(PurchaseOrder).where(PurchaseOrder.tenant_id == user.tenant_id).order_by(PurchaseOrder.id.desc()).limit(200))).all()
-    return [{"id": r.id, "reference": r.reference, "supplier_id": r.supplier_id, "warehouse_id": r.warehouse_id, "status": r.status, "total": r.total, "created_at": r.created_at} for r in rows]
+    rows = (await db.scalars(
+        select(PurchaseOrder).where(PurchaseOrder.tenant_id == user.tenant_id)
+        .order_by(PurchaseOrder.id.desc()).limit(200)
+    )).all()
+    if not rows:
+        return []
+
+    order_ids = [row.id for row in rows]
+    supplier_ids = {row.supplier_id for row in rows}
+    warehouse_ids = {row.warehouse_id for row in rows}
+    supplier_rows = (await db.execute(
+        select(Supplier.id, Supplier.name).where(Supplier.id.in_(supplier_ids))
+    )).all()
+    warehouse_rows = (await db.execute(
+        select(Warehouse.id, Warehouse.name).where(Warehouse.id.in_(warehouse_ids))
+    )).all()
+    supplier_names = {row.id: row.name for row in supplier_rows}
+    warehouse_names = {row.id: row.name for row in warehouse_rows}
+
+    line_rows = (await db.execute(
+        select(PurchaseLine, Product.name, Product.sku)
+        .join(Product, Product.id == PurchaseLine.product_id)
+        .where(PurchaseLine.order_id.in_(order_ids))
+        .order_by(PurchaseLine.id)
+    )).all()
+    grouped = {}
+    for line, product_name, sku in line_rows:
+        item = grouped.setdefault((line.order_id, line.product_id), {
+            "product_id": line.product_id, "product_name": product_name, "sku": sku,
+            "quantity": 0.0, "received": 0.0, "unit_cost_value": 0.0, "total": 0.0
+        })
+        item["quantity"] += line.quantity
+        item["received"] += line.received
+        item["unit_cost_value"] += line.quantity * line.unit_cost
+        item["total"] += line.total
+
+    by_order = {}
+    for (order_id, _), item in grouped.items():
+        quantity = item["quantity"]
+        item["unit_cost"] = item["unit_cost_value"] / quantity if quantity else 0
+        item["remaining"] = max(0.0, quantity - item["received"])
+        del item["unit_cost_value"]
+        by_order.setdefault(order_id, []).append(item)
+
+    return [{
+        "id": row.id, "reference": row.reference,
+        "supplier_id": row.supplier_id, "supplier_name": supplier_names.get(row.supplier_id, ""),
+        "warehouse_id": row.warehouse_id, "warehouse_name": warehouse_names.get(row.warehouse_id, ""),
+        "status": row.status, "total": row.total, "created_at": row.created_at,
+        "lines": by_order.get(row.id, [])
+    } for row in rows]
 
 @router.post("/purchases")
 async def purchase_create(x: PurchaseIn, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
