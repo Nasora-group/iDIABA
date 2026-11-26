@@ -732,6 +732,33 @@ def _payment_settings_payload(row: Optional[PlatformPaymentSettings] = None):
         "instructions": row.instructions if row else "",
     }
 
+@router.get("/public/payment-instructions")
+async def public_payment_instructions(db: AsyncSession = Depends(dbdep)):
+    """Ne publie que les moyens de paiement explicitement activés par le Super Admin."""
+    row = await db.get(PlatformPaymentSettings, 1)
+    providers = []
+    if row and row.wave_enabled and (row.wave_phone or row.wave_link):
+        providers.append({
+            "key": "WAVE",
+            "label": "Wave",
+            "beneficiary": row.wave_name or "",
+            "phone": row.wave_phone or "",
+            "link": row.wave_link or "",
+        })
+    if row and row.orange_enabled and (row.orange_phone or row.orange_link):
+        providers.append({
+            "key": "ORANGE_MONEY",
+            "label": "Orange Money",
+            "beneficiary": row.orange_name or "",
+            "phone": row.orange_phone or "",
+            "link": row.orange_link or "",
+        })
+    return {
+        "providers": providers,
+        "instructions": row.instructions if row else "",
+        "available": bool(providers),
+    }
+
 @router.get("/platform/payment-settings")
 async def platform_payment_settings_get(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
     if user.role != "SUPER_ADMIN":

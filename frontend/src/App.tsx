@@ -38,7 +38,7 @@ const roleLabels:Record<string,string>={ADMIN:"Administrateur",GERANT:"Gérant",
 const roleOptions=["GERANT","CAISSIER","VENDEUR","STOCK"];
 export default function App(){
  const {token,user,set,clear}=useAuth();
- const [online,setOnline]=useState(navigator.onLine),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[registerMode,setRegisterMode]=useState(false),[signup,setSignup]=useState<any>({mode:"HYBRIDE",terms_accepted:false});
+ const [online,setOnline]=useState(navigator.onLine),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[registerMode,setRegisterMode]=useState(false),[signup,setSignup]=useState<any>({mode:"HYBRIDE",terms_accepted:false});const [publicPayment,setPublicPayment]=useState<any>({providers:[],instructions:"",available:false});
  const [products,setProducts]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<any[]>([]),[cash,setCash]=useState<any>(null);
  const [customers,setCustomers]=useState<Customer[]>([]),[suppliers,setSuppliers]=useState<Supplier[]>([]),[users,setUsers]=useState<User[]>([]),[sales,setSales]=useState<any[]>([]);
  const [cart,setCart]=useState<Line[]>([]),[tab,setTab]=useState("Caisse"),[search,setSearch]=useState(""),[opening,setOpening]=useState("0"),[counted,setCounted]=useState(""),[msg,setMsg]=useState(""),[dash,setDash]=useState<any>(null);
@@ -65,6 +65,7 @@ export default function App(){
   }
   if(rows.length)try{await refresh(currentUser)}catch{}
  }
+ useEffect(()=>{let active=true;api("/api/public/payment-instructions").then(data=>{if(active)setPublicPayment(data);}).catch(()=>{});return()=>{active=false};},[]);
  useEffect(()=>{if(!token)return;let active=true;(async()=>{try{const me=await api("/api/auth/me");if(!active)return;set(token,me);if(me.role==="SUPER_ADMIN"){setTab("Gestion avancée");return;}await refresh(me);}catch(e:any){if(active){clear();setMsg("Session expirée. Veuillez vous reconnecter.");}}})();return()=>{active=false};},[token]);
  const filtered=products.filter(p=>(p.name+p.sku+p.barcode).toLowerCase().includes(search.toLowerCase()));
  const total=useMemo(()=>cart.reduce((s,l)=>s+l.qty*l.product.sale_price*(1+l.product.tax_rate/100),0),[cart]);
@@ -118,6 +119,18 @@ export default function App(){
  <button className="primary" disabled={busy}>{busy?"Envoi...":"Envoyer la demande"}</button><button type="button" onClick={()=>{setRegisterMode(false);setMsg("");}}>Retour à la connexion</button>
  <small>La demande doit être validée par l'équipe iDIABA. L'accès sera activé après configuration de l'abonnement.</small>
  </>}
+ {publicPayment.available&&<section style={{marginTop:18,padding:16,border:"1px solid #d1d5db",borderRadius:12,textAlign:"left",background:"#fff"}}>
+  <h3 style={{marginTop:0}}>Paiement de l'abonnement iDIABA</h3>
+  <p style={{fontSize:13,color:"#475569"}}>Utilisez l'un des moyens de paiement disponibles ci-dessous. Après le transfert, communiquez la référence à l'équipe iDIABA. L'accès sera activé après vérification du paiement.</p>
+  {publicPayment.providers.map((provider:any)=><div key={provider.key} style={{padding:"10px 0",borderTop:"1px solid #e5e7eb"}}>
+   <b>{provider.label}</b>
+   {provider.beneficiary&&<div style={{fontSize:13}}>Bénéficiaire : {provider.beneficiary}</div>}
+   {provider.phone&&<div style={{fontSize:13}}>Numéro : <strong>{provider.phone}</strong></div>}
+   {provider.link&&<div style={{marginTop:6}}><a href={provider.link} target="_blank" rel="noreferrer">Ouvrir le lien de paiement</a></div>}
+  </div>)}
+  {publicPayment.instructions&&<p style={{fontSize:13,marginBottom:0}}><b>Consignes :</b> {publicPayment.instructions}</p>}
+ </section>}
+ {(!publicPayment.available)&&<p style={{fontSize:12,color:"#64748b",marginTop:14}}>Les moyens de paiement de l'abonnement seront affichés ici dès leur configuration par iDIABA.</p>}
  </form></main>;
  return <div className="app"><aside><div className="brand"><span className="logo">i</span><b>iDIABA</b></div>{tabs.map(([x,Icon]:any)=><button className={tab===x?"active":""} onClick={()=>{setTab(x);setForm({});}} key={x}><Icon/>{x}</button>)}<button className="logout" onClick={clear}><LogOut/>Déconnexion</button></aside><main>
  <header><div><h2>{tab}</h2><small>{user?.name} · {roleLabels[user?.role||""]||user?.role}</small></div><span className={online?"online":"offline"}>{online?<Wifi/>:<WifiOff/>}{online?"En ligne":"Hors-ligne"}</span></header>
