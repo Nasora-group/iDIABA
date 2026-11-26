@@ -97,6 +97,22 @@ async def tenant_auth(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
   if ends_at <= datetime.now(timezone.utc):
    raise HTTPException(402,"Abonnement arrivé à échéance. Renouvelez votre abonnement.")
  return u
+async def effective_permissions(u:User,db:AsyncSession):
+ if u.role == "SUPER_ADMIN" or u.tenant_id is None:
+  return []
+ from app.advanced import PERMISSION_KEYS,RoleProfile
+ if u.role == "ADMIN":
+  return sorted(PERMISSION_KEYS)
+ builtin={
+  "GERANT":set(PERMISSION_KEYS)-{"users.read","users.write"},
+  "CAISSIER":{"catalog.read","customers.read","cash.read","cash.open","cash.close","sales.read","sales.write","restaurant.read","restaurant.write"},
+  "VENDEUR":{"catalog.read","customers.read","sales.read","sales.write"},
+  "STOCK":{"catalog.read","catalog.write","suppliers.read","suppliers.write","purchases.read","purchases.write","stock.read","stock.write","inventory.write"}
+ }
+ if u.role in builtin:
+  return sorted(builtin[u.role])
+ profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
+ return sorted(set(json.loads(profile.permissions or "[]")) & PERMISSION_KEYS) if profile else []
 def roles(*allowed, permission=None):
  async def check(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
   if u.role in allowed: return u
@@ -161,9 +177,12 @@ async def login(x:Login,db:AsyncSession=Depends(dbdep)):
  exp=datetime.now(timezone.utc)+timedelta(hours=12)
  t=await db.get(Tenant,u.tenant_id) if u.tenant_id is not None else None
  tenant_data=None if t is None else {"name":t.name,"mode":t.mode,"currency":t.currency}
- return {"access_token":jwt.encode({"sub":str(u.id),"exp":exp},SECRET,algorithm="HS256"),"user":{"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id},"tenant":tenant_data}
+ permissions=await effective_permissions(u,db)
+ return {"access_token":jwt.encode({"sub":str(u.id),"exp":exp},SECRET,algorithm="HS256"),"user":{"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id,"permissions":permissions},"tenant":tenant_data}
 @app.get("/api/auth/me")
-async def me(u:User=Depends(auth)): return {"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id}
+async def me(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+ permissions=await effective_permissions(u,db)
+ return {"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id,"permissions":permissions}
 @app.get("/api/warehouses")
 async def warehouses(u:User=Depends(roles("ADMIN","GERANT","STOCK","CAISSIER","VENDEUR",permission="sales.write")),db:AsyncSession=Depends(dbdep)):
  return [{"id":x.id,"name":x.name,"code":x.code} for x in (await db.scalars(select(Warehouse).where(Warehouse.tenant_id==u.tenant_id))).all()]
