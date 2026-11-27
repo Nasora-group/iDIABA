@@ -107,7 +107,7 @@ async def effective_permissions(u:User,db:AsyncSession):
   "GERANT":set(PERMISSION_KEYS)-{"users.read","users.write"},
   "CAISSIER":{"catalog.read","customers.read","cash.read","cash.open","cash.close","sales.read","sales.write","restaurant.read","restaurant.write"},
   "VENDEUR":{"catalog.read","customers.read","sales.read","sales.write"},
-  "STOCK":{"catalog.read","catalog.write","suppliers.read","suppliers.write","purchases.read","purchases.write","stock.read","stock.write","inventory.write"}
+  "STOCK":{"catalog.read","catalog.write","suppliers.read","suppliers.write","purchases.read","purchases.write","stock.read","stock.write","inventory.read","inventory.write"}
  }
  if u.role in builtin:
   return sorted(builtin[u.role])
