@@ -697,7 +697,7 @@ async def sale_refund(sale_id: int, x: RefundIn, user: User = Depends(tenant_aut
         if not line or item.counted <= 0:
             raise HTTPException(409, "Quantité de retour invalide")
         requested[item.product_id] = requested.get(item.product_id, 0) + item.counted
-        already_qty = await db.scalar(select(func.coalesce(func.sum(RefundLine.quantity), 0)).join(Refund, Refund.id == RefundLine.refund_id).where(Refund.sale_id == sale.id, Refund.status == "VALIDE", RefundLine.product_id == item.product_id))
+        already_qty = await db.scalar(select(func.coalesce(func.sum(RefundLine.quantity), 0)).join(Refund, Refund.id == RefundLine.refund_id).where(Refund.sale_id == sale.id, Refund.tenant_id == user.tenant_id, Refund.status == "VALIDE", RefundLine.product_id == item.product_id))
         if float(already_qty or 0) + requested[item.product_id] > line.quantity:
             raise HTTPException(409, "La quantité retournée dépasse la quantité vendue")
         amount = round(line.unit_price * item.counted, 2)
