@@ -222,3 +222,22 @@ async def refund_reference_index_test():
         assert "uq_refund_payments_tenant_method_reference" in names
 asyncio.run(refund_reference_index_test())
 print("REFUNDS OK: références uniques par entreprise/mode et contrôle du solde espèces")
+
+
+# Les références financières doivent être uniques au niveau PostgreSQL/SQLite,
+# y compris lorsque deux requêtes concurrentes passent les contrôles applicatifs.
+async def finance_reference_index_tests():
+    expected = {
+        "supplier_invoices": "uq_supplier_invoices_tenant_reference",
+        "supplier_payments": "uq_supplier_payments_tenant_method_reference",
+        "customer_receipts": "uq_customer_receipts_tenant_method_reference",
+        "expenses": "uq_expenses_tenant_method_reference",
+        "subscription_payments": "uq_subscription_payments_provider_reference",
+    }
+    async with Session() as db:
+        for table, index_name in expected.items():
+            rows = await db.execute(text(f"PRAGMA index_list('{table}')"))
+            names = {row[1] for row in rows.all()}
+            assert index_name in names, f"Index unique manquant : {index_name}"
+asyncio.run(finance_reference_index_tests())
+print("FINANCIAL REFERENCE INDEXES OK: factures, paiements fournisseurs, encaissements clients, dépenses et abonnements")
