@@ -17,6 +17,11 @@ jobs:
       - run: cd backend && python -c "from app.main import app; print(app.title)"
       - run: cd backend && python seed.py
       - run: cd backend && python smoke_test.py
+      - name: API workflow integration tests (isolated SQLite)
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./api-workflow-tests.db
+        run: python api_workflow_test.py
   frontend:
     runs-on: ubuntu-latest
     steps:
