@@ -807,7 +807,7 @@ async def kitchen_order_create(x: KitchenIn, user: User = Depends(tenant_auth), 
 async def kitchen_orders(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "restaurant.read", db)
     rows = (await db.scalars(select(KitchenOrder).where(KitchenOrder.tenant_id == user.tenant_id).order_by(KitchenOrder.id.desc()).limit(100))).all()
-    return [{"id": r.id, "table_id": r.table_id, "note": r.note, "status": r.status, "created_at": r.created_at} for r in rows]
+    return [{"id": r.id, "table_id": r.table_id, "warehouse_id": r.warehouse_id, "note": r.note, "status": r.status, "created_at": r.created_at} for r in rows]
 
 @router.post("/restaurant/orders/{order_id}/status")
 async def kitchen_order_status(order_id: int, status: str, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
