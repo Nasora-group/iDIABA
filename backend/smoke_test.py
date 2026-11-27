@@ -182,3 +182,11 @@ async def inventory_read_permission_tests():
 
 asyncio.run(inventory_read_permission_tests())
 print("INVENTORY PERMISSIONS OK: consultation séparée de la création et validation")
+
+async def builtin_stock_inventory_read_test():
+    stock_user = SimpleNamespace(role="STOCK", tenant_id=42)
+    granted = set(await effective_permissions(stock_user, FakePermissionDB(None)))
+    assert {"inventory.read", "inventory.write"} <= granted
+    assert "stock.read" in granted
+asyncio.run(builtin_stock_inventory_read_test())
+print("BUILTIN STOCK OK: consultation et modification des inventaires conservées")
