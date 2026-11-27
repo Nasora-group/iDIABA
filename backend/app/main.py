@@ -146,7 +146,6 @@ async def startup():
    await connection.execute(text("ALTER TABLE registration_requests ALTER COLUMN password_hash DROP NOT NULL"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_refund_payments_tenant_method_reference ON refund_payments (tenant_id, method, reference) WHERE reference <> ''"))
-   await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_refund_payments_tenant_method_reference ON refund_payments (tenant_id, method, reference) WHERE reference <> ''"))
    await connection.execute(text("INSERT INTO subscriptions (tenant_id, plan, status, monthly_price, starts_at) SELECT id, 'ESSENTIEL', 'ESSAI', 0, CURRENT_TIMESTAMP FROM tenants ON CONFLICT (tenant_id) DO NOTHING"))
    # Neutralise uniquement les deux comptes de démonstration publics historiques.
    # Les entreprises, ventes et autres données associées sont conservées.
