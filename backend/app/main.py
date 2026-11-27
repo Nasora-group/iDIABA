@@ -161,6 +161,7 @@ async def startup():
    if "change_amount" not in columns:
     await connection.execute(text("ALTER TABLE sales ADD COLUMN change_amount FLOAT NOT NULL DEFAULT 0"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
+   await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_refund_payments_tenant_method_reference ON refund_payments (tenant_id, method, reference) WHERE reference <> ''"))
    await connection.execute(text("INSERT OR IGNORE INTO subscriptions (tenant_id, plan, status, monthly_price, starts_at) SELECT id, 'ESSENTIEL', 'ESSAI', 0, CURRENT_TIMESTAMP FROM tenants"))
  print("[startup] Initialisation des données de démonstration", flush=True)
  # Import différé : seed.py réutilise les modèles et la session de ce module.
