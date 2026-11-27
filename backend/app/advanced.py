@@ -835,6 +835,7 @@ async def kitchen_order_status(order_id: int, status: str, user: User = Depends(
             select(KitchenOrderLine).where(KitchenOrderLine.order_id == row.id).order_by(KitchenOrderLine.id)
         )).all()
         prepared = []
+        reserved_by_product = {}
         for line in lines:
             already = (await db.scalars(select(KitchenOrderConsumption).where(
                 KitchenOrderConsumption.tenant_id == user.tenant_id,
@@ -855,8 +856,12 @@ async def kitchen_order_status(order_id: int, status: str, user: User = Depends(
                 ).order_by(Recipe.ingredient_id))).all()
                 if not recipe:
                     raise HTTPException(409, f"Fiche recette absente : {menu_product.name}")
-            components = [(part.ingredient_id, part.quantity * line.quantity) for part in recipe] if recipe else [(menu_product.id, line.quantity)]
-            for ingredient_id, required_qty in components:
+            component_quantities = {}
+            for part in recipe:
+                component_quantities[part.ingredient_id] = component_quantities.get(part.ingredient_id, 0.0) + part.quantity * line.quantity
+            if not recipe:
+                component_quantities[menu_product.id] = line.quantity
+            for ingredient_id, required_qty in sorted(component_quantities.items()):
                 ingredient = await db.scalar(select(Product).where(
                     Product.id == ingredient_id, Product.tenant_id == user.tenant_id,
                     Product.active.is_(True)
@@ -868,8 +873,10 @@ async def kitchen_order_status(order_id: int, status: str, user: User = Depends(
                     WarehouseStock.warehouse_id == row.warehouse_id,
                     WarehouseStock.product_id == ingredient.id
                 ).with_for_update())
-                if not stock or stock.quantity + 1e-9 < required_qty:
+                already_reserved = reserved_by_product.get(ingredient.id, 0.0)
+                if not stock or stock.quantity + 1e-9 < already_reserved + required_qty:
                     raise HTTPException(409, f"Stock insuffisant : {ingredient.name}")
+                reserved_by_product[ingredient.id] = already_reserved + required_qty
                 prepared.append((line, ingredient, stock, required_qty))
         for line, ingredient, stock, required_qty in prepared:
             stock.quantity -= required_qty
