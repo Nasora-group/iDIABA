@@ -683,6 +683,13 @@ async def sale_refund(sale_id: int, x: RefundIn, user: User = Depends(tenant_aut
     sale = await db.scalar(select(Sale).where(Sale.id == sale_id, Sale.tenant_id == user.tenant_id, Sale.status == "PAYE").with_for_update())
     if not sale:
         raise HTTPException(404, "Vente introuvable, annulée ou déjà remboursée")
+    reference = x.reference.strip()
+    if reference and await db.scalar(select(RefundPayment).where(
+        RefundPayment.tenant_id == user.tenant_id,
+        RefundPayment.method == x.refund_method,
+        RefundPayment.reference == reference
+    )):
+        raise HTTPException(409, "Cette référence de remboursement a déjà été utilisée.")
     refund_cash = None
     if x.refund_method == "ESPECES":
         refund_cash = await db.scalar(select(Cash).where(Cash.tenant_id == user.tenant_id, Cash.user_id == user.id, Cash.status == "OPEN").with_for_update())
@@ -719,10 +726,12 @@ async def sale_refund(sale_id: int, x: RefundIn, user: User = Depends(tenant_aut
     already_refunded = await db.scalar(select(func.coalesce(func.sum(Refund.amount), 0)).where(Refund.sale_id == sale.id, Refund.tenant_id == user.tenant_id, Refund.status == "VALIDE"))
     if float(already_refunded or 0) + refund_amount > sale.total + 0.001:
         raise HTTPException(409, "Le cumul des remboursements dépasserait le montant de la vente")
+    if refund_cash is not None and refund_cash.expected + 0.009 < refund_amount:
+        raise HTTPException(409, "Le solde de caisse est insuffisant pour effectuer ce remboursement en espèces.")
     refund = Refund(tenant_id=user.tenant_id, sale_id=sale.id, user_id=user.id, reason=x.reason, amount=refund_amount)
     db.add(refund)
     await db.flush()
-    db.add(RefundPayment(tenant_id=user.tenant_id, refund_id=refund.id, user_id=user.id, method=x.refund_method, amount=refund_amount, reference=x.reference.strip()))
+    db.add(RefundPayment(tenant_id=user.tenant_id, refund_id=refund.id, user_id=user.id, method=x.refund_method, amount=refund_amount, reference=reference))
     if refund_cash is not None:
         refund_cash.expected -= refund_amount
     for product_id, quantity, amount in prepared:

@@ -1,6 +1,6 @@
 import asyncio
 from datetime import date
-from sqlalchemy import select,func,cast,Date
+from sqlalchemy import select,func,cast,Date,text
 from sqlalchemy.dialects import postgresql
 from app.main import Base, Sale
 from app.main import Session,Tenant,User,Warehouse,WarehouseStock,Product,Customer,Recipe,LineIn,PayIn,aggregate_sale_lines,payment_settlement,startup,unit_conversion
@@ -209,3 +209,16 @@ for function_name, expected_conditions in tenant_scoped_sources.items():
     for condition in expected_conditions:
         assert condition in source, f"{function_name} doit filtrer par entreprise : {condition}"
 print("TENANT JOIN ISOLATION OK: fournisseurs, produits, dépôts, remboursements, clients et caisses")
+
+# Remboursements : empêcher les références de paiement réutilisées et les
+# sorties espèces supérieures au solde théorique de la caisse.
+refund_source = inspect.getsource(advanced_module.sale_refund)
+assert "RefundPayment.reference == reference" in refund_source
+assert "refund_cash.expected + 0.009 < refund_amount" in refund_source
+async def refund_reference_index_test():
+    async with Session() as db:
+        rows = await db.execute(text("PRAGMA index_list('refund_payments')"))
+        names = {row[1] for row in rows.all()}
+        assert "uq_refund_payments_tenant_method_reference" in names
+asyncio.run(refund_reference_index_test())
+print("REFUNDS OK: références uniques par entreprise/mode et contrôle du solde espèces")
