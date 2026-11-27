@@ -18,6 +18,15 @@ BASE_URL = "http://idiaba.test"
 async def main():
     await startup()
 
+    # Le seed de démonstration ne gère pas les abonnements : le test crée
+    # explicitement un abonnement ESSAI dans sa base SQLite jetable.
+    async with Session() as db:
+        demo_tenant = await db.scalar(select(Tenant).where(Tenant.name == "Ndiaye Distribution & Resto - Dakar"))
+        demo_subscription = await db.scalar(select(Subscription).where(Subscription.tenant_id == demo_tenant.id))
+        if demo_subscription is None:
+            db.add(Subscription(tenant_id=demo_tenant.id, plan="ESSENTIEL", status="ESSAI", monthly_price=0))
+            await db.commit()
+
     # Deuxième entreprise synthétique pour vérifier l'isolation multi-tenant.
     async with Session() as db:
         other = Tenant(name="Entreprise Test Isolation", mode="COMMERCE", currency="FCFA", tax_rate=18)
