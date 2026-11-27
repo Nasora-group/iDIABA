@@ -11,7 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from pydantic import BaseModel, Field
-from sqlalchemy import String, Float, Integer, Boolean, DateTime, Date, ForeignKey, select, func, cast
+from sqlalchemy import String, Float, Integer, Boolean, DateTime, Date, ForeignKey, UniqueConstraint, select, func, cast
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
