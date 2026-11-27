@@ -11,13 +11,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from pydantic import BaseModel, Field
-from sqlalchemy import String, Float, Integer, Boolean, DateTime, Date, ForeignKey, select, func, cast
+from sqlalchemy import String, Float, Integer, Boolean, DateTime, Date, ForeignKey, UniqueConstraint, select, func, cast
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import (
     Base, app, dbdep, auth, roles, User, Tenant, Product, Warehouse,
-    WarehouseStock, Movement, Supplier, Sale, SaleLine, Payment, Cash,
+    WarehouseStock, Movement, Supplier, Sale, SaleLine, Payment, Cash, Recipe,
     Audit, hasher, tenant_auth, effective_permissions, Customer
 )
 
@@ -233,6 +233,7 @@ class KitchenOrder(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
     table_id: Mapped[Optional[int]] = mapped_column(ForeignKey("restaurant_tables.id"), nullable=True)
+    warehouse_id: Mapped[Optional[int]] = mapped_column(ForeignKey("warehouses.id"), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     note: Mapped[str] = mapped_column(String(300), default="")
     status: Mapped[str] = mapped_column(String(20), default="A_PREPARER")
@@ -245,6 +246,19 @@ class KitchenOrderLine(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     quantity: Mapped[float] = mapped_column(Float)
     note: Mapped[str] = mapped_column(String(200), default="")
+
+class KitchenOrderConsumption(Base):
+    """Journal immuable des ingrédients sortis lors du service d'une commande."""
+    __tablename__ = "kitchen_order_consumptions"
+    __table_args__ = (UniqueConstraint("order_line_id", "ingredient_product_id", name="uq_kitchen_consumption_line_ingredient"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("kitchen_orders.id"), index=True)
+    order_line_id: Mapped[int] = mapped_column(ForeignKey("kitchen_order_lines.id"), index=True)
+    ingredient_product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("warehouses.id"))
+    quantity: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
@@ -761,6 +775,7 @@ async def restaurant_table_create(x: TableIn, user: User = Depends(tenant_auth),
 
 class KitchenIn(BaseModel):
     table_id: Optional[int] = None
+    warehouse_id: Optional[int] = None
     note: str = ""
     lines: list[CountLine] = Field(min_length=1)
 
@@ -769,7 +784,16 @@ async def kitchen_order_create(x: KitchenIn, user: User = Depends(tenant_auth), 
     await permitted(user, "restaurant.write", db)
     if x.table_id and not await db.scalar(select(RestaurantTable).where(RestaurantTable.id == x.table_id, RestaurantTable.tenant_id == user.tenant_id, RestaurantTable.active.is_(True))):
         raise HTTPException(404, "Table introuvable")
-    order = KitchenOrder(tenant_id=user.tenant_id, table_id=x.table_id, user_id=user.id, note=x.note)
+    warehouse = None
+    if x.warehouse_id is not None:
+        warehouse = await db.scalar(select(Warehouse).where(Warehouse.id == x.warehouse_id, Warehouse.tenant_id == user.tenant_id))
+        if not warehouse:
+            raise HTTPException(404, "Dépôt introuvable dans cette entreprise")
+    else:
+        warehouse = await db.scalar(select(Warehouse).where(Warehouse.tenant_id == user.tenant_id).order_by(Warehouse.id).limit(1))
+    if not warehouse:
+        raise HTTPException(409, "Créez un dépôt avant de prendre une commande restaurant")
+    order = KitchenOrder(tenant_id=user.tenant_id, table_id=x.table_id, warehouse_id=warehouse.id, user_id=user.id, note=x.note)
     db.add(order)
     await db.flush()
     for item in x.lines:
@@ -783,19 +807,98 @@ async def kitchen_order_create(x: KitchenIn, user: User = Depends(tenant_auth), 
 async def kitchen_orders(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "restaurant.read", db)
     rows = (await db.scalars(select(KitchenOrder).where(KitchenOrder.tenant_id == user.tenant_id).order_by(KitchenOrder.id.desc()).limit(100))).all()
-    return [{"id": r.id, "table_id": r.table_id, "note": r.note, "status": r.status, "created_at": r.created_at} for r in rows]
+    return [{"id": r.id, "table_id": r.table_id, "warehouse_id": r.warehouse_id, "note": r.note, "status": r.status, "created_at": r.created_at} for r in rows]
 
 @router.post("/restaurant/orders/{order_id}/status")
 async def kitchen_order_status(order_id: int, status: str, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "restaurant.write", db)
     if status not in {"A_PREPARER", "EN_PREPARATION", "PRETE", "SERVIE", "ANNULEE"}:
         raise HTTPException(400, "Statut invalide")
-    row = await db.scalar(select(KitchenOrder).where(KitchenOrder.id == order_id, KitchenOrder.tenant_id == user.tenant_id))
+    row = await db.scalar(select(KitchenOrder).where(
+        KitchenOrder.id == order_id, KitchenOrder.tenant_id == user.tenant_id
+    ).with_for_update())
     if not row:
         raise HTTPException(404, "Commande introuvable")
+    if row.status == "ANNULEE":
+        raise HTTPException(409, "Une commande annulée ne peut pas être modifiée")
+    if row.status == "SERVIE" and status != "SERVIE":
+        raise HTTPException(409, "Une commande servie ne peut plus être modifiée")
+    if status == "SERVIE" and row.status != "SERVIE":
+        if not row.warehouse_id:
+            warehouse = await db.scalar(select(Warehouse).where(
+                Warehouse.tenant_id == user.tenant_id
+            ).order_by(Warehouse.id).limit(1))
+            if not warehouse:
+                raise HTTPException(409, "Aucun dépôt disponible pour sortir les ingrédients")
+            row.warehouse_id = warehouse.id
+        lines = (await db.scalars(
+            select(KitchenOrderLine).where(KitchenOrderLine.order_id == row.id).order_by(KitchenOrderLine.id)
+        )).all()
+        prepared = []
+        reserved_by_product = {}
+        for line in lines:
+            already = (await db.scalars(select(KitchenOrderConsumption).where(
+                KitchenOrderConsumption.tenant_id == user.tenant_id,
+                KitchenOrderConsumption.order_line_id == line.id
+            ))).all()
+            if already:
+                continue
+            menu_product = await db.scalar(select(Product).where(
+                Product.id == line.product_id, Product.tenant_id == user.tenant_id,
+                Product.active.is_(True)
+            ).with_for_update())
+            if not menu_product:
+                raise HTTPException(404, "Article de commande introuvable")
+            recipe = []
+            if menu_product.kind == "COMPOSE":
+                recipe = (await db.scalars(select(Recipe).where(
+                    Recipe.tenant_id == user.tenant_id, Recipe.product_id == menu_product.id
+                ).order_by(Recipe.ingredient_id))).all()
+                if not recipe:
+                    raise HTTPException(409, f"Fiche recette absente : {menu_product.name}")
+            component_quantities = {}
+            for part in recipe:
+                component_quantities[part.ingredient_id] = component_quantities.get(part.ingredient_id, 0.0) + part.quantity * line.quantity
+            if not recipe:
+                component_quantities[menu_product.id] = line.quantity
+            for ingredient_id, required_qty in sorted(component_quantities.items()):
+                ingredient = await db.scalar(select(Product).where(
+                    Product.id == ingredient_id, Product.tenant_id == user.tenant_id,
+                    Product.active.is_(True)
+                ).with_for_update())
+                if not ingredient:
+                    raise HTTPException(404, "Ingrédient introuvable dans cette entreprise")
+                stock = await db.scalar(select(WarehouseStock).where(
+                    WarehouseStock.tenant_id == user.tenant_id,
+                    WarehouseStock.warehouse_id == row.warehouse_id,
+                    WarehouseStock.product_id == ingredient.id
+                ).with_for_update())
+                already_reserved = reserved_by_product.get(ingredient.id, 0.0)
+                if not stock or stock.quantity + 1e-9 < already_reserved + required_qty:
+                    raise HTTPException(409, f"Stock insuffisant : {ingredient.name}")
+                reserved_by_product[ingredient.id] = already_reserved + required_qty
+                prepared.append((line, ingredient, stock, required_qty))
+        for line, ingredient, stock, required_qty in prepared:
+            stock.quantity -= required_qty
+            ingredient.stock -= required_qty
+            db.add(Movement(
+                tenant_id=user.tenant_id, warehouse_id=row.warehouse_id,
+                product_id=ingredient.id, kind="SORTIE_RESTAURANT_RECETTE",
+                quantity=-required_qty, unit_cost=ingredient.purchase_price,
+                reference=f"REST-{row.id}"
+            ))
+            db.add(KitchenOrderConsumption(
+                tenant_id=user.tenant_id, order_id=row.id, order_line_id=line.id,
+                ingredient_product_id=ingredient.id, warehouse_id=row.warehouse_id,
+                quantity=required_qty
+            ))
+        db.add(Audit(
+            tenant_id=user.tenant_id, user_id=user.id, action="SERVICE_RESTAURANT",
+            detail=f"Commande restaurant {row.id} : stock consommé"
+        ))
     row.status = status
     await db.commit()
-    return {"id": row.id, "status": row.status}
+    return {"id": row.id, "status": row.status, "stock_consumed": status == "SERVIE"}
 
 @router.get("/sales/{sale_id}/invoice")
 async def sale_invoice(sale_id: int, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
