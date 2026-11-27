@@ -329,7 +329,7 @@ async def purchase_list(user: User = Depends(tenant_auth), db: AsyncSession = De
     supplier_ids = {row.supplier_id for row in rows}
     warehouse_ids = {row.warehouse_id for row in rows}
     supplier_rows = (await db.execute(
-        select(Supplier.id, Supplier.name).where(Supplier.id.in_(supplier_ids))
+        select(Supplier.id, Supplier.name).where(Supplier.id.in_(supplier_ids), Supplier.tenant_id == user.tenant_id)
     )).all()
     warehouse_rows = (await db.execute(
         select(Warehouse.id, Warehouse.name).where(Warehouse.id.in_(warehouse_ids), Warehouse.tenant_id == user.tenant_id)
@@ -340,7 +340,7 @@ async def purchase_list(user: User = Depends(tenant_auth), db: AsyncSession = De
     line_rows = (await db.execute(
         select(PurchaseLine, Product.name, Product.sku)
         .join(Product, Product.id == PurchaseLine.product_id)
-        .where(PurchaseLine.order_id.in_(order_ids))
+        .where(PurchaseLine.order_id.in_(order_ids), Product.tenant_id == user.tenant_id)
         .order_by(PurchaseLine.id)
     )).all()
     grouped = {}
@@ -503,7 +503,7 @@ async def inventory_list(user: User = Depends(tenant_auth), db: AsyncSession = D
         return []
     warehouse_ids = {row.warehouse_id for row in rows}
     warehouse_rows = (await db.execute(
-        select(Warehouse.id, Warehouse.name).where(Warehouse.id.in_(warehouse_ids))
+        select(Warehouse.id, Warehouse.name).where(Warehouse.id.in_(warehouse_ids), Warehouse.tenant_id == user.tenant_id)
     )).all()
     warehouse_names = {row.id: row.name for row in warehouse_rows}
     inventory_ids = [row.id for row in rows]
@@ -795,7 +795,7 @@ async def sale_invoice(sale_id: int, user: User = Depends(tenant_auth), db: Asyn
     if not sale:
         raise HTTPException(404, "Vente introuvable")
     tenant = await db.get(Tenant, user.tenant_id)
-    lines = (await db.execute(select(SaleLine, Product.unit).join(Product, Product.id == SaleLine.product_id).where(SaleLine.sale_id == sale.id))).all()
+    lines = (await db.execute(select(SaleLine, Product.unit).join(Product, Product.id == SaleLine.product_id).where(SaleLine.sale_id == sale.id, Product.tenant_id == user.tenant_id))).all()
     rows = "".join(f"<tr><td>{escape(l.label)}</td><td>{l.quantity:g} {escape(str(unit or 'Pièce'))}</td><td>{l.unit_price:,.0f}</td><td>{l.total:,.0f}</td></tr>" for l, unit in lines)
     html = f"""<!doctype html><html lang="fr"><meta charset="utf-8"><title>Ticket {sale.id}</title>
     <style>body{{font:14px Arial;max-width:620px;margin:24px auto;color:#222}}table{{width:100%;border-collapse:collapse}}td,th{{padding:8px;border-bottom:1px solid #ddd;text-align:left}}.total{{text-align:right;font-size:20px;font-weight:bold}}@media print{{button{{display:none}}}}</style>
@@ -1166,7 +1166,7 @@ async def supplier_invoice_list(user: User = Depends(tenant_auth), db: AsyncSess
     rows = (await db.execute(
         select(SupplierInvoice, Supplier.name)
         .join(Supplier, Supplier.id == SupplierInvoice.supplier_id)
-        .where(SupplierInvoice.tenant_id == user.tenant_id)
+        .where(SupplierInvoice.tenant_id == user.tenant_id, Supplier.tenant_id == user.tenant_id)
         .order_by(SupplierInvoice.issue_date.desc(), SupplierInvoice.id.desc()).limit(300)
     )).all()
     return [{
@@ -1258,7 +1258,7 @@ async def customer_receipt_list(user: User = Depends(tenant_auth), db: AsyncSess
     rows = (await db.execute(
         select(CustomerReceipt, Customer.name)
         .join(Customer, Customer.id == CustomerReceipt.customer_id)
-        .where(CustomerReceipt.tenant_id == user.tenant_id)
+        .where(CustomerReceipt.tenant_id == user.tenant_id, Customer.tenant_id == user.tenant_id)
         .order_by(CustomerReceipt.created_at.desc()).limit(300)
     )).all()
     return [{
@@ -1352,7 +1352,7 @@ async def cash_session_list(user: User = Depends(tenant_auth), db: AsyncSession 
     await permitted(user, "cash.read", db)
     rows = (await db.execute(
         select(Cash, User.name).join(User, User.id == Cash.user_id)
-        .where(Cash.tenant_id == user.tenant_id)
+        .where(Cash.tenant_id == user.tenant_id, User.tenant_id == user.tenant_id)
         .order_by(Cash.opened_at.desc()).limit(200)
     )).all()
     session_ids = [cash.id for cash, _ in rows]
