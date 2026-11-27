@@ -190,3 +190,22 @@ async def builtin_stock_inventory_read_test():
     assert "stock.read" in granted
 asyncio.run(builtin_stock_inventory_read_test())
 print("BUILTIN STOCK OK: consultation et modification des inventaires conservées")
+
+# Régression de cloisonnement : chaque jointure vers une entité métier doit
+# conserver explicitement le tenant courant, même si la ligne parente est filtrée.
+import inspect
+from app import advanced as advanced_module
+tenant_scoped_sources = {
+    "purchase_list": ["Supplier.tenant_id == user.tenant_id", "Product.tenant_id == user.tenant_id"],
+    "inventory_list": ["Warehouse.tenant_id == user.tenant_id"],
+    "sale_refund": ["Refund.tenant_id == user.tenant_id"],
+    "sale_invoice": ["Product.tenant_id == user.tenant_id"],
+    "supplier_invoice_list": ["Supplier.tenant_id == user.tenant_id"],
+    "customer_receipt_list": ["Customer.tenant_id == user.tenant_id"],
+    "cash_session_list": ["User.tenant_id == user.tenant_id"],
+}
+for function_name, expected_conditions in tenant_scoped_sources.items():
+    source = inspect.getsource(getattr(advanced_module, function_name))
+    for condition in expected_conditions:
+        assert condition in source, f"{function_name} doit filtrer par entreprise : {condition}"
+print("TENANT JOIN ISOLATION OK: fournisseurs, produits, dépôts, remboursements, clients et caisses")
