@@ -112,7 +112,7 @@ required_permissions = {
     "users.read", "users.write", "catalog.read", "catalog.write",
     "customers.read", "customers.write", "suppliers.read", "suppliers.write",
     "cash.read", "cash.open", "cash.close", "purchases.read", "purchases.write",
-    "stock.read", "stock.write", "inventory.write", "sales.read", "sales.write",
+    "stock.read", "stock.write", "inventory.read", "inventory.write", "sales.read", "sales.write",
     "sales.refund", "restaurant.read", "restaurant.write", "reports.read",
     "finance.read", "finance.write", "receivables.read", "receivables.write",
     "payables.read", "payables.write",
@@ -144,6 +144,7 @@ async def effective_permission_tests():
     granted = await effective_permissions(custom, FakePermissionDB(profile))
     assert "sales.write" in granted and "sales.read" in granted
     assert "stock.read" in granted
+    assert "inventory.read" not in granted
     assert "users.write" not in granted
     admin = SimpleNamespace(role="ADMIN", tenant_id=42)
     assert required_permissions <= set(await effective_permissions(admin, FakePermissionDB(None)))
@@ -167,3 +168,17 @@ async def finance_permission_tests():
     assert {"finance.read", "finance.write", "payables.read", "payables.write", "receivables.read", "receivables.write", "suppliers.read", "customers.read"} <= finance_permissions
 asyncio.run(finance_permission_tests())
 print("FINANCE OK: factures fournisseurs, règlements, créances clients, dépenses, trésorerie et rapports tenant-scoped")
+
+async def inventory_read_permission_tests():
+    read_only = SimpleNamespace(role="MAGASINIER_LECTURE", tenant_id=42)
+    profile = SimpleNamespace(permissions='["inventory.read"]')
+    granted = set(await effective_permissions(read_only, FakePermissionDB(profile)))
+    assert "inventory.read" in granted
+    assert "inventory.write" not in granted
+    writer = SimpleNamespace(role="MAGASINIER", tenant_id=42)
+    writer_profile = SimpleNamespace(permissions='["inventory.write"]')
+    writer_granted = set(await effective_permissions(writer, FakePermissionDB(writer_profile)))
+    assert {"inventory.read", "inventory.write"} <= writer_granted
+
+asyncio.run(inventory_read_permission_tests())
+print("INVENTORY PERMISSIONS OK: consultation séparée de la création et validation")

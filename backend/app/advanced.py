@@ -263,7 +263,7 @@ PERMISSION_KEYS = {
     "suppliers.read", "suppliers.write",
     "cash.read", "cash.open", "cash.close",
     "purchases.read", "purchases.write",
-    "stock.read", "stock.write", "inventory.write",
+    "stock.read", "stock.write", "inventory.read", "inventory.write",
     "sales.read", "sales.write", "sales.refund",
     "restaurant.read", "restaurant.write", "reports.read",
     "finance.read", "finance.write", "receivables.read", "receivables.write",
@@ -494,7 +494,7 @@ class InventoryPost(BaseModel):
 
 @router.get("/inventories")
 async def inventory_list(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
-    await permitted(user, "inventory.write", db)
+    await permitted(user, "inventory.read", db)
     rows = (await db.scalars(
         select(Inventory).where(Inventory.tenant_id == user.tenant_id)
         .order_by(Inventory.id.desc()).limit(100)
@@ -527,7 +527,7 @@ async def inventory_list(user: User = Depends(tenant_auth), db: AsyncSession = D
 
 @router.get("/inventories/{inventory_id}")
 async def inventory_detail(inventory_id: int, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
-    await permitted(user, "inventory.write", db)
+    await permitted(user, "inventory.read", db)
     inventory = await db.scalar(select(Inventory).where(
         Inventory.id == inventory_id, Inventory.tenant_id == user.tenant_id
     ))
