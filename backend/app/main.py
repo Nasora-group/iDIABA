@@ -143,6 +143,7 @@ async def startup():
    await connection.execute(text("UPDATE users SET tenant_id = NULL WHERE role = 'SUPER_ADMIN' AND tenant_id IS NOT NULL"))
    await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS client_sale_id VARCHAR(64)"))
    await connection.execute(text("ALTER TABLE sales ADD COLUMN IF NOT EXISTS change_amount DOUBLE PRECISION NOT NULL DEFAULT 0"))
+   await connection.execute(text("ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS warehouse_id INTEGER"))
    await connection.execute(text("ALTER TABLE registration_requests ALTER COLUMN password_hash DROP NOT NULL"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_refund_payments_tenant_method_reference ON refund_payments (tenant_id, method, reference) WHERE reference <> ''"))
@@ -165,6 +166,9 @@ async def startup():
     await connection.execute(text("ALTER TABLE sales ADD COLUMN client_sale_id VARCHAR(64)"))
    if "change_amount" not in columns:
     await connection.execute(text("ALTER TABLE sales ADD COLUMN change_amount FLOAT NOT NULL DEFAULT 0"))
+   kitchen_columns={row[1] for row in (await connection.execute(text("PRAGMA table_info(kitchen_orders)"))).all()}
+   if "warehouse_id" not in kitchen_columns:
+    await connection.execute(text("ALTER TABLE kitchen_orders ADD COLUMN warehouse_id INTEGER"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sales_tenant_client_sale ON sales (tenant_id, client_sale_id) WHERE client_sale_id IS NOT NULL"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_refund_payments_tenant_method_reference ON refund_payments (tenant_id, method, reference) WHERE reference <> ''"))
    await connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_supplier_invoices_tenant_reference ON supplier_invoices (tenant_id, reference)"))
