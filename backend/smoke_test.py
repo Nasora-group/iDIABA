@@ -252,22 +252,26 @@ async def restaurant_recipe_consumption_test():
         admin = await db.scalar(select(User).where(User.email == "admin@demo.sn"))
         burger = await db.scalar(select(Product).where(Product.tenant_id == admin.tenant_id, Product.sku == "BUR"))
         rice = await db.scalar(select(Product).where(Product.tenant_id == admin.tenant_id, Product.sku == "RIZ25"))
+        sandwich = await db.scalar(select(Product).where(Product.tenant_id == admin.tenant_id, Product.sku == "SAN"))
         shop = await db.scalar(select(Warehouse).where(Warehouse.tenant_id == admin.tenant_id, Warehouse.code == "PLT"))
         rice_stock = await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id == admin.tenant_id, WarehouseStock.warehouse_id == shop.id, WarehouseStock.product_id == rice.id))
         before = rice_stock.quantity
         order = KitchenOrder(tenant_id=admin.tenant_id, table_id=None, warehouse_id=shop.id, user_id=admin.id, note="Test recette isolé")
         db.add(order)
         await db.flush()
-        db.add(KitchenOrderLine(order_id=order.id, product_id=burger.id, quantity=2))
+        db.add_all([
+            KitchenOrderLine(order_id=order.id, product_id=burger.id, quantity=2),
+            KitchenOrderLine(order_id=order.id, product_id=sandwich.id, quantity=2),
+        ])
         await db.commit()
         await kitchen_order_status(order.id, "SERVIE", admin, db)
         await db.refresh(rice_stock)
         after_first_service = rice_stock.quantity
-        assert abs(after_first_service - (before - 0.06)) < 1e-8
+        assert abs(after_first_service - (before - 0.10)) < 1e-8
         await kitchen_order_status(order.id, "SERVIE", admin, db)
         await db.refresh(rice_stock)
         assert abs(rice_stock.quantity - after_first_service) < 1e-8
-        assert await db.scalar(select(func.count(KitchenOrderConsumption.id)).where(KitchenOrderConsumption.order_id == order.id)) == 2
+        assert await db.scalar(select(func.count(KitchenOrderConsumption.id)).where(KitchenOrderConsumption.order_id == order.id)) == 4
         assert "warehouse_id" in KitchenOrder.__table__.columns
 asyncio.run(restaurant_recipe_consumption_test())
 print("RESTAURANT OK: consommation recette au service, dépôt sélectionné et absence de double sortie")
