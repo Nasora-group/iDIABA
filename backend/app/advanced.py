@@ -1215,11 +1215,19 @@ async def tenant_onboarding_update(x: dict, user: User = Depends(tenant_auth), d
     if len(json.dumps(x, ensure_ascii=False)) > 12000:
         raise HTTPException(413, "Les paramètres transmis sont trop volumineux.")
     row = await db.scalar(select(TenantConfiguration).where(TenantConfiguration.tenant_id == user.tenant_id))
+    current = json.loads(row.configuration_json or "{}") if row else {"version": 1, "sectors": [], "modules": [], "settings": {}}
+    # Les modules et secteurs sont définis lors de l'inscription et gérés par la plateforme.
+    # L'administrateur de l'entreprise peut modifier ses paramètres sans s'accorder lui-même
+    # de nouveaux modules ni contourner les droits liés à son abonnement.
+    for locked_key in ("modules", "sectors"):
+        if locked_key in x and set(x.get(locked_key) or []) != set(current.get(locked_key) or []):
+            raise HTTPException(403, "Les modules et secteurs sont gérés par l'administrateur iDIABA.")
+    merged = {**current, **x, "modules": current.get("modules", []), "sectors": current.get("sectors", [])}
     if row:
-        row.configuration_json = json.dumps(x, ensure_ascii=False)
+        row.configuration_json = json.dumps(merged, ensure_ascii=False)
         row.updated_at = datetime.utcnow()
     else:
-        db.add(TenantConfiguration(tenant_id=user.tenant_id, configuration_json=json.dumps(x, ensure_ascii=False)))
+        db.add(TenantConfiguration(tenant_id=user.tenant_id, configuration_json=json.dumps(merged, ensure_ascii=False)))
     await db.commit()
     return {"saved": True}
 
