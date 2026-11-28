@@ -1,5 +1,5 @@
 """Traçabilité des lots/séries, variantes catalogue et tarifs clients."""
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -291,7 +291,8 @@ async def batches_list(user: User = Depends(tenant_auth), db: AsyncSession = Dep
         "batch_code": batch.batch_code, "expiry_date": batch.expiry_date,
         "quantity_received": batch.quantity_received, "quantity_available": batch.quantity_available,
         "unit_cost": batch.unit_cost, "status": "EPUISE" if batch.quantity_available <= 1e-9 else
-            ("PERIME" if batch.expiry_date and batch.expiry_date < date.today() else batch.status)
+            ("PERIME" if batch.expiry_date and batch.expiry_date < date.today() else
+             ("EXPIRATION_PROCHE" if batch.expiry_date and batch.expiry_date <= date.today() + timedelta(days=30) else batch.status))
     } for batch, product, warehouse in rows]
 
 
