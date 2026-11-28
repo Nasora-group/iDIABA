@@ -431,6 +431,17 @@ async def sale_create(x:SaleIn,u:User=Depends(roles("ADMIN","GERANT","CAISSIER",
   if not required_stock or required_stock.quantity+1e-9<required_quantity:
    label=required_product.name
    raise HTTPException(409,f"Stock insuffisant pour la vente : {label} (requis : {required_quantity:g})")
+ # Contrôle du stock tracé avant l'enregistrement de la vente.
+ from app.traceability import ProductTraceability,StockBatch,SerialNumber
+ for required_product_id,required_quantity in sorted(stock_requirements.items()):
+  policy=await db.scalar(select(ProductTraceability).where(ProductTraceability.tenant_id==u.tenant_id,ProductTraceability.product_id==required_product_id))
+  if not policy or policy.mode=="NONE": continue
+  if policy.mode=="LOT":
+   lots=(await db.scalars(select(StockBatch).where(StockBatch.tenant_id==u.tenant_id,StockBatch.product_id==required_product_id,StockBatch.warehouse_id==wh.id,StockBatch.quantity_available>0,((StockBatch.expiry_date.is_(None))|(StockBatch.expiry_date>=date.today()))).order_by(StockBatch.expiry_date.asc().nullslast(),StockBatch.id.asc()).with_for_update())).all()
+   if sum(row.quantity_available for row in lots)+1e-9<required_quantity: raise HTTPException(409,f"Lots valides insuffisants pour {stock_products[required_product_id].name}")
+  elif policy.mode=="SERIAL":
+   serials=(await db.scalars(select(SerialNumber).where(SerialNumber.tenant_id==u.tenant_id,SerialNumber.product_id==required_product_id,SerialNumber.warehouse_id==wh.id,SerialNumber.status=="EN_STOCK").order_by(SerialNumber.id).with_for_update())).all()
+   if len(serials)<required_quantity or abs(required_quantity-round(required_quantity))>1e-9: raise HTTPException(409,f"Numéros de série disponibles insuffisants pour {stock_products[required_product_id].name}")
  total=round(subtotal+tax,2)
  credit,change=payment_settlement(total,x.payments)
  if credit and not customer: raise HTTPException(400,"Client obligatoire pour un crédit")
@@ -457,6 +468,20 @@ async def sale_create(x:SaleIn,u:User=Depends(roles("ADMIN","GERANT","CAISSIER",
     ingredient_stock.quantity-=part.quantity*q
     db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wh.id,product_id=ingredient.id,kind="SORTIE_VENTE_RECETTE",quantity=-part.quantity*q,unit_cost=ingredient.purchase_price,reference=f"VTE-{s.id}"))
   else:
+   policy=await db.scalar(select(traceability.ProductTraceability).where(traceability.ProductTraceability.tenant_id==u.tenant_id,traceability.ProductTraceability.product_id==p.id))
+   if policy and policy.mode=="LOT":
+    remaining=q
+    lots=(await db.scalars(select(traceability.StockBatch).where(traceability.StockBatch.tenant_id==u.tenant_id,traceability.StockBatch.product_id==p.id,traceability.StockBatch.warehouse_id==wh.id,traceability.StockBatch.quantity_available>0,((traceability.StockBatch.expiry_date.is_(None))|(traceability.StockBatch.expiry_date>=date.today()))).order_by(traceability.StockBatch.expiry_date.asc().nullslast(),traceability.StockBatch.id.asc()).with_for_update())).all()
+    for lot in lots:
+     taken=min(remaining,lot.quantity_available);lot.quantity_available-=taken;remaining-=taken
+     if lot.quantity_available<=1e-9:lot.status="EPUISE"
+     if remaining<=1e-9:break
+   elif policy and policy.mode=="SERIAL":
+    serials=(await db.scalars(select(traceability.SerialNumber).where(traceability.SerialNumber.tenant_id==u.tenant_id,traceability.SerialNumber.product_id==p.id,traceability.SerialNumber.warehouse_id==wh.id,traceability.SerialNumber.status=="EN_STOCK").order_by(traceability.SerialNumber.id).limit(int(q)).with_for_update())).all()
+    for serial in serials:serial.status="VENDU";serial.sale_id=s.id
+    for batch_id in {serial.batch_id for serial in serials if serial.batch_id is not None}:
+     lot=await db.scalar(select(traceability.StockBatch).where(traceability.StockBatch.id==batch_id,traceability.StockBatch.tenant_id==u.tenant_id).with_for_update())
+     if lot:lot.quantity_available=max(0.0,lot.quantity_available-sum(1 for serial in serials if serial.batch_id==batch_id))
    p.stock-=q
    warehouse_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==p.id).with_for_update())
    warehouse_stock.quantity-=q
@@ -577,6 +602,7 @@ async def users_update(uid:int,x:UserUpdate,u:User=Depends(roles("ADMIN",permiss
 # Modules métier additionnels (modèles chargés avant create_all au démarrage).
 from app import advanced  # noqa: F401
 from app import commercial  # noqa: F401
+from app import traceability  # noqa: F401
 
 # En production, l'API sert aussi l'application React compilée.
 _frontend=os.path.abspath(os.path.join(os.path.dirname(__file__),"../../frontend/dist"))
