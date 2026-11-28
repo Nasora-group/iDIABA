@@ -1172,7 +1172,7 @@ async def public_registration(x: PublicRegistrationIn, db: AsyncSession = Depend
     ))
     if pending:
         raise HTTPException(409, "Une demande avec cette adresse e-mail est déjà en attente.")
-    allowed_sectors = {"COMMERCE", "GROSSISTE", "DISTRIBUTION", "RESTAURANT", "ALIMENTAIRE", "PHARMACIE", "BTP", "SERVICES", "AUTRE"}
+    allowed_sectors = {"HYBRIDE", "COMMERCE", "GROSSISTE", "DISTRIBUTION", "RESTAURANT", "ALIMENTAIRE", "PHARMACIE", "BTP", "SERVICES", "AUTRE"}
     allowed_modules = {"POS", "CATALOGUE", "STOCK", "ACHATS", "VENTES_B2B", "FACTURATION", "FINANCE", "RESTAURANT", "INVENTAIRE", "MULTI_DEPOTS", "EQUIPE", "RAPPORTS"}
     sectors = sorted(set(x.sectors or [x.mode]))
     modules = sorted(set(x.modules or ["POS", "CATALOGUE", "STOCK", "ACHATS", "FACTURATION", "FINANCE", "EQUIPE", "RAPPORTS"]))
