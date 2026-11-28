@@ -164,6 +164,7 @@ export default function App(){
   {onboardingStep<3?<button type="button" className="primary" onClick={()=>{if(onboardingStep===0&&(!signup.company_name||!signup.phone)){setMsg("Renseignez le nom et le téléphone de l'entreprise.");return;}if(onboardingStep===1&&!(signup.sectors||[]).length){setMsg("Sélectionnez au moins un secteur d'activité.");return;}setMsg("");setOnboardingStep(v=>v+1);}}>Continuer</button>:<button className="primary" disabled={busy}>{busy?"Envoi...":"Envoyer mon inscription"}</button>}
   <button type="button" onClick={()=>{setRegisterMode(false);setOnboardingStep(0);setMsg("");}}>Annuler</button>
  </div>
+ </>}
  {publicPayment.available&&<section style={{marginTop:18,padding:16,border:"1px solid #d1d5db",borderRadius:12,textAlign:"left",background:"#fff"}}>
   <h3 style={{marginTop:0}}>Paiement de l'abonnement iDIABA</h3>
   <p style={{fontSize:13,color:"#475569"}}>Utilisez l'un des moyens de paiement disponibles ci-dessous. Après le transfert, communiquez la référence à l'équipe iDIABA. L'accès sera activé après vérification du paiement.</p>
