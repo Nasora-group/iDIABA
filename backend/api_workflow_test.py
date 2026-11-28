@@ -27,6 +27,19 @@ async def main():
             db.add(Subscription(tenant_id=demo_tenant.id, plan="ESSENTIEL", status="ESSAI", monthly_price=0))
             await db.commit()
 
+    # Compte plateforme isolé : aucun accès aux données métier d'une entreprise.
+    async with Session() as db:
+        platform_admin = User(
+            tenant_id=None, email="platform@idiaba.test", name="Super Admin Test",
+            password_hash=hasher.hash("Platform123!"), role="SUPER_ADMIN", active=True,
+        )
+        inactive_user = User(
+            tenant_id=None, email="inactive@idiaba.test", name="Compte Inactif",
+            password_hash=hasher.hash("Inactive123!"), role="SUPER_ADMIN", active=False,
+        )
+        db.add_all([platform_admin, inactive_user])
+        await db.commit()
+
     # Deuxième entreprise synthétique pour vérifier l'isolation multi-tenant.
     async with Session() as db:
         other = Tenant(name="Entreprise Test Isolation", mode="COMMERCE", currency="FCFA", tax_rate=18)
@@ -63,6 +76,24 @@ async def main():
 
         admin = await login("admin@demo.sn", "admin123")
         isolation_admin = await login("admin@isolation.test", "Isolation123!")
+        platform_headers = await login("platform@idiaba.test", "Platform123!")
+
+        # Les rôles sont strictement séparés dans les deux sens.
+        assert (await client.get("/api/platform/overview", headers=admin)).status_code == 403
+        assert (await client.get("/api/platform/companies", headers=isolation_admin)).status_code == 403
+        assert (await client.get("/api/platform/payment-settings", headers=admin)).status_code == 403
+        assert (await client.get("/api/products", headers=platform_headers)).status_code == 403
+        platform_identity = await client.get("/api/auth/me", headers=platform_headers)
+        assert platform_identity.status_code == 200
+        assert platform_identity.json()["role"] == "SUPER_ADMIN"
+        assert platform_identity.json()["tenant_id"] is None
+
+        inactive_login = await client.post("/api/auth/login", json={
+            "email": "inactive@idiaba.test", "password": "Inactive123!",
+        })
+        assert inactive_login.status_code == 401
+        invalid_token = await client.get("/api/auth/me", headers={"Authorization": "Bearer invalid-token"})
+        assert invalid_token.status_code == 401
 
         # Vérifier que chaque catalogue ne révèle que les produits de son entreprise.
         products = (await client.get("/api/products", headers=admin)).json()
