@@ -454,7 +454,7 @@ async def delivery_create(order_id: int, x: DeliveryIn, user: User = Depends(ten
     for line, product, stock, quantity in prepared:
         line.delivered += quantity
         stock.quantity -= quantity
-        product.stock = max(0.0, product.stock - quantity)
+        product.stock -= quantity
         db.add(DeliveryNoteLine(
             delivery_note_id=note.id, order_line_id=line.id,
             product_id=product.id, quantity=quantity
