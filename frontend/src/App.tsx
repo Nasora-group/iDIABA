@@ -38,7 +38,7 @@ const roleLabels:Record<string,string>={ADMIN:"Administrateur",GERANT:"Gérant",
 const roleOptions=["GERANT","CAISSIER","VENDEUR","STOCK"];
 export default function App(){
  const {token,user,set,clear}=useAuth();
- const [online,setOnline]=useState(navigator.onLine),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[registerMode,setRegisterMode]=useState(false),[signup,setSignup]=useState<any>({mode:"HYBRIDE",terms_accepted:false});const [publicPayment,setPublicPayment]=useState<any>({providers:[],instructions:"",available:false});
+ const [online,setOnline]=useState(navigator.onLine),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[registerMode,setRegisterMode]=useState(false),[onboardingStep,setOnboardingStep]=useState(0),[signup,setSignup]=useState<any>({mode:"HYBRIDE",currency:"FCFA",tax_rate:18,sectors:[],modules:[],settings:{inventory_method:"CUMP",sales_mode:"MIXTE",allow_negative_stock:false,multi_warehouse:false,table_management:true},terms_accepted:false});const [publicPayment,setPublicPayment]=useState<any>({providers:[],instructions:"",available:false});
  const [products,setProducts]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<any[]>([]),[cash,setCash]=useState<any>(null),[customProfiles,setCustomProfiles]=useState<{role_key:string;name:string;active:boolean}[]>([]);
  const [customers,setCustomers]=useState<Customer[]>([]),[suppliers,setSuppliers]=useState<Supplier[]>([]),[users,setUsers]=useState<User[]>([]),[sales,setSales]=useState<any[]>([]);
  const [cart,setCart]=useState<Line[]>([]),[tab,setTab]=useState("Caisse"),[search,setSearch]=useState(""),[opening,setOpening]=useState("0"),[counted,setCounted]=useState(""),[msg,setMsg]=useState(""),[dash,setDash]=useState<any>(null);
@@ -126,17 +126,44 @@ export default function App(){
  if(!token)return <main className="login"><form onSubmit={registerMode?register:login}><div className="logo">i</div><h1>iDIABA</h1><p>Gestion commerciale & caisse</p>
  {msg&&<p className="message" role="status">{msg}</p>}
  {!registerMode?<><label>Email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Mot de passe<input type="password" required value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="primary">Se connecter</button><button type="button" onClick={()=>{setRegisterMode(true);setMsg("");}}>Créer mon entreprise</button></>:<>
- <h3>Demander l'ouverture d'un compte entreprise</h3>
- <label>Nom de l'entreprise<input required minLength={2} maxLength={160} value={signup.company_name||""} onChange={e=>setSignup((x:any)=>({...x,company_name:e.target.value}))}/></label>
- <label>Activité<select value={signup.mode} onChange={e=>setSignup((x:any)=>({...x,mode:e.target.value}))}><option value="COMMERCE">Commerce / Boutique</option><option value="RESTAURANT">Restaurant</option><option value="HYBRIDE">Commerce et restauration</option></select></label>
- <label>Nom du responsable<input required minLength={2} value={signup.admin_name||""} onChange={e=>setSignup((x:any)=>({...x,admin_name:e.target.value}))}/></label>
- <label>Email professionnel<input type="email" required value={signup.admin_email||""} onChange={e=>setSignup((x:any)=>({...x,admin_email:e.target.value}))}/></label>
- <label>Téléphone<input type="tel" required minLength={6} value={signup.phone||""} onChange={e=>setSignup((x:any)=>({...x,phone:e.target.value}))}/></label>
- <label>Adresse de l'entreprise<input value={signup.address||""} onChange={e=>setSignup((x:any)=>({...x,address:e.target.value}))}/></label>
- <label>Mot de passe (10 caractères minimum)<input type="password" required minLength={10} maxLength={128} value={signup.admin_password||""} onChange={e=>setSignup((x:any)=>({...x,admin_password:e.target.value}))}/></label>
- <label style={{display:"flex",alignItems:"flex-start",gap:8}}><input type="checkbox" required checked={!!signup.terms_accepted} onChange={e=>setSignup((x:any)=>({...x,terms_accepted:e.target.checked}))}/> J'accepte que mes informations soient utilisées pour traiter cette demande de création de compte.</label>
- <button className="primary" disabled={busy}>{busy?"Envoi...":"Envoyer la demande"}</button><button type="button" onClick={()=>{setRegisterMode(false);setMsg("");}}>Retour à la connexion</button>
- <small>La demande doit être validée par l'équipe iDIABA. L'accès sera activé après configuration de l'abonnement.</small>
+ <h3>Créer votre espace entreprise</h3>
+ <div style={{display:"flex",gap:6,margin:"12px 0 18px",flexWrap:"wrap"}}>{["Entreprise","Activité","Modules","Compte"].map((label,i)=><span key={label} style={{padding:"7px 10px",borderRadius:20,fontSize:12,background:onboardingStep===i?"#14532d":"#e5e7eb",color:onboardingStep===i?"white":"#334155"}}>{i+1}. {label}</span>)}</div>
+ {onboardingStep===0&&<>
+  <p><b>1. Informations de l'entreprise</b></p>
+  <label>Nom de l'entreprise<input required minLength={2} maxLength={160} value={signup.company_name||""} onChange={e=>setSignup((x:any)=>({...x,company_name:e.target.value}))}/></label>
+  <label>Adresse de l'entreprise<input value={signup.address||""} onChange={e=>setSignup((x:any)=>({...x,address:e.target.value}))}/></label>
+  <label>Téléphone professionnel<input type="tel" required minLength={6} value={signup.phone||""} onChange={e=>setSignup((x:any)=>({...x,phone:e.target.value}))}/></label>
+  <label>NINEA<input value={signup.ninea||""} onChange={e=>setSignup((x:any)=>({...x,ninea:e.target.value}))}/></label>
+  <label>Registre de commerce (RCCM)<input value={signup.rc||""} onChange={e=>setSignup((x:any)=>({...x,rc:e.target.value}))}/></label>
+  <label>Devise principale<select value={signup.currency||"FCFA"} onChange={e=>setSignup((x:any)=>({...x,currency:e.target.value}))}><option value="FCFA">FCFA</option><option value="EUR">Euro (EUR)</option><option value="USD">Dollar (USD)</option><option value="XOF">Franc CFA BCEAO (XOF)</option><option value="XAF">Franc CFA BEAC (XAF)</option></select></label>
+  <label>Taux de TVA par défaut (%)<input type="number" min="0" max="100" step="0.01" value={signup.tax_rate??18} onChange={e=>setSignup((x:any)=>({...x,tax_rate:Number(e.target.value)}))}/></label>
+ </>}
+ {onboardingStep===1&&<>
+  <p><b>2. Secteurs d'activité</b></p><p style={{fontSize:13,color:"#64748b"}}>Sélectionnez une ou plusieurs activités. Les modules seront adaptés à vos choix.</p>
+  {([["COMMERCE","Commerce / Boutique"],["GROSSISTE","Grossiste"],["DISTRIBUTION","Distribution"],["RESTAURANT","Restaurant"],["ALIMENTAIRE","Alimentation"],["PHARMACIE","Pharmacie / Parapharmacie"],["BTP","BTP / Matériaux"],["SERVICES","Prestations de services"],["AUTRE","Autre activité"]] as string[][]).map(([key,label])=><label key={key} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 0"}}><input type="checkbox" checked={(signup.sectors||[]).includes(key)} onChange={e=>setSignup((x:any)=>({...x,sectors:e.target.checked?[...(x.sectors||[]),key]:(x.sectors||[]).filter((v:string)=>v!==key)}))}/>{label}</label>)}
+  <label>Configuration principale<select value={signup.mode||"HYBRIDE"} onChange={e=>setSignup((x:any)=>({...x,mode:e.target.value}))}><option value="COMMERCE">Commerce</option><option value="RESTAURANT">Restauration</option><option value="HYBRIDE">Activités mixtes</option></select></label>
+ </>}
+ {onboardingStep===2&&<>
+  <p><b>3. Modules et règles de gestion</b></p>
+  <p style={{fontSize:13,color:"#64748b"}}>Vous pourrez activer d'autres modules depuis les paramètres de votre entreprise.</p>
+  {([["POS","Caisse et points de vente"],["CATALOGUE","Catalogue et tarifs"],["STOCK","Gestion des stocks"],["ACHATS","Achats et fournisseurs"],["VENTES_B2B","Devis et ventes professionnelles"],["FACTURATION","Facturation et livraisons"],["FINANCE","Finance et trésorerie"],["RESTAURANT","Tables, commandes et recettes"],["INVENTAIRE","Inventaires et transferts"],["MULTI_DEPOTS","Multi-entrepôts"],["EQUIPE","Utilisateurs et permissions"],["RAPPORTS","Tableaux de bord et rapports"]] as string[][]).map(([key,label])=><label key={key} style={{display:"flex",alignItems:"center",gap:9,padding:"6px 0"}}><input type="checkbox" checked={(signup.modules||[]).includes(key)} onChange={e=>setSignup((x:any)=>({...x,modules:e.target.checked?[...(x.modules||[]),key]:(x.modules||[]).filter((v:string)=>v!==key)}))}/>{label}</label>)}
+  <label>Méthode de valorisation des stocks<select value={signup.settings?.inventory_method||"CUMP"} onChange={e=>setSignup((x:any)=>({...x,settings:{...x.settings,inventory_method:e.target.value}}))}><option value="CUMP">Coût moyen pondéré (CUMP)</option><option value="FIFO">Premier entré, premier sorti (FIFO)</option></select></label>
+  <label>Mode de vente<select value={signup.settings?.sales_mode||"MIXTE"} onChange={e=>setSignup((x:any)=>({...x,settings:{...x.settings,sales_mode:e.target.value}}))}><option value="MIXTE">Vente au détail et en gros</option><option value="DETAIL">Vente au détail</option><option value="GROS">Vente en gros</option><option value="SERVICES">Prestations de services</option></select></label>
+  {([["allow_negative_stock","Autoriser les ventes avec stock négatif"],["multi_warehouse","Utiliser plusieurs dépôts / magasins"],["table_management","Activer la gestion des tables (restauration)"]] as string[][]).map(([key,label])=><label key={key} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 0"}}><input type="checkbox" checked={!!signup.settings?.[key]} onChange={e=>setSignup((x:any)=>({...x,settings:{...x.settings,[key]:e.target.checked}}))}/>{label}</label>)}
+ </>}
+ {onboardingStep===3&&<>
+  <p><b>4. Administrateur de l'entreprise</b></p>
+  <label>Nom complet<input required minLength={2} value={signup.admin_name||""} onChange={e=>setSignup((x:any)=>({...x,admin_name:e.target.value}))}/></label>
+  <label>Email professionnel<input type="email" required value={signup.admin_email||""} onChange={e=>setSignup((x:any)=>({...x,admin_email:e.target.value}))}/></label>
+  <label>Mot de passe (10 caractères minimum)<input type="password" required minLength={10} maxLength={128} value={signup.admin_password||""} onChange={e=>setSignup((x:any)=>({...x,admin_password:e.target.value}))}/></label>
+  <label style={{display:"flex",alignItems:"flex-start",gap:8}}><input type="checkbox" required checked={!!signup.terms_accepted} onChange={e=>setSignup((x:any)=>({...x,terms_accepted:e.target.checked}))}/> J'accepte les conditions d'utilisation et le traitement des informations de mon entreprise.</label>
+  <p style={{fontSize:12,color:"#64748b"}}>Après envoi, votre dossier et vos paramètres seront transmis à iDIABA pour validation. L'accès opérationnel sera ouvert après activation de l'abonnement.</p>
+ </>}
+ <div style={{display:"flex",gap:8,marginTop:16}}>
+  {onboardingStep>0&&<button type="button" onClick={()=>setOnboardingStep(v=>v-1)}>Précédent</button>}
+  {onboardingStep<3?<button type="button" className="primary" onClick={()=>{if(onboardingStep===0&&(!signup.company_name||!signup.phone)){setMsg("Renseignez le nom et le téléphone de l'entreprise.");return;}if(onboardingStep===1&&!(signup.sectors||[]).length){setMsg("Sélectionnez au moins un secteur d'activité.");return;}setMsg("");setOnboardingStep(v=>v+1);}}>Continuer</button>:<button className="primary" disabled={busy}>{busy?"Envoi...":"Envoyer mon inscription"}</button>}
+  <button type="button" onClick={()=>{setRegisterMode(false);setOnboardingStep(0);setMsg("");}}>Annuler</button>
+ </div>
  </>}
  {publicPayment.available&&<section style={{marginTop:18,padding:16,border:"1px solid #d1d5db",borderRadius:12,textAlign:"left",background:"#fff"}}>
   <h3 style={{marginTop:0}}>Paiement de l'abonnement iDIABA</h3>

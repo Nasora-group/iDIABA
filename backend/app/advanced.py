@@ -1133,7 +1133,27 @@ class PublicRegistrationIn(BaseModel):
     admin_name: str = Field(min_length=2, max_length=120)
     admin_email: str = Field(min_length=5, max_length=160, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     admin_password: str = Field(min_length=10, max_length=128)
+    ninea: str = Field(default="", max_length=50)
+    rc: str = Field(default="", max_length=50)
+    currency: str = Field(default="FCFA", pattern=r"^(FCFA|EUR|USD|XOF|XAF)$")
+    tax_rate: float = Field(default=18, ge=0, le=100)
+    sectors: list[str] = Field(default_factory=list, max_length=12)
+    modules: list[str] = Field(default_factory=list, max_length=40)
+    settings: dict = Field(default_factory=dict)
     terms_accepted: bool
+
+class RegistrationConfiguration(Base):
+    __tablename__ = "registration_configurations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    registration_id: Mapped[int] = mapped_column(ForeignKey("registration_requests.id"), unique=True, index=True)
+    configuration_json: Mapped[str] = mapped_column(String(12000), default="{}")
+
+class TenantConfiguration(Base):
+    __tablename__ = "tenant_configurations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), unique=True, index=True)
+    configuration_json: Mapped[str] = mapped_column(String(12000), default="{}")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class RegistrationReviewIn(BaseModel):
     decision: str = Field(pattern=r"^(APPROUVER|REFUSER)$")
@@ -1152,15 +1172,56 @@ async def public_registration(x: PublicRegistrationIn, db: AsyncSession = Depend
     ))
     if pending:
         raise HTTPException(409, "Une demande avec cette adresse e-mail est déjà en attente.")
+    allowed_sectors = {"COMMERCE", "GROSSISTE", "DISTRIBUTION", "RESTAURANT", "ALIMENTAIRE", "PHARMACIE", "BTP", "SERVICES", "AUTRE"}
+    allowed_modules = {"POS", "CATALOGUE", "STOCK", "ACHATS", "VENTES_B2B", "FACTURATION", "FINANCE", "RESTAURANT", "INVENTAIRE", "MULTI_DEPOTS", "EQUIPE", "RAPPORTS"}
+    sectors = sorted(set(x.sectors or [x.mode]))
+    modules = sorted(set(x.modules or ["POS", "CATALOGUE", "STOCK", "ACHATS", "FACTURATION", "FINANCE", "EQUIPE", "RAPPORTS"]))
+    if set(sectors) - allowed_sectors or set(modules) - allowed_modules:
+        raise HTTPException(400, "Secteur ou module non reconnu.")
+    configuration = {
+        "version": 1, "sectors": sectors, "modules": modules,
+        "settings": x.settings, "ninea": x.ninea.strip(), "rc": x.rc.strip(),
+        "currency": x.currency, "tax_rate": x.tax_rate
+    }
+    try:
+        configuration_json = json.dumps(configuration, ensure_ascii=False)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Paramétrage invalide.")
+    if len(configuration_json) > 12000:
+        raise HTTPException(413, "Les paramètres transmis sont trop volumineux.")
     request = RegistrationRequest(
         company_name=x.company_name.strip(), mode=x.mode, address=x.address.strip(),
         phone=x.phone.strip(), admin_name=x.admin_name.strip(), admin_email=email,
         password_hash=hasher.hash(x.admin_password), status="EN_ATTENTE"
     )
     db.add(request)
+    await db.flush()
+    db.add(RegistrationConfiguration(registration_id=request.id, configuration_json=configuration_json))
     await db.commit()
     await db.refresh(request)
-    return {"id": request.id, "status": request.status, "message": "Demande envoyée. Elle sera examinée par l'équipe iDIABA."}
+    return {"id": request.id, "status": request.status, "message": "Votre dossier entreprise et vos paramètres ont été enregistrés. L'équipe iDIABA vérifiera votre inscription."}
+
+@router.get("/tenant/onboarding")
+async def tenant_onboarding_get(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    row = await db.scalar(select(TenantConfiguration).where(TenantConfiguration.tenant_id == user.tenant_id))
+    if not row:
+        return {"version": 1, "sectors": [], "modules": [], "settings": {}}
+    return json.loads(row.configuration_json)
+
+@router.put("/tenant/onboarding")
+async def tenant_onboarding_update(x: dict, user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
+    if user.role != "ADMIN":
+        raise HTTPException(403, "Réservé à l'administrateur de l'entreprise")
+    if len(json.dumps(x, ensure_ascii=False)) > 12000:
+        raise HTTPException(413, "Les paramètres transmis sont trop volumineux.")
+    row = await db.scalar(select(TenantConfiguration).where(TenantConfiguration.tenant_id == user.tenant_id))
+    if row:
+        row.configuration_json = json.dumps(x, ensure_ascii=False)
+        row.updated_at = datetime.utcnow()
+    else:
+        db.add(TenantConfiguration(tenant_id=user.tenant_id, configuration_json=json.dumps(x, ensure_ascii=False)))
+    await db.commit()
+    return {"saved": True}
 
 @router.get("/platform/registrations")
 async def platform_registrations(user: User = Depends(auth), db: AsyncSession = Depends(dbdep)):
@@ -1192,12 +1253,19 @@ async def review_registration(registration_id: int, x: RegistrationReviewIn, use
         return {"id": request.id, "status": request.status}
     if await db.scalar(select(User).where(User.email == request.admin_email)):
         raise HTTPException(409, "Cette adresse e-mail est déjà utilisée par un compte.")
-    tenant = Tenant(name=request.company_name, mode=request.mode, address=request.address, phone=request.phone, currency="FCFA", tax_rate=18)
+    registration_config = await db.scalar(select(RegistrationConfiguration).where(RegistrationConfiguration.registration_id == request.id))
+    config = json.loads(registration_config.configuration_json) if registration_config else {}
+    tenant = Tenant(
+        name=request.company_name, mode=request.mode, address=request.address, phone=request.phone,
+        ninea=config.get("ninea", ""), rc=config.get("rc", ""),
+        currency=config.get("currency", "FCFA"), tax_rate=float(config.get("tax_rate", 18))
+    )
     db.add(tenant)
     await db.flush()
     admin = User(tenant_id=tenant.id, email=request.admin_email, name=request.admin_name,
                  password_hash=request.password_hash, role="ADMIN", active=True)
     db.add(admin)
+    db.add(TenantConfiguration(tenant_id=tenant.id, configuration_json=json.dumps(config, ensure_ascii=False)))
     # L'entreprise est créée sans accès opérationnel tant que le Super Admin
     # n'a pas choisi une formule, un tarif et une échéance.
     db.add(Subscription(tenant_id=tenant.id, plan="ESSENTIEL", status="SUSPENDU", monthly_price=0))
