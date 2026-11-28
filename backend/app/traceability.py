@@ -303,7 +303,7 @@ async def serials_list(product_id: Optional[int] = None, status: Optional[str] =
 async def variants_list(user: User = Depends(tenant_auth), db: AsyncSession = Depends(dbdep)):
     await permitted(user, "catalog.read", db)
     rows = (await db.execute(
-        select(ProductVariant, Product, Product)
+        select(ProductVariant, Product)
         .join(Product, Product.id == ProductVariant.product_id)
         .where(ProductVariant.tenant_id == user.tenant_id)
         .order_by(ProductVariant.id.desc())
