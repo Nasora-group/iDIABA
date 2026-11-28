@@ -374,20 +374,30 @@ async def sale_create(x:SaleIn,u:User=Depends(roles("ADMIN","GERANT","CAISSIER",
   customer=await db.scalar(select(Customer).where(Customer.id==x.customer_id,Customer.tenant_id==u.tenant_id).with_for_update())
   if not customer: raise HTTPException(404,"Client introuvable")
  items=[];subtotal=0;tax=0
+ stock_requirements={}
+ stock_products={}
  for product_id,quantity in aggregate_sale_lines(x.lines):
   p=await db.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==u.tenant_id,Product.active.is_(True)).with_for_update())
   if not p: raise HTTPException(404,"Article introuvable")
-  warehouse_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==p.id).with_for_update())
   recipe=[]
   if p.kind=="COMPOSE":
    recipe=(await db.scalars(select(Recipe).where(Recipe.tenant_id==u.tenant_id,Recipe.product_id==p.id).order_by(Recipe.ingredient_id))).all()
    if not recipe: raise HTTPException(409,f"Fiche recette absente : {p.name}")
    for part in recipe:
     ingredient=await db.scalar(select(Product).where(Product.id==part.ingredient_id,Product.tenant_id==u.tenant_id).with_for_update())
-    ingredient_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==part.ingredient_id).with_for_update())
-    if not ingredient or not ingredient_stock or ingredient_stock.quantity<part.quantity*quantity: raise HTTPException(409,f"Stock ingrédient insuffisant : {ingredient.name if ingredient else 'inconnu'}")
-  elif not warehouse_stock or warehouse_stock.quantity<quantity: raise HTTPException(409,f"Stock insuffisant : {p.name}")
+    if not ingredient: raise HTTPException(409,"Ingrédient de recette introuvable")
+    stock_requirements[ingredient.id]=stock_requirements.get(ingredient.id,0)+part.quantity*quantity
+    stock_products[ingredient.id]=ingredient
+  else:
+   stock_requirements[p.id]=stock_requirements.get(p.id,0)+quantity
+   stock_products[p.id]=p
   st=p.sale_price*quantity;items.append((p,quantity,st,recipe));subtotal+=st;tax+=st*p.tax_rate/100
+ for required_product_id,required_quantity in sorted(stock_requirements.items()):
+  required_product=stock_products[required_product_id]
+  required_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==required_product_id).with_for_update())
+  if not required_stock or required_stock.quantity+1e-9<required_quantity:
+   label=required_product.name
+   raise HTTPException(409,f"Stock insuffisant pour la vente : {label} (requis : {required_quantity:g})")
  total=round(subtotal+tax,2)
  credit,change=payment_settlement(total,x.payments)
  if credit and not customer: raise HTTPException(400,"Client obligatoire pour un crédit")
