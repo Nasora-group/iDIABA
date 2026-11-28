@@ -229,6 +229,60 @@ async def main():
         })
         assert second_receipt.status_code == 200 and second_receipt.json()["status"] == "RECU"
 
+        # Devis accepté -> commande client -> réservation -> livraisons partielles.
+        quote_response = await client.post("/api/quotes", headers=admin, json={
+            "customer_id": aminata["id"], "reference": "DEV-API-001",
+            "note": "Test devis et livraison",
+            "lines": [{"product_id": oil["id"], "quantity": 2, "unit_price": 1000, "tax_rate": 18}],
+        })
+        assert quote_response.status_code == 200, quote_response.text
+        quote_id = quote_response.json()["id"]
+        sent_quote = await client.post(f"/api/quotes/{quote_id}/status?status=ENVOYE", headers=admin)
+        assert sent_quote.status_code == 200 and sent_quote.json()["status"] == "ENVOYE"
+        accepted_quote = await client.post(f"/api/quotes/{quote_id}/status?status=ACCEPTE", headers=admin)
+        assert accepted_quote.status_code == 200 and accepted_quote.json()["status"] == "ACCEPTE"
+        converted = await client.post(
+            f"/api/quotes/{quote_id}/convert?reference=CMD-API-001&warehouse_id={shop['id']}",
+            headers=admin,
+        )
+        assert converted.status_code == 200, converted.text
+        order_id = converted.json()["id"]
+        confirmed = await client.post(f"/api/customer-orders/{order_id}/confirm", headers=admin)
+        assert confirmed.status_code == 200 and confirmed.json()["status"] == "CONFIRMEE"
+        order_rows = (await client.get("/api/customer-orders", headers=admin)).json()
+        customer_order = next(row for row in order_rows if row["id"] == order_id)
+        assert customer_order["lines"][0]["reserved"] == 2
+        stock_before_delivery = next(
+            row["stock"] for row in (await client.get("/api/products", headers=admin)).json()
+            if row["id"] == oil["id"]
+        )
+        first_delivery = await client.post(f"/api/customer-orders/{order_id}/deliveries", headers=admin, json={
+            "reference": "BL-API-001",
+            "lines": [{"order_line_id": customer_order["lines"][0]["id"], "quantity": 1}],
+        })
+        assert first_delivery.status_code == 200, first_delivery.text
+        assert first_delivery.json()["order_status"] == "PARTIELLE"
+        after_first_delivery = (await client.get("/api/customer-orders", headers=admin)).json()
+        partial_order = next(row for row in after_first_delivery if row["id"] == order_id)
+        assert partial_order["lines"][0]["delivered"] == 1
+        second_delivery = await client.post(f"/api/customer-orders/{order_id}/deliveries", headers=admin, json={
+            "reference": "BL-API-002",
+            "lines": [{"order_line_id": customer_order["lines"][0]["id"], "quantity": 1}],
+        })
+        assert second_delivery.status_code == 200, second_delivery.text
+        assert second_delivery.json()["order_status"] == "LIVREE"
+        after_deliveries_stock = next(
+            row["stock"] for row in (await client.get("/api/products", headers=admin)).json()
+            if row["id"] == oil["id"]
+        )
+        assert after_deliveries_stock == stock_before_delivery - 2
+        delivery_history = await client.get(f"/api/customer-orders/{order_id}/deliveries", headers=admin)
+        assert delivery_history.status_code == 200 and len(delivery_history.json()) == 2
+        assert (await client.get("/api/quotes", headers=isolation_admin)).json() == []
+        assert (await client.get("/api/customer-orders", headers=isolation_admin)).json() == []
+        foreign_order_deliveries = await client.get(f"/api/customer-orders/{order_id}/deliveries", headers=isolation_admin)
+        assert foreign_order_deliveries.status_code == 404
+
         # Comptabilité fournisseurs : facture, règlement partiel et prévention du trop-payé.
         invoice = await client.post("/api/finance/supplier-invoices", headers=admin, json={
             "supplier_id": supplier_id, "reference": "FAC-API-001",

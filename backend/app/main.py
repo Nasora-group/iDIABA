@@ -576,6 +576,7 @@ async def users_update(uid:int,x:UserUpdate,u:User=Depends(roles("ADMIN",permiss
 
 # Modules métier additionnels (modèles chargés avant create_all au démarrage).
 from app import advanced  # noqa: F401
+from app import commercial  # noqa: F401
 
 # En production, l'API sert aussi l'application React compilée.
 _frontend=os.path.abspath(os.path.join(os.path.dirname(__file__),"../../frontend/dist"))
