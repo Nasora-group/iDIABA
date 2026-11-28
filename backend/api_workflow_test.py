@@ -7,7 +7,7 @@ from sqlalchemy import select, func
 
 from app.main import (
     app, startup, engine, Session, Tenant, User, Warehouse, WarehouseStock,
-    Product, Customer, hasher,
+    Product, Customer, Recipe, Sale, hasher,
 )
 from app.advanced import Subscription, SupplierInvoice, SupplierPayment, CustomerReceipt, Expense
 
@@ -81,6 +81,67 @@ async def main():
         opened = await client.post("/api/cash/open", headers=admin, json={"opening": 100000})
         assert opened.status_code == 200, opened.text
         cash_id = opened.json()["id"]
+
+        # Régression POS : deux recettes partagent un ingrédient. Chaque ligne
+        # consomme 0,75 unité, mais le stock disponible est de 1 unité seulement.
+        # Le contrôle cumulé doit refuser la vente avant toute écriture.
+        async with Session() as db:
+            demo_user = await db.scalar(select(User).where(User.email == "admin@demo.sn"))
+            test_ingredient = Product(
+                tenant_id=demo_user.tenant_id, sku="TEST-ING-SHARED",
+                name="Ingrédient partagé test", unit="Pièce",
+                purchase_price=10, sale_price=0, tax_rate=0,
+                stock=1, min_stock=0, kind="SIMPLE", active=True,
+            )
+            composed_a = Product(
+                tenant_id=demo_user.tenant_id, sku="TEST-COMP-A",
+                name="Produit composé test A", unit="Pièce",
+                purchase_price=0, sale_price=100, tax_rate=0,
+                stock=0, min_stock=0, kind="COMPOSE", active=True,
+            )
+            composed_b = Product(
+                tenant_id=demo_user.tenant_id, sku="TEST-COMP-B",
+                name="Produit composé test B", unit="Pièce",
+                purchase_price=0, sale_price=100, tax_rate=0,
+                stock=0, min_stock=0, kind="COMPOSE", active=True,
+            )
+            db.add_all([test_ingredient, composed_a, composed_b])
+            await db.flush()
+            db.add(WarehouseStock(
+                tenant_id=demo_user.tenant_id, warehouse_id=shop["id"],
+                product_id=test_ingredient.id, quantity=1,
+            ))
+            db.add_all([
+                Recipe(tenant_id=demo_user.tenant_id, product_id=composed_a.id, ingredient_id=test_ingredient.id, quantity=0.75),
+                Recipe(tenant_id=demo_user.tenant_id, product_id=composed_b.id, ingredient_id=test_ingredient.id, quantity=0.75),
+            ])
+            await db.commit()
+            shared_ids = (test_ingredient.id, composed_a.id, composed_b.id)
+            demo_tenant_id = demo_user.tenant_id
+            sales_before_shared_test = await db.scalar(select(func.count(Sale.id)).where(Sale.tenant_id == demo_tenant_id))
+
+        shared_stock_before = 1.0
+        shared_sale = await client.post("/api/sales", headers=admin, json={
+            "warehouse_id": shop["id"],
+            "channel": "COMMERCE",
+            "lines": [
+                {"product_id": shared_ids[1], "quantity": 1},
+                {"product_id": shared_ids[2], "quantity": 1},
+            ],
+            "payments": [{"method": "WAVE", "amount": 200}],
+        })
+        assert shared_sale.status_code == 409, shared_sale.text
+        async with Session() as db:
+            unchanged_shared_stock = await db.scalar(select(WarehouseStock).where(
+                WarehouseStock.tenant_id == demo_tenant_id,
+                WarehouseStock.warehouse_id == shop["id"],
+                WarehouseStock.product_id == shared_ids[0],
+            ))
+            assert unchanged_shared_stock.quantity == shared_stock_before
+            assert await db.scalar(select(func.count(Sale.id)).where(
+                Sale.tenant_id == demo_tenant_id,
+            )) == sales_before_shared_test
+
         sale_payload = {
             "warehouse_id": shop["id"],
             "channel": "COMMERCE",
