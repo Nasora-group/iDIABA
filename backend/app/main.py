@@ -100,19 +100,21 @@ async def tenant_auth(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
 async def effective_permissions(u:User,db:AsyncSession):
  if u.role == "SUPER_ADMIN" or u.tenant_id is None:
   return []
- from app.advanced import PERMISSION_KEYS,RoleProfile
+ from app.advanced import PERMISSION_KEYS,RoleProfile,TenantConfiguration
  if u.role == "ADMIN":
-  return sorted(PERMISSION_KEYS)
- builtin={
-  "GERANT":set(PERMISSION_KEYS)-{"users.read","users.write"},
-  "CAISSIER":{"catalog.read","customers.read","cash.read","cash.open","cash.close","sales.read","sales.write","restaurant.read","restaurant.write"},
-  "VENDEUR":{"catalog.read","customers.read","sales.read","sales.write"},
-  "STOCK":{"catalog.read","catalog.write","suppliers.read","suppliers.write","purchases.read","purchases.write","stock.read","stock.write","inventory.read","inventory.write"}
- }
- if u.role in builtin:
-  return sorted(builtin[u.role])
- profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
- permissions=set(json.loads(profile.permissions or "[]")) & PERMISSION_KEYS if profile else set()
+  permissions=set(PERMISSION_KEYS)
+ else:
+  builtin={
+   "GERANT":set(PERMISSION_KEYS)-{"users.read","users.write"},
+   "CAISSIER":{"catalog.read","customers.read","cash.read","cash.open","cash.close","sales.read","sales.write","restaurant.read","restaurant.write"},
+   "VENDEUR":{"catalog.read","customers.read","sales.read","sales.write"},
+   "STOCK":{"catalog.read","catalog.write","suppliers.read","suppliers.write","purchases.read","purchases.write","stock.read","stock.write","inventory.read","inventory.write"}
+  }
+  if u.role in builtin:
+   permissions=set(builtin[u.role])
+  else:
+   profile=await db.scalar(select(RoleProfile).where(RoleProfile.tenant_id==u.tenant_id,RoleProfile.role_key==u.role,RoleProfile.active.is_(True)))
+   permissions=set(json.loads(profile.permissions or "[]")) & PERMISSION_KEYS if profile else set()
  for key in list(permissions):
   if key.endswith(".write"): permissions.add(key[:-6]+".read")
  if permissions & {"sales.write","sales.refund"}: permissions.update({"catalog.read","sales.read"})
@@ -121,7 +123,38 @@ async def effective_permissions(u:User,db:AsyncSession):
  if permissions & {"payables.read","payables.write"}: permissions.add("suppliers.read")
  if permissions & {"receivables.read","receivables.write"}: permissions.add("customers.read")
  if "finance.write" in permissions: permissions.add("finance.read")
+
+ # Les droits sont intersectés avec les modules activés pour l'entreprise.
+ # Une configuration absente/vide conserve l'accès historique des anciens tenants.
+ row=await db.scalar(select(TenantConfiguration).where(TenantConfiguration.tenant_id==u.tenant_id))
+ if row:
+  try:
+   enabled=set(json.loads(row.configuration_json or "{}").get("modules") or [])
+  except (TypeError,ValueError,AttributeError):
+   enabled=set()
+  if enabled:
+   module_for_permission={
+    "users.read":{"EQUIPE"},"users.write":{"EQUIPE"},
+    "catalog.read":{"CATALOGUE","POS","VENTES_B2B","STOCK","ACHATS","RESTAURANT","INVENTAIRE","MULTI_DEPOTS"},
+    "catalog.write":{"CATALOGUE","STOCK"},
+    "customers.read":{"POS","VENTES_B2B"},"customers.write":{"POS","VENTES_B2B"},
+    "cash.read":{"POS"},"cash.open":{"POS"},"cash.close":{"POS"},
+    "purchases.read":{"ACHATS"},"purchases.write":{"ACHATS"},
+    "suppliers.read":{"ACHATS"},"suppliers.write":{"ACHATS"},
+    "stock.read":{"STOCK","ACHATS","INVENTAIRE","MULTI_DEPOTS"},
+    "stock.write":{"STOCK","INVENTAIRE","MULTI_DEPOTS"},
+    "inventory.read":{"INVENTAIRE","STOCK","MULTI_DEPOTS"},
+    "inventory.write":{"INVENTAIRE","STOCK","MULTI_DEPOTS"},
+    "sales.read":{"POS","VENTES_B2B"},"sales.write":{"POS","VENTES_B2B"},"sales.refund":{"POS","VENTES_B2B"},
+    "restaurant.read":{"RESTAURANT"},"restaurant.write":{"RESTAURANT"},
+    "reports.read":{"RAPPORTS"},
+    "finance.read":{"FINANCE"},"finance.write":{"FINANCE"},
+    "receivables.read":{"FINANCE"},"receivables.write":{"FINANCE"},
+    "payables.read":{"FINANCE"},"payables.write":{"FINANCE"}
+   }
+   permissions={key for key in permissions if module_for_permission.get(key,set()) & enabled}
  return sorted(permissions)
+
 def roles(*allowed, permission=None):
  async def check(u:User=Depends(tenant_auth),db:AsyncSession=Depends(dbdep)):
   if u.role in allowed: return u
