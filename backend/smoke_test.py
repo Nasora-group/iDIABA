@@ -70,6 +70,22 @@ assert hasattr(PurchaseLine, "received") and hasattr(PurchaseLine, "unit_cost")
 assert {"/api/purchases", "/api/purchases/{order_id}/receive"} <= {route.path for route in app.routes}
 print("PURCHASE WORKFLOW OK: commandes multi-lignes et réception partielle")
 
+# Commerce B2B : devis, commandes clients, réservation et bons de livraison.
+from app.commercial import Quote, QuoteLine, CustomerOrder, CustomerOrderLine, DeliveryNote, DeliveryNoteLine
+commerce_paths={route.path for route in app.routes}
+assert {
+    "/api/quotes", "/api/quotes/{quote_id}/status", "/api/quotes/{quote_id}/convert",
+    "/api/customer-orders", "/api/customer-orders/{order_id}/confirm",
+    "/api/customer-orders/{order_id}/deliveries",
+    "/api/customer-orders/{order_id}/deliveries",
+} <= commerce_paths
+assert {
+    "customer_quotes", "customer_quote_lines", "customer_orders",
+    "customer_order_lines", "delivery_notes", "delivery_note_lines",
+} <= set(Base.metadata.tables)
+assert hasattr(CustomerOrderLine, "reserved") and hasattr(CustomerOrderLine, "delivered")
+print("CUSTOMER COMMERCE OK: devis, commandes, réservation de stock et livraisons partielles")
+
 # Catalogue : création, modification et import Excel tenant-scoped.
 product_paths={route.path for route in app.routes}
 assert {"/api/products","/api/products/{product_id}","/api/products/import"} <= product_paths
