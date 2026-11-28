@@ -121,9 +121,12 @@ required_permissions = {
 assert required_permissions <= PERMISSION_KEYS
 
 class FakePermissionDB:
-    def __init__(self, profile):
+    def __init__(self, profile, configuration=None):
         self.profile = profile
+        self.configuration = configuration
     async def scalar(self, query):
+        if "tenant_configurations" in str(query):
+            return self.configuration
         return self.profile
 
 async def permission_guard_tests():
@@ -191,6 +194,24 @@ async def builtin_stock_inventory_read_test():
     assert "stock.read" in granted
 asyncio.run(builtin_stock_inventory_read_test())
 print("BUILTIN STOCK OK: consultation et modification des inventaires conservées")
+
+# Les modules sélectionnés sont appliqués aux droits API, pas seulement aux menus.
+async def tenant_module_entitlement_tests():
+    admin = SimpleNamespace(role="ADMIN", tenant_id=42)
+    pos_only = SimpleNamespace(configuration_json='{"version":1,"modules":["POS"],"sectors":["COMMERCE"],"settings":{}}')
+    pos_permissions = set(await effective_permissions(admin, FakePermissionDB(None, pos_only)))
+    assert {"sales.read", "sales.write", "cash.read", "cash.open", "cash.close", "customers.read", "catalog.read"} <= pos_permissions
+    assert not ({"stock.read", "stock.write", "purchases.read", "restaurant.read", "finance.read", "users.write", "reports.read"} & pos_permissions)
+
+    stock_only = SimpleNamespace(configuration_json='{"version":1,"modules":["STOCK"],"sectors":["COMMERCE"],"settings":{}}')
+    stock_permissions = set(await effective_permissions(admin, FakePermissionDB(None, stock_only)))
+    assert {"stock.read", "stock.write", "inventory.read", "inventory.write", "catalog.read"} <= stock_permissions
+    assert not ({"sales.write", "cash.open", "purchases.write", "finance.write"} & stock_permissions)
+
+    legacy = set(await effective_permissions(admin, FakePermissionDB(None, None)))
+    assert required_permissions <= legacy
+asyncio.run(tenant_module_entitlement_tests())
+print("MODULE ENTITLEMENTS OK: permissions serveur limitées aux modules activés, anciens tenants inchangés")
 
 # Régression de cloisonnement : chaque jointure vers une entité métier doit
 # conserver explicitement le tenant courant, même si la ligne parente est filtrée.
