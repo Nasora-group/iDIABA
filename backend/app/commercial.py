@@ -146,7 +146,14 @@ async def _tenant_customer(db: AsyncSession, tenant_id: int, customer_id: int):
     return customer
 
 
-async def _prepare_lines(db: AsyncSession, tenant_id: int, lines: list[CommerceLineIn]):
+async def _prepare_lines(db: AsyncSession, tenant_id: int, lines: list[CommerceLineIn], customer_id: Optional[int] = None):
+    from app.traceability import CustomerPriceAssignment, CustomerPriceList, CustomerPriceListItem
+    assignment = None
+    if customer_id is not None:
+        assignment = await db.scalar(select(CustomerPriceAssignment).where(
+            CustomerPriceAssignment.tenant_id == tenant_id,
+            CustomerPriceAssignment.customer_id == customer_id
+        ))
     prepared = []
     subtotal = tax = total = 0.0
     for item in lines:
@@ -156,13 +163,27 @@ async def _prepare_lines(db: AsyncSession, tenant_id: int, lines: list[CommerceL
         ))
         if not product:
             raise HTTPException(404, "Article introuvable dans cette entreprise")
-        base = item.quantity * item.unit_price
-        line_tax = base * item.tax_rate / 100
+        unit_price = item.unit_price
+        if assignment:
+            configured_price = await db.scalar(select(CustomerPriceListItem.unit_price).join(
+                CustomerPriceList, CustomerPriceList.id == CustomerPriceListItem.price_list_id
+            ).where(
+                CustomerPriceList.id == assignment.price_list_id,
+                CustomerPriceList.tenant_id == tenant_id,
+                CustomerPriceList.active.is_(True),
+                CustomerPriceListItem.product_id == product.id
+            ))
+            if configured_price is not None:
+                unit_price = configured_price
+        effective_item = CommerceLineIn(product_id=item.product_id, quantity=item.quantity,
+                                        unit_price=unit_price, tax_rate=item.tax_rate)
+        base = effective_item.quantity * effective_item.unit_price
+        line_tax = base * effective_item.tax_rate / 100
         line_total = base + line_tax
         subtotal += base
         tax += line_tax
         total += line_total
-        prepared.append((product, item, line_total))
+        prepared.append((product, effective_item, line_total))
     return prepared, round(subtotal, 2), round(tax, 2), round(total, 2)
 
 
@@ -212,7 +233,7 @@ async def quote_create(x: QuoteIn, user: User = Depends(tenant_auth), db: AsyncS
         Quote.tenant_id == user.tenant_id, Quote.reference == x.reference.strip()
     )):
         raise HTTPException(409, "Cette référence de devis existe déjà")
-    prepared, subtotal, tax, total = await _prepare_lines(db, user.tenant_id, x.lines)
+    prepared, subtotal, tax, total = await _prepare_lines(db, user.tenant_id, x.lines, x.customer_id)
     quote = Quote(
         tenant_id=user.tenant_id, customer_id=x.customer_id,
         reference=x.reference.strip(), valid_until=x.valid_until,
