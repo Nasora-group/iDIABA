@@ -1,4 +1,5 @@
 import os
+import secrets
 import json
 from datetime import datetime,date,timedelta,timezone
 from typing import Optional
@@ -68,6 +69,9 @@ class Payment(Base):
 class Audit(Base):
  __tablename__="audit_logs"
  id:Mapped[int]=mapped_column(primary_key=True);tenant_id:Mapped[int]=mapped_column(ForeignKey("tenants.id"),index=True);user_id:Mapped[int]=mapped_column(ForeignKey("users.id"));action:Mapped[str]=mapped_column(String(80));detail:Mapped[str]=mapped_column(String(500),default="");created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
+class PlatformAudit(Base):
+ __tablename__="platform_audit_logs"
+ id:Mapped[int]=mapped_column(primary_key=True);actor_user_id:Mapped[int]=mapped_column(ForeignKey("users.id"));target_user_id:Mapped[int]=mapped_column(ForeignKey("users.id"));action:Mapped[str]=mapped_column(String(80));detail:Mapped[str]=mapped_column(String(500),default="");created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
 
 async def dbdep():
  async with Session() as s: yield s
@@ -218,6 +222,7 @@ async def startup():
 @app.get("/api/health")
 async def health(): return {"status":"ok","service":"idiaba"}
 class Login(BaseModel): email:str;password:str
+class PlatformPasswordResetIn(BaseModel): email:str=Field(min_length=5,max_length=160)
 @app.post("/api/auth/login")
 async def login(x:Login,db:AsyncSession=Depends(dbdep)):
  u=await db.scalar(select(User).where(User.email==x.email.lower(),User.active.is_(True)))
@@ -236,6 +241,21 @@ async def login(x:Login,db:AsyncSession=Depends(dbdep)):
  tenant_data=None if t is None else {"name":t.name,"mode":t.mode,"currency":t.currency}
  permissions=await effective_permissions(u,db)
  return {"access_token":jwt.encode({"sub":str(u.id),"exp":exp},SECRET,algorithm="HS256"),"user":{"id":u.id,"name":u.name,"email":u.email,"role":u.role,"tenant_id":u.tenant_id,"permissions":permissions},"tenant":tenant_data}
+@app.post("/api/platform/users/reset-password")
+async def platform_reset_user_password(x:PlatformPasswordResetIn,u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
+ if u.role!="SUPER_ADMIN" or u.tenant_id is not None:
+  raise HTTPException(403,"Réservé au Super Admin de la plateforme")
+ email=x.email.strip().lower()
+ target=await db.scalar(select(User).where(func.lower(User.email)==email))
+ if not target:
+  raise HTTPException(404,"Aucun compte trouvé avec cette adresse e-mail")
+ if target.role=="SUPER_ADMIN" or target.tenant_id is None:
+  raise HTTPException(400,"La réinitialisation d'un compte plateforme n'est pas autorisée depuis cette fonction")
+ temporary_password=secrets.token_urlsafe(15)
+ target.password_hash=hasher.hash(temporary_password)
+ db.add(PlatformAudit(actor_user_id=u.id,target_user_id=target.id,action="REINITIALISATION_MOT_DE_PASSE",detail=f"Mot de passe réinitialisé pour {target.email}"))
+ await db.commit()
+ return {"success":True,"email":target.email,"temporary_password":temporary_password,"message":"Mot de passe réinitialisé. Copiez ce mot de passe temporaire et transmettez-le au titulaire par un canal sécurisé."}
 @app.get("/api/auth/me")
 async def me(u:User=Depends(auth),db:AsyncSession=Depends(dbdep)):
  permissions=await effective_permissions(u,db)
