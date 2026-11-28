@@ -113,6 +113,96 @@ async def main():
         assert opened.status_code == 200, opened.text
         cash_id = opened.json()["id"]
 
+        # Réception par lot avec péremption et consommation FEFO au POS.
+        async with Session() as db:
+            demo_user = await db.scalar(select(User).where(User.email == "admin@demo.sn"))
+            tracked_lot_product = Product(
+                tenant_id=demo_user.tenant_id, sku="TRACE-LOT-001", name="Produit suivi lot",
+                unit="Pièce", purchase_price=40, sale_price=100, tax_rate=0,
+                stock=0, min_stock=0, kind="SIMPLE", active=True,
+            )
+            tracked_serial_product = Product(
+                tenant_id=demo_user.tenant_id, sku="TRACE-SER-001", name="Produit suivi série",
+                unit="Pièce", purchase_price=50, sale_price=100, tax_rate=0,
+                stock=0, min_stock=0, kind="SIMPLE", active=True,
+            )
+            db.add_all([tracked_lot_product, tracked_serial_product])
+            await db.flush()
+            db.add_all([
+                WarehouseStock(tenant_id=demo_user.tenant_id, warehouse_id=shop["id"], product_id=tracked_lot_product.id, quantity=0),
+                WarehouseStock(tenant_id=demo_user.tenant_id, warehouse_id=shop["id"], product_id=tracked_serial_product.id, quantity=0),
+            ])
+            lot_product_id, serial_product_id = tracked_lot_product.id, tracked_serial_product.id
+            await db.commit()
+        lot_mode = await client.put("/api/traceability/settings", headers=admin, json={"product_id": lot_product_id, "mode": "LOT"})
+        assert lot_mode.status_code == 200, lot_mode.text
+        lot_receipt = await client.post("/api/traceability/receipts", headers=admin, json={
+            "warehouse_id": shop["id"], "reference": "REC-LOT-TEST",
+            "lines": [{"product_id": lot_product_id, "batch_code": "LOT-EXP-01", "expiry_date": "2027-12-31", "quantity": 5, "unit_cost": 40}],
+        })
+        assert lot_receipt.status_code == 200, lot_receipt.text
+        lot_sale = await client.post("/api/sales", headers=admin, json={
+            "warehouse_id": shop["id"], "lines": [{"product_id": lot_product_id, "quantity": 2}],
+            "payments": [{"method": "ESPECES", "amount": 200}],
+        })
+        assert lot_sale.status_code == 200, lot_sale.text
+        lot_rows = await client.get("/api/traceability/batches", headers=admin)
+        lot_row = next(row for row in lot_rows.json() if row["batch_code"] == "LOT-EXP-01")
+        assert lot_row["quantity_available"] == 3
+
+        # Numéros de série : un identifiant distinct par unité, vendu une seule fois.
+        serial_mode = await client.put("/api/traceability/settings", headers=admin, json={"product_id": serial_product_id, "mode": "SERIAL"})
+        assert serial_mode.status_code == 200, serial_mode.text
+        serial_receipt = await client.post("/api/traceability/receipts", headers=admin, json={
+            "warehouse_id": shop["id"], "reference": "REC-SERIAL-TEST",
+            "lines": [{"product_id": serial_product_id, "batch_code": "SER-BATCH-01", "quantity": 2, "unit_cost": 50, "serial_numbers": ["SN-TEST-001", "SN-TEST-002"]}],
+        })
+        assert serial_receipt.status_code == 200, serial_receipt.text
+        serial_sale = await client.post("/api/sales", headers=admin, json={
+            "warehouse_id": shop["id"], "lines": [{"product_id": serial_product_id, "quantity": 1}],
+            "payments": [{"method": "ESPECES", "amount": 100}],
+        })
+        assert serial_sale.status_code == 200, serial_sale.text
+        serial_rows = (await client.get("/api/traceability/serials", headers=admin)).json()
+        sold_serial = next(row for row in serial_rows if row["serial_number"] == "SN-TEST-001")
+        assert sold_serial["status"] == "VENDU" and sold_serial["sale_id"] == serial_sale.json()["id"]
+
+        # Variantes : chaque variante devient un article de stock autonome.
+        variant_response = await client.post("/api/product-variants", headers=admin, json={
+            "parent_product_id": oil["id"], "sku": "HUI5-VAR-TEST", "name": "Huile 5L format test",
+            "barcode": "VAR-TEST-001", "attributes": {"format": "5L", "couleur": "Jaune"}, "sale_price": 1450,
+        })
+        assert variant_response.status_code == 200, variant_response.text
+        assert any(row["sku"] == "HUI5-VAR-TEST" for row in (await client.get("/api/products", headers=admin)).json())
+
+        # Grille client : le prix contractuel remplace le prix standard dans le devis.
+        price_list_response = await client.post("/api/customer-price-lists", headers=admin, json={"name": "Tarif test revendeur", "currency": "FCFA"})
+        assert price_list_response.status_code == 200, price_list_response.text
+        price_list_id = price_list_response.json()["id"]
+        prices_saved = await client.put(f"/api/customer-price-lists/{price_list_id}/items", headers=admin, json=[
+            {"product_id": oil["id"], "unit_price": 1234},
+        ])
+        assert prices_saved.status_code == 200, prices_saved.text
+        assigned = await client.post("/api/customer-price-lists/assign", headers=admin, json={
+            "customer_id": aminata["id"], "price_list_id": price_list_id,
+        })
+        assert assigned.status_code == 200, assigned.text
+        client_price = await client.get(f"/api/customers/{aminata['id']}/prices/{oil['id']}", headers=admin)
+        assert client_price.status_code == 200 and client_price.json()["unit_price"] == 1234
+        priced_quote = await client.post("/api/quotes", headers=admin, json={
+            "customer_id": aminata["id"], "reference": "DEV-PRICE-TEST",
+            "lines": [{"product_id": oil["id"], "quantity": 1, "unit_price": 999, "tax_rate": 0}],
+        })
+        assert priced_quote.status_code == 200, priced_quote.text
+        quote_rows = (await client.get("/api/quotes", headers=admin)).json()
+        priced_row = next(row for row in quote_rows if row["reference"] == "DEV-PRICE-TEST")
+        assert priced_row["lines"][0]["unit_price"] == 1234 and priced_row["total"] == 1234
+
+        assert (await client.get("/api/traceability/batches", headers=isolation_admin)).json() == []
+        assert (await client.get("/api/traceability/serials", headers=isolation_admin)).json() == []
+        assert (await client.get("/api/product-variants", headers=isolation_admin)).json() == []
+        assert (await client.get("/api/customer-price-lists", headers=isolation_admin)).json() == []
+
         # Régression POS : deux recettes partagent un ingrédient. Chaque ligne
         # consomme 0,75 unité, mais le stock disponible est de 1 unité seulement.
         # Le contrôle cumulé doit refuser la vente avant toute écriture.
@@ -313,8 +403,8 @@ async def main():
 
         # La caisse doit intégrer vente nette de monnaie et remboursement espèces.
         cash_current = (await client.get("/api/cash/current", headers=admin)).json()
-        assert abs(cash_current["expected"] - 110880) < 0.001
-        closed = await client.post(f"/api/cash/{cash_id}/close", headers=admin, json={"counted": 110880})
+        assert abs(cash_current["expected"] - 111180) < 0.001
+        closed = await client.post(f"/api/cash/{cash_id}/close", headers=admin, json={"counted": 111180})
         assert closed.status_code == 200, closed.text
         assert closed.json()["variance"] == 0
 
