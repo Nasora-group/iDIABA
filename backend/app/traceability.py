@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import String, Float, Integer, DateTime, Date, ForeignKey, UniqueConstraint, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.main import Base, app, dbdep, User, Product, Customer, Warehouse, WarehouseStock, Movement, Audit, tenant_auth
@@ -194,6 +195,16 @@ async def batch_receipt(x: BatchReceiptIn, user: User = Depends(tenant_auth), db
     ))
     if not warehouse:
         raise HTTPException(404, "Dépôt introuvable")
+    all_serials = [serial.strip() for line in x.lines for serial in line.serial_numbers if serial.strip()]
+    if len(all_serials) != len(set(all_serials)):
+        raise HTTPException(400, "Le même numéro de série apparaît plusieurs fois dans la réception")
+    if all_serials:
+        existing_serial = await db.scalar(select(SerialNumber.id).where(
+            SerialNumber.tenant_id == user.tenant_id,
+            SerialNumber.serial_number.in_(all_serials)
+        ).limit(1))
+        if existing_serial:
+            raise HTTPException(409, "Un numéro de série existe déjà dans cette entreprise")
     prepared = []
     for line in x.lines:
         product = await _product(db, user.tenant_id, line.product_id, True)
@@ -248,6 +259,9 @@ async def batch_receipt(x: BatchReceiptIn, user: User = Depends(tenant_auth), db
         if stock is None:
             stock = WarehouseStock(tenant_id=user.tenant_id, warehouse_id=warehouse.id, product_id=product.id, quantity=0)
             db.add(stock)
+        old_quantity = product.stock or 0.0
+        if old_quantity + line.quantity > 0:
+            product.purchase_price = ((old_quantity * product.purchase_price) + (line.quantity * line.unit_cost)) / (old_quantity + line.quantity)
         stock.quantity += line.quantity
         product.stock += line.quantity
         db.add(Movement(
@@ -366,7 +380,7 @@ async def price_list_create(x: PriceListIn, user: User = Depends(tenant_auth), d
     db.add(item)
     try:
         await db.commit()
-    except Exception:
+    except IntegrityError:
         await db.rollback()
         raise HTTPException(409, "Une grille tarifaire porte déjà ce nom")
     return {"id": item.id, "name": item.name}
