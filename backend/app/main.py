@@ -466,6 +466,21 @@ async def sale_create(x:SaleIn,u:User=Depends(roles("ADMIN","GERANT","CAISSIER",
     ingredient.stock-=part.quantity*q
     ingredient_stock=await db.scalar(select(WarehouseStock).where(WarehouseStock.tenant_id==u.tenant_id,WarehouseStock.warehouse_id==wh.id,WarehouseStock.product_id==ingredient.id))
     ingredient_stock.quantity-=part.quantity*q
+    tracked_policy=await db.scalar(select(traceability.ProductTraceability).where(traceability.ProductTraceability.tenant_id==u.tenant_id,traceability.ProductTraceability.product_id==ingredient.id))
+    required_ingredient_qty=part.quantity*q
+    if tracked_policy and tracked_policy.mode=="LOT":
+     lots=(await db.scalars(select(traceability.StockBatch).where(traceability.StockBatch.tenant_id==u.tenant_id,traceability.StockBatch.product_id==ingredient.id,traceability.StockBatch.warehouse_id==wh.id,traceability.StockBatch.quantity_available>0,((traceability.StockBatch.expiry_date.is_(None))|(traceability.StockBatch.expiry_date>=date.today()))).order_by(traceability.StockBatch.expiry_date.asc().nullslast(),traceability.StockBatch.id.asc()).with_for_update())).all()
+     for lot in lots:
+      taken=min(required_ingredient_qty,lot.quantity_available);lot.quantity_available-=taken;required_ingredient_qty-=taken
+      if lot.quantity_available<=1e-9:lot.status="EPUISE"
+      if required_ingredient_qty<=1e-9:break
+    elif tracked_policy and tracked_policy.mode=="SERIAL":
+     if abs(required_ingredient_qty-round(required_ingredient_qty))>1e-9:raise HTTPException(409,"Une recette ne peut pas consommer une fraction d'article sérialisé")
+     serials=(await db.scalars(select(traceability.SerialNumber).where(traceability.SerialNumber.tenant_id==u.tenant_id,traceability.SerialNumber.product_id==ingredient.id,traceability.SerialNumber.warehouse_id==wh.id,traceability.SerialNumber.status=="EN_STOCK").order_by(traceability.SerialNumber.id).limit(int(required_ingredient_qty)).with_for_update())).all()
+     for serial in serials:serial.status="VENDU";serial.sale_id=s.id
+     for batch_id in {serial.batch_id for serial in serials if serial.batch_id is not None}:
+      lot=await db.scalar(select(traceability.StockBatch).where(traceability.StockBatch.id==batch_id,traceability.StockBatch.tenant_id==u.tenant_id).with_for_update())
+      if lot:lot.quantity_available=max(0.0,lot.quantity_available-sum(1 for serial in serials if serial.batch_id==batch_id))
     db.add(Movement(tenant_id=u.tenant_id,warehouse_id=wh.id,product_id=ingredient.id,kind="SORTIE_VENTE_RECETTE",quantity=-part.quantity*q,unit_cost=ingredient.purchase_price,reference=f"VTE-{s.id}"))
   else:
    policy=await db.scalar(select(traceability.ProductTraceability).where(traceability.ProductTraceability.tenant_id==u.tenant_id,traceability.ProductTraceability.product_id==p.id))
