@@ -1,6 +1,7 @@
 import {useEffect,useState} from "react";
 import type {CSSProperties} from "react";
 import {Layers,ShieldCheck,Truck,ClipboardList,RotateCcw,Utensils,Printer,Building2,RefreshCw} from "lucide-react";
+import CommercePanel from "./CommercePanel";
 
 const api=async(path:string,body?:any,method?:string)=>{
  const token=localStorage.getItem("idiaba_token");
@@ -58,6 +59,7 @@ export default function AdvancedPanel({role,permissions=[]}:{role:string;permiss
   ...(has("sales.refund")?["Retours"]:[]),
   ...(has("restaurant.read","restaurant.write")?["Restaurant"]:[]),
   ...(has("sales.read")?["Factures"]:[]),
+   ...(has("sales.read","sales.write")?["Devis & commandes"]:[]),
   ...(has("finance.read","finance.write","payables.read","payables.write","receivables.read","receivables.write")?["Finance"]:[])
  ];
  useEffect(()=>{if(sections.length&&!sections.includes(section))setSection(sections[0]);},[sections.join("|"),section]);
