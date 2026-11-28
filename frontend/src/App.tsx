@@ -38,6 +38,7 @@ const roleLabels:Record<string,string>={ADMIN:"Administrateur",GERANT:"Gérant",
 const roleOptions=["GERANT","CAISSIER","VENDEUR","STOCK"];
 export default function App(){
  const {token,user,set,clear}=useAuth();
+ const [tenantConfig,setTenantConfig]=useState<any>(null);
  const [online,setOnline]=useState(navigator.onLine),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[registerMode,setRegisterMode]=useState(false),[onboardingStep,setOnboardingStep]=useState(0),[signup,setSignup]=useState<any>({mode:"HYBRIDE",currency:"FCFA",tax_rate:18,sectors:[],modules:[],settings:{inventory_method:"CUMP",sales_mode:"MIXTE",allow_negative_stock:false,multi_warehouse:false,table_management:true},terms_accepted:false});const [publicPayment,setPublicPayment]=useState<any>({providers:[],instructions:"",available:false});
  const [products,setProducts]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<any[]>([]),[cash,setCash]=useState<any>(null),[customProfiles,setCustomProfiles]=useState<{role_key:string;name:string;active:boolean}[]>([]);
  const [customers,setCustomers]=useState<Customer[]>([]),[suppliers,setSuppliers]=useState<Supplier[]>([]),[users,setUsers]=useState<User[]>([]),[sales,setSales]=useState<any[]>([]);
@@ -45,20 +46,22 @@ export default function App(){
  const [form,setForm]=useState<any>({}),[busy,setBusy]=useState(false);
  const [editingProduct,setEditingProduct]=useState<Product|null>(null),[importRows,setImportRows]=useState<any[]>([]),[importMode,setImportMode]=useState("REPLACE"),[importWarehouse,setImportWarehouse]=useState("");
  const can=(...keys:string[])=>keys.some(k=>(user?.permissions||[]).includes(k));
+ const moduleEnabled=(...keys:string[])=>!Array.isArray(tenantConfig?.modules)||tenantConfig.modules.length===0||keys.some(k=>tenantConfig.modules.includes(k));
  const admin=user?.role==="ADMIN"||can("users.write"), catalogWrite=can("catalog.write"), stockRole=can("stock.write","inventory.write");
  const tabs=user?.role==="SUPER_ADMIN"?[["Gestion avancée",Layers]]:[
-  ...(can("sales.write")&&can("cash.read")&&can("cash.open")?[["Caisse",ShoppingCart]] as any:[]),
-  ...(can("catalog.read")?[["Catalogue",Archive]] as any:[]),
-  ...(can("stock.read","stock.write","inventory.write")?[["Stocks",Package]] as any:[]),
-  ...(can("customers.read","customers.write")?[["Clients",Users]] as any:[]),
-  ...(can("suppliers.read","suppliers.write")?[["Fournisseurs",Truck]] as any:[]),
-  ...(can("reports.read")?[["Rapports",BarChart3]] as any:[]),
-  ...(can("users.read","users.write")?[["Utilisateurs",UserCog]] as any:[]),
-  ...(can("purchases.read","purchases.write","inventory.write","stock.read","stock.write","sales.refund","restaurant.read","restaurant.write","sales.read","users.read","users.write","finance.read","finance.write","payables.read","payables.write","receivables.read","receivables.write")?[["Gestion avancée",Layers]] as any:[])
+  ...(moduleEnabled("POS")&&can("sales.write")&&can("cash.read")&&can("cash.open")?[["Caisse",ShoppingCart]] as any:[]),
+  ...(moduleEnabled("CATALOGUE")&&can("catalog.read")?[["Catalogue",Archive]] as any:[]),
+  ...(moduleEnabled("STOCK","INVENTAIRE","MULTI_DEPOTS")&&can("stock.read","stock.write","inventory.write")?[["Stocks",Package]] as any:[]),
+  ...(moduleEnabled("POS","VENTES_B2B")&&can("customers.read","customers.write")?[["Clients",Users]] as any:[]),
+  ...(moduleEnabled("ACHATS")&&can("suppliers.read","suppliers.write")?[["Fournisseurs",Truck]] as any:[]),
+  ...(moduleEnabled("RAPPORTS")&&can("reports.read")?[["Rapports",BarChart3]] as any:[]),
+  ...(moduleEnabled("EQUIPE")&&can("users.read","users.write")?[["Utilisateurs",UserCog]] as any:[]),
+  ...(moduleEnabled("ACHATS","VENTES_B2B","FACTURATION","FINANCE","RESTAURANT","INVENTAIRE","MULTI_DEPOTS","EQUIPE","RAPPORTS")&&can("purchases.read","purchases.write","inventory.write","stock.read","stock.write","sales.refund","restaurant.read","restaurant.write","sales.read","users.read","users.write","finance.read","finance.write","payables.read","payables.write","receivables.read","receivables.write")?[["Gestion avancée",Layers]] as any:[])
  ];
  useEffect(()=>{if(user&&tabs.length&&!tabs.some(([name]:any)=>name===tab))setTab(tabs[0][0]);},[user?.id,user?.permissions?.join(","),tab]);
  useEffect(()=>{const f=()=>{setOnline(navigator.onLine);if(navigator.onLine)syncQueue(user)};addEventListener("online",f);addEventListener("offline",f);if(navigator.onLine&&user)syncQueue(user);return()=>{removeEventListener("online",f);removeEventListener("offline",f)};},[user?.id,user?.role,user?.tenant_id]);
  async function refresh(current:User|null=user){
+  if(current&&current.role!=="SUPER_ADMIN"){try{setTenantConfig(await api("/api/tenant/onboarding"));}catch{setTenantConfig(null);}}
   const has=(key:string)=>current?.role==="ADMIN"||(current?.permissions||[]).includes(key);
   const [p,w,c,cu,sa]=await Promise.all([
    has("catalog.read")?api("/api/products").catch(()=>[]):Promise.resolve([]),
