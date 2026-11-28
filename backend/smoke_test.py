@@ -312,3 +312,25 @@ async def restaurant_recipe_consumption_test():
         assert "warehouse_id" in KitchenOrder.__table__.columns
 asyncio.run(restaurant_recipe_consumption_test())
 print("RESTAURANT OK: consommation recette au service, dépôt sélectionné et absence de double sortie")
+
+# Modèles et routes de traçabilité, variantes et tarification client.
+from app import traceability
+traceability_tables = {
+    "product_traceability", "stock_batches", "product_serial_numbers",
+    "product_variants", "customer_price_lists", "customer_price_list_items",
+    "customer_price_assignments",
+}
+assert traceability_tables <= set(Base.metadata.tables)
+traceability_routes = {route.path for route in app.routes}
+assert {
+    "/api/traceability/settings", "/api/traceability/receipts",
+    "/api/traceability/batches", "/api/traceability/serials",
+    "/api/product-variants", "/api/customer-price-lists",
+    "/api/customer-price-lists/{list_id}/items",
+    "/api/customer-price-lists/assign",
+    "/api/customers/{customer_id}/prices/{product_id}",
+} <= traceability_routes
+assert hasattr(traceability.StockBatch, "expiry_date")
+assert hasattr(traceability.SerialNumber, "serial_number")
+assert hasattr(traceability.ProductVariant, "attributes")
+print("TRACEABILITY OK: lots, péremption, séries, variantes et grilles tarifaires clients")
