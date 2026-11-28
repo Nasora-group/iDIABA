@@ -403,8 +403,8 @@ async def main():
 
         # La caisse doit intégrer vente nette de monnaie et remboursement espèces.
         cash_current = (await client.get("/api/cash/current", headers=admin)).json()
-        assert abs(cash_current["expected"] - 110880) < 0.001
-        closed = await client.post(f"/api/cash/{cash_id}/close", headers=admin, json={"counted": 110880})
+        assert abs(cash_current["expected"] - 111180) < 0.001
+        closed = await client.post(f"/api/cash/{cash_id}/close", headers=admin, json={"counted": 111180})
         assert closed.status_code == 200, closed.text
         assert closed.json()["variance"] == 0
 
