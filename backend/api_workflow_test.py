@@ -117,6 +117,8 @@ async def main():
             ])
             await db.commit()
             shared_ids = (test_ingredient.id, composed_a.id, composed_b.id)
+            demo_tenant_id = demo_user.tenant_id
+            sales_before_shared_test = await db.scalar(select(func.count(Sale.id)).where(Sale.tenant_id == demo_tenant_id))
 
         shared_stock_before = 1.0
         shared_sale = await client.post("/api/sales", headers=admin, json={
@@ -131,15 +133,14 @@ async def main():
         assert shared_sale.status_code == 409, shared_sale.text
         async with Session() as db:
             unchanged_shared_stock = await db.scalar(select(WarehouseStock).where(
-                WarehouseStock.tenant_id == 1,
+                WarehouseStock.tenant_id == demo_tenant_id,
                 WarehouseStock.warehouse_id == shop["id"],
                 WarehouseStock.product_id == shared_ids[0],
             ))
             assert unchanged_shared_stock.quantity == shared_stock_before
             assert await db.scalar(select(func.count(Sale.id)).where(
-                Sale.tenant_id == demo_user.tenant_id,
-                Sale.total == 200,
-            )) == 0
+                Sale.tenant_id == demo_tenant_id,
+            )) == sales_before_shared_test
 
         sale_payload = {
             "warehouse_id": shop["id"],
